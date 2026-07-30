@@ -12,6 +12,7 @@
 require('dotenv').config();
 const admin = require('firebase-admin');
 const { createClient } = require('@supabase/supabase-js');
+const ws = require('ws');
 
 // --- КОНФИГУРАЦИЯ FIREBASE ---
 const serviceAccount = {
@@ -43,7 +44,11 @@ if (!supabaseUrl || !supabaseKey) {
   process.exit(1);
 }
 
-const supabase = createClient(supabaseUrl, supabaseKey);
+const supabase = createClient(supabaseUrl, supabaseKey, {
+  realtime: {
+    transport: ws
+  }
+});
 
 // --- УТИЛИТЫ ---
 
@@ -51,23 +56,24 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 function convertValue(value) {
   if (value === null || value === undefined) return null;
   
-  // Timestamp -> ISO String
-  if (value instanceof admin.firestore.Timestamp) {
+  // Проверяем наличие методов/свойств вместо instanceof для совместимости
+  // Timestamp: имеет toDate() и toMillis()
+  if (typeof value.toDate === 'function' && typeof value.toMillis === 'function') {
     return value.toDate().toISOString();
   }
   
-  // DocumentReference -> ID
-  if (value instanceof admin.firestore.DocumentReference) {
+  // DocumentReference: имеет path, id, firestore()
+  if (typeof value.id === 'string' && typeof value.path === 'string') {
     return value.id;
   }
   
-  // GeoPoint -> { latitude, longitude }
-  if (value instanceof admin.firestore.GeoPoint) {
+  // GeoPoint: имеет latitude, longitude
+  if (typeof value.latitude === 'number' && typeof value.longitude === 'number') {
     return { latitude: value.latitude, longitude: value.longitude };
   }
   
-  // Blob -> Base64 (если нужно, иначе null)
-  if (value instanceof admin.firestore.Blob) {
+  // Blob: имеет toBase64(), toBuffer()
+  if (typeof value.toBase64 === 'function') {
     console.warn('⚠️ Обнаружен Blob, конвертация в base64 может быть тяжелой. Пропускаем или обрабатываем отдельно.');
     return null; 
   }
@@ -80,7 +86,9 @@ function convertValue(value) {
   if (typeof value === 'object') {
     const newObj = {};
     for (const key in value) {
-      newObj[key] = convertValue(value[key]);
+      if (Object.prototype.hasOwnProperty.call(value, key)) {
+        newObj[key] = convertValue(value[key]);
+      }
     }
     return newObj;
   }
@@ -166,20 +174,19 @@ async function insertBatch(table, records) {
   for (let i = 0; i < records.length; i += batchSize) {
     const batch = records.slice(i, i + batchSize);
     
-    let query = supabase.from(table).insert(batch);
+    // Определяем конфликтующий столбец
+    const conflictTarget = table === 'settings' ? 'key' : 'id';
     
-    if (table === 'settings') {
-      query = query.onConflict('key'); 
-    } else {
-      query = query.onConflict('id');
-    }
-
-    const { data, error } = await query.select();
+    // Разделяем запись на части: те, которые могут конфликтовать, и остальные
+    // Используем upsert через onConflict (требуется v2+)
+    const { data, error } = await supabase
+      .from(table)
+      .upsert(batch, { onConflict: conflictTarget });
     
     if (error) {
       console.error(`❌ Ошибка вставки в ${table} (пакет ${i}-${i+batchSize}):`, error.message);
     } else {
-      console.log(`✅ Вставлено ${batch.length} записей в ${table}`);
+      console.log(`✅ Вставлено/обновлено ${batch.length} записей в ${table}`);
     }
   }
 }
