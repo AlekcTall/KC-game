@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Метрики – Геймификация КЦ</title>
+  <link rel="stylesheet" href="css/style.css">
+  <style>
+    .metrics-page { max-width: 1100px; margin: 0 auto; padding: 1.5rem; }
+    .metrics-filters { background: #f9fafb; border-radius: 12px; padding: 1.2rem; margin-bottom: 2rem; display: flex; flex-wrap: wrap; gap: 1rem; align-items: flex-end; }
+    .metrics-filters label { font-size: 0.8rem; font-weight: 600; text-transform: uppercase; color: #6b7280; }
+    .metrics-filters input { padding: 0.5rem; border: 1px solid #d1d5db; border-radius: 8px; width: 160px; }
+    .metrics-card { background: white; border-radius: 12px; padding: 1.5rem; margin-bottom: 1.5rem; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+    .metrics-card h3 { margin-bottom: 1rem; color: var(--color-header); }
+    .metrics-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+    .metrics-table th, .metrics-table td { padding: 0.6rem 0.8rem; border-bottom: 1px solid #eee; text-align: left; }
+    .metrics-table th { background: #f9fafb; font-weight: 600; color: #6b7280; font-size: 0.8rem; text-transform: uppercase; }
+    .online-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 0.4rem; }
+    .online { background: #27ae60; }
+    .offline { background: #ccc; }
+    .export-btn { margin-top: 1rem; margin-right: 0.5rem; }
+    .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin-top: 1rem; }
+    .summary-item { text-align: center; padding: 1rem; background: #f9fafb; border-radius: 12px; }
+    .summary-value { font-size: 2rem; font-weight: 700; }
+    .summary-label { font-size: 0.8rem; color: #6b7280; }
+    .auto-refresh-note { font-size: 0.8rem; color: #888; margin-top: 0.5rem; }
+  </style>
+</head>
+<body>
+  <header class="header">
+    <div class="container header__inner">
+      <a href="index.html" class="logo">КЦ-Игры</a>
+      <button class="burger" id="burger-btn" aria-label="Меню">☰</button>
+      <nav class="nav" id="main-nav">
+        <ul class="nav__list">
+          <li><a href="index.html" class="nav__link">Главная</a></li>
+          <li><a href="games.html" class="nav__link">Игры</a></li>
+          <li><a href="leaderboard.html" class="nav__link">Рейтинг</a></li>
+          <li><a href="shop.html" class="nav__link">Магазин</a></li>
+          <li><a href="profile.html" class="nav__link">Профиль</a></li>
+          <li><a href="admin.html" class="nav__link">Админ</a></li>
+        </ul>
+      </nav>
+      <div id="auth-status" class="auth-status"></div>
+    </div>
+  </header>
+
+  <main class="main">
+    <div class="container metrics-page" id="metrics-container">
+      <p>Загрузка метрик...</p>
+    </div>
+  </main>
+
+  <footer class="footer"><div class="container"><p>© 2026 ваши амбассадоры</p></div></footer>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore-compat.js"></script>
+  <!-- SheetJS для экспорта в Excel -->
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+  <script src="js/firebase-config.js"></script>
+  <script src="js/firebase-auth.js"></script>
+  <script src="js/storage.js"></script>
+  <script src="js/achievements.js"></script>
+  <script src="js/notifications.js"></script>
+  <script src="js/easter-eggs.js"></script>
+  <script src="js/feedback.js"></script>
+  <script src="js/main.js"></script>
+
+  <script>
+    const ONLINE_THRESHOLD = 15 * 60 * 1000; // 15 минут
+    let autoRefreshInterval = null;
+
+    document.addEventListener('DOMContentLoaded', async () => {
+      const container = document.getElementById('metrics-container');
+
+      auth.onAuthStateChanged(async (user) => {
+        if (!user) { container.innerHTML = '<p>Вы не авторизованы.</p>'; return; }
+        const doc = await db.collection('users').doc(user.uid).get();
+        if (!doc.exists || doc.data().role !== 'admin') {
+          container.innerHTML = '<p>Доступ запрещён.</p>';
+          return;
+        }
+
+        // Обновляем lastActive для админа
+        await updateLastActive(user.uid);
+
+        buildMetricsPage();
+        startAutoRefresh();
+      });
+
+      function buildMetricsPage() {
+        container.innerHTML = `
+          <h2>📊 Подробные метрики</h2>
+          <div class="metrics-filters">
+            <div><label>Начало периода</label><input type="datetime-local" id="filter-start"></div>
+            <div><label>Конец периода</label><input type="datetime-local" id="filter-end"></div>
+            <button class="btn" id="apply-filter">Применить</button>
+            <button class="btn btn-cancel" id="reset-filter">Сбросить</button>
+          </div>
+          <p class="auto-refresh-note">Данные автоматически обновляются каждые 30 секунд</p>
+          <div id="metrics-content"></div>
+        `;
+
+        document.getElementById('apply-filter').addEventListener('click', loadMetrics);
+        document.getElementById('reset-filter').addEventListener('click', () => {
+          document.getElementById('filter-start').value = '';
+          document.getElementById('filter-end').value = '';
+          loadMetrics();
+        });
+
+        loadMetrics();
+      }
+
+      function startAutoRefresh() {
+        if (autoRefreshInterval) clearInterval(autoRefreshInterval);
+        autoRefreshInterval = setInterval(() => {
+          if (auth.currentUser) {
+            loadMetrics();
+          } else {
+            stopAutoRefresh();
+          }
+        }, 30000);
+      }
+
+      function stopAutoRefresh() {
+        if (autoRefreshInterval) {
+          clearInterval(autoRefreshInterval);
+          autoRefreshInterval = null;
+        }
+      }
+
+      async function loadMetrics() {
+        const startStr = document.getElementById('filter-start')?.value;
+        const endStr = document.getElementById('filter-end')?.value;
+        let start = null, end = null;
+        if (startStr) start = new Date(startStr).getTime();
+        if (endStr) end = new Date(endStr).getTime();
+
+        const content = document.getElementById('metrics-content');
+        if (!content) return;
+        content.innerHTML = '<p>Загрузка...</p>';
+
+        try {
+          const snap = await db.collection('users').get();
+          const users = [];
+          snap.forEach(doc => {
+            const d = doc.data();
+            if (d.role === 'admin') return;
+            const lastActive = d.lastActive || 0;
+            const online = (Date.now() - lastActive) < ONLINE_THRESHOLD;
+            const gameHistory = d.gameHistory || [];
+            const topGame = getTopGame(gameHistory);
+
+            // Фильтр по периоду
+            if (start || end) {
+              const hasActivity = gameHistory.some(h => {
+                const t = h.timestamp;
+                if (start && t < start) return false;
+                if (end && t > end) return false;
+                return true;
+              });
+              if (!hasActivity) return;
+            }
+
+            users.push({
+              uid: doc.id,
+              username: d.username || 'Без имени',
+              email: d.email || '',
+              department: d.department || '—',
+              points: d.points || 0,
+              lokoin_balance: d.lokoin_balance || 0,
+              achievements: (d.achievements || []).length,
+              lastActive,
+              online,
+              topGame,
+              gameHistory
+            });
+          });
+
+          // Общая сводка
+          const total = users.length;
+          const onlineCount = users.filter(u => u.online).length;
+          const totalPoints = users.reduce((s, u) => s + u.points, 0);
+          const totalLokoins = users.reduce((s, u) => s + u.lokoin_balance, 0);
+
+          let html = `
+            <div class="metrics-card">
+              <h3>Общая сводка</h3>
+              <div class="summary-grid">
+                <div class="summary-item"><div class="summary-value">${total}</div><div class="summary-label">Пользователей</div></div>
+                <div class="summary-item"><div class="summary-value">${onlineCount}</div><div class="summary-label">Онлайн (посл. 15 мин)</div></div>
+                <div class="summary-item"><div class="summary-value">${totalPoints}</div><div class="summary-label">Всего баллов</div></div>
+                <div class="summary-item"><div class="summary-value">${totalLokoins}</div><div class="summary-label">Всего локоинов</div></div>
+              </div>
+              <button class="btn export-btn" id="export-summary-csv">📥 CSV</button>
+              <button class="btn export-btn" id="export-summary-xlsx">📊 Excel</button>
+            </div>
+
+            <div class="metrics-card">
+              <h3>Пользователи</h3>
+              <table class="metrics-table" id="users-table">
+                <thead><tr><th>Имя</th><th>Email</th><th>Отдел</th><th>Баллы</th><th>Локоины</th><th>Достижения</th><th>Статус</th><th>Топ игра</th></tr></thead>
+                <tbody>${users.map(u => `
+                  <tr>
+                    <td>${u.username}</td>
+                    <td>${u.email}</td>
+                    <td>${u.department}</td>
+                    <td>${u.points}</td>
+                    <td>${u.lokoin_balance}</td>
+                    <td>${u.achievements}</td>
+                    <td><span class="online-dot ${u.online ? 'online' : 'offline'}"></span>${u.online ? 'Онлайн' : 'Офлайн'}</td>
+                    <td>${u.topGame || '—'}</td>
+                  </tr>
+                `).join('')}</tbody>
+              </table>
+              <button class="btn export-btn" id="export-users-csv">📥 CSV</button>
+              <button class="btn export-btn" id="export-users-xlsx">📊 Excel</button>
+            </div>
+
+            <div class="metrics-card">
+              <h3>По отделам</h3>
+              <table class="metrics-table" id="dept-table">
+                <thead><tr><th>Отдел</th><th>Пользователей</th><th>Всего баллов</th><th>Топ игра</th><th>Топ пользователь</th></tr></thead>
+                <tbody>${buildDeptRows(users)}</tbody>
+              </table>
+              <button class="btn export-btn" id="export-dept-csv">📥 CSV</button>
+              <button class="btn export-btn" id="export-dept-xlsx">📊 Excel</button>
+            </div>
+          `;
+          content.innerHTML = html;
+
+          // Привязка экспорта CSV
+          document.getElementById('export-summary-csv').addEventListener('click', () => exportCSV([['Всего пользователей','Онлайн','Баллов','Локоинов'],[total,onlineCount,totalPoints,totalLokoins]], 'summary.csv'));
+          document.getElementById('export-users-csv').addEventListener('click', () => {
+            const rows = [['Имя','Email','Отдел','Баллы','Локоины','Достижения','Статус','Топ игра']];
+            users.forEach(u => rows.push([u.username,u.email,u.department,u.points,u.lokoin_balance,u.achievements,u.online?'Онлайн':'Офлайн',u.topGame||'—']));
+            exportCSV(rows, 'users.csv');
+          });
+          document.getElementById('export-dept-csv').addEventListener('click', () => {
+            const rows = [['Отдел','Пользователей','Всего баллов','Топ игра','Топ пользователь']];
+            const deptMap = groupBy(users, 'department');
+            for (const [dept, members] of Object.entries(deptMap)) {
+              const totalPoints = members.reduce((s, u) => s + u.points, 0);
+              const topGame = getTopGame(members.flatMap(u => u.gameHistory));
+              const topUser = members.sort((a,b) => b.points - a.points)[0];
+              rows.push([dept, members.length, totalPoints, topGame || '—', topUser ? topUser.username : '—']);
+            }
+            exportCSV(rows, 'departments.csv');
+          });
+
+          // Привязка экспорта XLSX
+          document.getElementById('export-summary-xlsx').addEventListener('click', () => exportXLSX([['Всего пользователей','Онлайн','Баллов','Локоинов'],[total,onlineCount,totalPoints,totalLokoins]], 'summary.xlsx'));
+          document.getElementById('export-users-xlsx').addEventListener('click', () => {
+            const rows = [['Имя','Email','Отдел','Баллы','Локоины','Достижения','Статус','Топ игра']];
+            users.forEach(u => rows.push([u.username,u.email,u.department,u.points,u.lokoin_balance,u.achievements,u.online?'Онлайн':'Офлайн',u.topGame||'—']));
+            exportXLSX(rows, 'users.xlsx');
+          });
+          document.getElementById('export-dept-xlsx').addEventListener('click', () => {
+            const rows = [['Отдел','Пользователей','Всего баллов','Топ игра','Топ пользователь']];
+            const deptMap = groupBy(users, 'department');
+            for (const [dept, members] of Object.entries(deptMap)) {
+              const totalPoints = members.reduce((s, u) => s + u.points, 0);
+              const topGame = getTopGame(members.flatMap(u => u.gameHistory));
+              const topUser = members.sort((a,b) => b.points - a.points)[0];
+              rows.push([dept, members.length, totalPoints, topGame || '—', topUser ? topUser.username : '—']);
+            }
+            exportXLSX(rows, 'departments.xlsx');
+          });
+
+        } catch (e) {
+          console.error(e);
+          content.innerHTML = '<p>Ошибка загрузки метрик.</p>';
+        }
+      }
+
+      function getTopGame(history) {
+        const counts = {};
+        history.forEach(h => {
+          const name = h.game === 'clicker' ? 'Кликер' : h.game === 'memory' ? 'Найди пару' : h.game === 'snake' ? 'Змейка' : h.game === '2048' ? '2048' : h.game === 'minesweeper' ? 'Сапёр' : h.game;
+          counts[name] = (counts[name] || 0) + 1;
+        });
+        const sorted = Object.entries(counts).sort((a,b) => b[1] - a[1]);
+        return sorted.length ? sorted[0][0] : null;
+      }
+
+      function groupBy(arr, key) {
+        return arr.reduce((acc, obj) => {
+          const val = obj[key] || '—';
+          if (!acc[val]) acc[val] = [];
+          acc[val].push(obj);
+          return acc;
+        }, {});
+      }
+
+      function buildDeptRows(users) {
+        const deptMap = groupBy(users, 'department');
+        let rows = '';
+        for (const [dept, members] of Object.entries(deptMap)) {
+          const totalPoints = members.reduce((s, u) => s + u.points, 0);
+          const topGame = getTopGame(members.flatMap(u => u.gameHistory));
+          const topUser = members.sort((a,b) => b.points - a.points)[0];
+          rows += `<tr>
+            <td>${dept}</td>
+            <td>${members.length}</td>
+            <td>${totalPoints}</td>
+            <td>${topGame || '—'}</td>
+            <td>${topUser ? topUser.username : '—'}</td>
+          </tr>`;
+        }
+        return rows;
+      }
+
+      function exportCSV(rows, filename) {
+        let csv = '\uFEFF' + rows.map(r => r.map(v => `"${v}"`).join(',')).join('\n');
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        a.click();
+        URL.revokeObjectURL(url);
+      }
+
+      function exportXLSX(rows, filename) {
+        const ws = XLSX.utils.aoa_to_sheet(rows);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, 'Метрики');
+        XLSX.writeFile(wb, filename);
+      }
+    });
+  </script>
+</body>
+</html>

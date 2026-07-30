@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <!-- Тело совы -->
+  <ellipse cx="32" cy="36" rx="16" ry="20" fill="#FBBF24" stroke="#F59E0B" stroke-width="2"/>
+  <!-- Голова -->
+  <circle cx="32" cy="20" r="12" fill="#FBBF24" stroke="#F59E0B" stroke-width="2"/>
+  <!-- Уши -->
+  <path d="M24 10 L22 4 L28 10" fill="#FBBF24" stroke="#F59E0B" stroke-width="2"/>
+  <path d="M40 10 L42 4 L36 10" fill="#FBBF24" stroke="#F59E0B" stroke-width="2"/>
+  <!-- Глаза -->
+  <circle cx="26" cy="18" r="5" fill="white" stroke="#F59E0B" stroke-width="1.5"/>
+  <circle cx="38" cy="18" r="5" fill="white" stroke="#F59E0B" stroke-width="1.5"/>
+  <circle cx="26" cy="18" r="2.5" fill="#1F2937"/>
+  <circle cx="38" cy="18" r="2.5" fill="#1F2937"/>
+  <!-- Клюв -->
+  <polygon points="30,22 32,26 34,22" fill="#F59E0B"/>
+  <!-- Крылья -->
+  <path d="M16 30 C12 34 14 44 20 46" fill="#F59E0B" stroke="#D97706" stroke-width="1.5"/>
+  <path d="M48 30 C52 34 50 44 44 46" fill="#F59E0B" stroke="#D97706" stroke-width="1.5"/>
+  <!-- Лапки -->
+  <path d="M24 54 L22 60 L26 60 L24 54" fill="#F59E0B"/>
+  <path d="M40 54 L38 60 L42 60 L40 54" fill="#F59E0B"/>
+  <!-- Блик -->
+  <ellipse cx="26" cy="16" rx="2" ry="1" fill="white" opacity="0.6"/>
+</svg>

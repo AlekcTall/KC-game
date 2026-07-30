@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Магазин – Геймификация КЦ</title>
+  <link rel="stylesheet" href="css/style.css">
+  <style>
+    .shop-categories { display: flex; gap: 0.5rem; margin-bottom: 1rem; flex-wrap: wrap; }
+    .shop-category-btn { padding: 0.4rem 1rem; border: 1px solid #d0d8e0; border-radius: 20px; background: white; cursor: pointer; font-size: 0.9rem; transition: all 0.2s; }
+    .shop-category-btn.active { background: var(--color-primary); color: white; border-color: var(--color-primary); }
+    .shop-card__duration { font-size: 0.8rem; color: #888; margin-bottom: 0.5rem; }
+    .shop-card__stock { font-size: 0.8rem; color: #e74c3c; margin-bottom: 0.5rem; font-weight: 600; }
+    .shop-card__effect { font-size: 0.75rem; color: #27ae60; margin-bottom: 0.3rem; font-weight: 500; }
+    .shop-card__timer { font-size: 0.8rem; color: #e67e22; font-weight: 600; margin-bottom: 0.5rem; }
+    .modal { max-width: 450px; }
+    .skeleton-card { background: var(--color-white); border-radius: var(--border-radius); padding: 1.5rem 1rem; box-shadow: 0 2px 10px rgba(0,0,0,0.05); text-align: center; animation: shimmer 1.5s infinite; display: flex; flex-direction: column; align-items: center; }
+    .skeleton-icon { width: 3rem; height: 3rem; border-radius: 50%; background: #e0e0e0; margin-bottom: 0.5rem; }
+    .skeleton-title { height: 1.2rem; width: 60%; background: #e0e0e0; margin-bottom: 0.5rem; border-radius: 4px; }
+    .skeleton-text { height: 0.9rem; width: 80%; background: #e0e0e0; margin-bottom: 0.5rem; border-radius: 4px; }
+    .skeleton-price { height: 1rem; width: 40%; background: #e0e0e0; border-radius: 4px; margin-top: 0.5rem; }
+    @keyframes shimmer { 0% { opacity: 0.6; } 50% { opacity: 1; } 100% { opacity: 0.6; } }
+    .shop-error { text-align: center; padding: 2rem; color: #e74c3c; }
+  </style>
+</head>
+<body>
+  <header class="header"><div class="container header__inner"><a href="index.html" class="logo">КЦ-Игры</a><button class="burger" id="burger-btn" aria-label="Меню">☰</button><nav class="nav" id="main-nav"><ul class="nav__list"><li><a href="index.html" class="nav__link">Главная</a></li><li><a href="games.html" class="nav__link">Игры</a></li><li><a href="leaderboard.html" class="nav__link">Рейтинг</a></li><li><a href="shop.html" class="nav__link active">Магазин</a></li><li><a href="profile.html" class="nav__link">Профиль</a></li><li><a href="admin.html" class="nav__link">Админ</a></li></ul></nav><div id="auth-status" class="auth-status"></div></div></header>
+  <main class="main"><div class="container"><h2>Магазин</h2><div id="shop-content"></div></div></main>
+  <footer class="footer"><div class="container"><p>© 2026 ваши амбассадоры</p></div></footer>
+
+  <div class="modal-overlay" id="item-modal" style="display:none;"><div class="modal item-modal-content"><span class="modal-close" id="item-modal-close">&times;</span><div class="item-detail"><div class="item-detail-icon" id="item-detail-icon"></div><h3 id="item-detail-title"></h3><p class="item-detail-price"><strong>Цена:</strong> <span id="item-detail-price"></span> локоинов</p><p class="item-detail-desc" id="item-detail-desc"></p><p id="item-detail-duration" style="font-size:0.9rem;color:#888;"></p><div class="item-detail-actions" id="item-detail-actions"></div></div></div></div>
+  <div class="modal-overlay" id="confirm-modal" style="display:none;"><div class="modal confirm-modal-content"><p id="confirm-text"></p><button class="btn" id="confirm-yes">Да, купить</button><button class="btn btn-cancel" id="confirm-no">Отмена</button></div></div>
+
+  <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore-compat.js"></script>
+  <script src="js/firebase-config.js"></script>
+  <script src="js/firebase-auth.js"></script>
+  <script src="js/storage.js"></script>
+  <script src="js/achievements.js"></script>
+  <script src="js/notifications.js"></script>
+  <script src="js/easter-eggs.js"></script>
+  <script src="js/feedback.js"></script>
+  <script src="js/main.js"></script>
+  <script src="js/effects-engine.js"></script>
+
+  <script>
+    (function() {
+      let allItems = [];
+      let currentUserDoc = null;
+      const shopContent = document.getElementById('shop-content');
+      let grid, searchInput, categorySelect, sortSelect;
+      const CACHE_KEY = 'krugames_shop_cache';
+
+      const itemModal = document.getElementById('item-modal'), itemModalClose = document.getElementById('item-modal-close'), itemDetailIcon = document.getElementById('item-detail-icon'), itemDetailTitle = document.getElementById('item-detail-title'), itemDetailPrice = document.getElementById('item-detail-price'), itemDetailDesc = document.getElementById('item-detail-desc'), itemDetailDuration = document.getElementById('item-detail-duration'), itemDetailActions = document.getElementById('item-detail-actions');
+      const confirmModal = document.getElementById('confirm-modal'), confirmText = document.getElementById('confirm-text'), confirmYes = document.getElementById('confirm-yes'), confirmNo = document.getElementById('confirm-no');
+      let pendingItem = null;
+
+      function renderSkeletons() {
+        grid.innerHTML = Array.from({ length: 8 }, () => `
+          <div class="skeleton-card">
+            <div class="skeleton-icon"></div>
+            <div class="skeleton-title"></div>
+            <div class="skeleton-text"></div>
+            <div class="skeleton-price"></div>
+          </div>
+        `).join('');
+      }
+
+      async function loadShopItems() {
+        const cached = sessionStorage.getItem(CACHE_KEY);
+        if (cached) {
+          try {
+            allItems = JSON.parse(cached);
+            renderShop();
+          } catch (e) {}
+        } else {
+          renderSkeletons();
+        }
+
+        try {
+          const snap = await db.collection('shopItems').get();
+          allItems = [];
+          snap.forEach(doc => allItems.push({ id: doc.id, ...doc.data() }));
+          sessionStorage.setItem(CACHE_KEY, JSON.stringify(allItems));
+          populateCategories();
+          renderShop();
+        } catch (e) {
+          console.error('Ошибка загрузки товаров:', e);
+          if (!cached) {
+            grid.innerHTML = '<p class="shop-error">Не удалось загрузить товары.</p>';
+          }
+        }
+      }
+
+      function populateCategories() {
+        const cats = [...new Set(allItems.map(i => i.category).filter(Boolean))];
+        categorySelect.innerHTML = '<option value="">Все категории</option>';
+        cats.forEach(c => categorySelect.add(new Option(c, c)));
+
+        const catContainer = document.getElementById('shop-categories');
+        if (catContainer) {
+          catContainer.querySelectorAll('.shop-category-btn:not([data-category=""])').forEach(b => b.remove());
+          cats.forEach(cat => {
+            const btn = document.createElement('button');
+            btn.className = 'shop-category-btn';
+            btn.textContent = cat;
+            btn.dataset.category = cat;
+            btn.addEventListener('click', () => {
+              catContainer.querySelectorAll('.shop-category-btn').forEach(b => b.classList.remove('active'));
+              btn.classList.add('active');
+              categorySelect.value = cat;
+              renderShop();
+            });
+            catContainer.appendChild(btn);
+          });
+        }
+      }
+
+      async function refreshCurrentUser() {
+        if (!auth.currentUser) return;
+        try {
+          const doc = await db.collection('users').doc(auth.currentUser.uid).get();
+          if (doc.exists) {
+            const data = doc.data();
+            currentUserDoc = { uid: auth.currentUser.uid, ...data };
+            setCurrentUser(currentUserDoc);
+          }
+        } catch (e) { console.error(e); }
+      }
+
+      function renderShop() {
+        let visibleItems = allItems.filter(item => !item.hidden);
+
+        if (!visibleItems.length) {
+          grid.innerHTML = '<p class="no-results">Товаров пока нет.</p>';
+          return;
+        }
+
+        const searchTerm = searchInput.value.trim().toLowerCase(),
+              category = categorySelect.value,
+              sort = sortSelect.value;
+
+        let filtered = visibleItems.filter(item => {
+          if (searchTerm && !item.title.toLowerCase().includes(searchTerm)) return false;
+          if (category && item.category !== category) return false;
+          return true;
+        });
+
+        if (sort === 'price_asc') filtered.sort((a, b) => a.price - b.price);
+        else if (sort === 'price_desc') filtered.sort((a, b) => b.price - a.price);
+
+        if (!filtered.length) {
+          grid.innerHTML = '<p class="no-results">Ничего не найдено.</p>';
+          return;
+        }
+
+        const purchasedItems = currentUserDoc?.purchasedItems || getCurrentUser()?.purchasedItems || [];
+        const activeEffectsInfo = typeof getActiveEffectsInfo === 'function' ? getActiveEffectsInfo(currentUserDoc || getCurrentUser()) : [];
+
+        let html = '';
+        filtered.forEach(item => {
+          const isOwned = item.unique && purchasedItems.includes(item.id);
+          const stockText = item.stock !== null && item.stock !== undefined ? `Осталось: ${item.stock} шт.` : '';
+          const durationText = item.duration > 0 ? `Действует: ${item.duration} ч.` : (item.duration === 0 ? 'Навсегда' : '');
+
+          let timerHtml = '';
+          if (item.effectType && (item.effectType === 'double_xp' || item.effectType === 'fast_cooldown')) {
+            const activeEffect = activeEffectsInfo.find(e => e.id === item.effectType);
+            if (activeEffect) {
+              timerHtml = `<p class="shop-card__timer">🕒 Активен ещё ${activeEffect.remainingText}</p>`;
+            }
+          }
+
+          html += `<div class="shop-card" data-item-id="${item.id}">
+            <div class="shop-card__icon">${item.icon || '🛒'}</div>
+            <h3 class="shop-card__title">${item.title}</h3>
+            ${item.effectType || item.effect ? `<p class="shop-card__effect">${item.effectType || item.effect}</p>` : ''}
+            ${durationText ? `<p class="shop-card__duration">${durationText}</p>` : ''}
+            ${timerHtml}
+            ${stockText ? `<p class="shop-card__stock">${stockText}</p>` : ''}
+            <p class="shop-card__price">${item.price} локоин${pluralizeLokoin(item.price)}</p>
+            ${isOwned ? '<span class="shop-card__badge">Куплено</span>' : ''}
+          </div>`;
+        });
+        grid.innerHTML = html;
+
+        document.querySelectorAll('.shop-card').forEach(card => {
+          card.addEventListener('click', () => {
+            const item = allItems.find(i => i.id === card.dataset.itemId);
+            if (item) openItemModal(item);
+          });
+        });
+      }
+
+      function openItemModal(item) {
+        if (!item) return;
+        pendingItem = item;
+        itemDetailIcon.textContent = item.icon || '🛒';
+        itemDetailTitle.textContent = item.title;
+        itemDetailPrice.textContent = item.price;
+        itemDetailDesc.textContent = item.description || 'Описание отсутствует.';
+        itemDetailDuration.textContent = item.duration > 0 ? `Длительность: ${item.duration} ч.` : (item.duration === 0 ? 'Навсегда' : '');
+
+        const purchasedItems = currentUserDoc?.purchasedItems || getCurrentUser()?.purchasedItems || [];
+        const isOwned = item.unique && purchasedItems.includes(item.id);
+        let timerText = '';
+        if (item.effectType && (item.effectType === 'double_xp' || item.effectType === 'fast_cooldown')) {
+          const activeInfo = typeof getActiveEffectsInfo === 'function' ? getActiveEffectsInfo(currentUserDoc || getCurrentUser()) : [];
+          const eff = activeInfo.find(e => e.id === item.effectType);
+          if (eff) timerText = `<p style="color:#e67e22; font-weight:500;">🕒 Эффект активен ещё ${eff.remainingText}</p>`;
+        }
+
+        if (isOwned) {
+          itemDetailActions.innerHTML = '<span class="item-detail-owned">Уже куплено</span>' + timerText;
+        } else if (item.stock !== null && item.stock !== undefined && item.stock <= 0) {
+          itemDetailActions.innerHTML = '<span class="item-detail-owned" style="background:#e74c3c;">Раскуплено</span>';
+        } else if (timerText && !item.unique) {
+          itemDetailActions.innerHTML = timerText;
+        } else {
+          itemDetailActions.innerHTML = `<button class="btn btn-buy" id="btn-buy">Купить за ${item.price} локоин${pluralizeLokoin(item.price)}</button>`;
+        }
+
+        itemModal.style.display = 'flex';
+        const buyBtn = document.getElementById('btn-buy');
+        if (buyBtn) {
+          buyBtn.addEventListener('click', () => {
+            itemModal.style.display = 'none';
+            confirmPurchase(item);
+          });
+        }
+      }
+
+      function confirmPurchase(item) {
+        if (!auth.currentUser) {
+          showToast('Войдите, чтобы покупать.', 'error');
+          return;
+        }
+        const balance = currentUserDoc?.lokoin_balance ?? getCurrentUser()?.lokoin_balance ?? 0;
+        if (balance < item.price) {
+          showToast(`Недостаточно локоинов. Ваш баланс: ${balance}`, 'error');
+          return;
+        }
+        if (item.stock !== null && item.stock !== undefined && item.stock <= 0) {
+          showToast('Товар раскуплен.', 'error');
+          return;
+        }
+        const purchasedItems = currentUserDoc?.purchasedItems || getCurrentUser()?.purchasedItems || [];
+        if (item.unique && purchasedItems.includes(item.id)) {
+          showToast('Вы уже купили этот товар.', 'error');
+          return;
+        }
+
+        confirmText.textContent = `Купить «${item.title}» за ${item.price} локоин${pluralizeLokoin(item.price)}?`;
+        confirmModal.style.display = 'flex';
+        confirmYes.onclick = async () => {
+          confirmModal.style.display = 'none';
+          await performPurchase(item);
+        };
+        confirmNo.onclick = () => { confirmModal.style.display = 'none'; };
+      }
+
+      async function performPurchase(item) {
+        try {
+          if (!auth.currentUser) throw new Error('Не авторизован');
+          const balance = currentUserDoc?.lokoin_balance ?? getCurrentUser()?.lokoin_balance ?? 0;
+          const newBalance = balance - item.price;
+          const userRef = db.collection('users').doc(auth.currentUser.uid);
+          const updateData = {
+            lokoin_balance: newBalance,
+            purchasedItems: firebase.firestore.FieldValue.arrayUnion(item.id)
+          };
+
+          await userRef.update(updateData);
+
+          if ((item.effectType || item.effect) && typeof applyItemEffect === 'function') {
+            await applyItemEffect(auth.currentUser.uid, item);
+          }
+
+          if (!item.effectType && item.effect === 'dark_theme' && item.duration === 0) {
+            await userRef.update({ activeTheme: 'dark' });
+            document.body.classList.add('dark-theme');
+          }
+
+          if (typeof addPurchaseNotification === 'function') {
+            await addPurchaseNotification(auth.currentUser.uid, item.title, item.price, newBalance);
+          }
+
+          if (item.notifyAdmin) {
+            await db.collection('purchaseRequests').add({
+              userId: auth.currentUser.uid,
+              username: currentUserDoc?.username || 'Аноним',
+              email: currentUserDoc?.email || '',
+              department: currentUserDoc?.department || '',
+              itemId: item.id,
+              itemTitle: item.title,
+              itemPrice: item.price,
+              itemEffect: item.effectType || item.effect || '',
+              status: 'new',
+              createdAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
+
+            const adminsSnap = await db.collection('users').where('role', '==', 'admin').get();
+            adminsSnap.forEach(async adminDoc => {
+              if (typeof addNotification === 'function') {
+                await addNotification(adminDoc.id, `🛒 ${currentUserDoc?.username || 'Аноним'} приобрёл «${item.title}» за ${item.price} лок.`, 'purchase', 'admin.html');
+              }
+            });
+          }
+
+          showToast(`Вы приобрели «${item.title}»!`, 'success');
+
+          if (currentUserDoc) {
+            currentUserDoc.lokoin_balance = newBalance;
+            if (!currentUserDoc.purchasedItems) currentUserDoc.purchasedItems = [];
+            currentUserDoc.purchasedItems.push(item.id);
+          }
+          const cachedUser = getCurrentUser();
+          if (cachedUser) {
+            cachedUser.lokoin_balance = newBalance;
+            if (!cachedUser.purchasedItems) cachedUser.purchasedItems = [];
+            cachedUser.purchasedItems.push(item.id);
+            setCurrentUser(cachedUser);
+          }
+
+          sessionStorage.setItem(CACHE_KEY, JSON.stringify(allItems));
+
+          sessionStorage.removeItem('krugames_profile_cache');
+          sessionStorage.removeItem('krugames_leaderboard');
+          Object.keys(sessionStorage).forEach(key => {
+            if (key.startsWith('krugames_public_profile_')) {
+              sessionStorage.removeItem(key);
+            }
+          });
+
+          if (typeof checkFirstPurchase === 'function') {
+            await checkFirstPurchase();
+          }
+          if (item.effectType === 'dark_theme' && typeof checkDarkThemePurchase === 'function') {
+            await checkDarkThemePurchase();
+          }
+
+          renderShop();
+          itemModal.style.display = 'none';
+        } catch (e) {
+          showToast('Ошибка: ' + e.message, 'error');
+        }
+      }
+
+      itemModalClose.addEventListener('click', () => { itemModal.style.display = 'none'; });
+      window.addEventListener('click', e => {
+        if (e.target === itemModal) itemModal.style.display = 'none';
+        if (e.target === confirmModal) confirmModal.style.display = 'none';
+      });
+
+      auth.onAuthStateChanged(async user => {
+        if (!user) {
+          shopContent.innerHTML = '<p class="no-results">Войдите, чтобы просматривать магазин.</p>';
+          return;
+        }
+
+        shopContent.innerHTML = `
+          <div class="shop-categories" id="shop-categories">
+            <button class="shop-category-btn active" data-category="">Все</button>
+          </div>
+          <div class="shop-filters">
+            <div class="filter-group"><label>🔍 Поиск</label><input type="text" id="shop-search" placeholder="Название..."></div>
+            <div class="filter-group"><label>Категория</label><select id="shop-category"><option value="">Все</option></select></div>
+            <div class="filter-group"><label>Сортировка</label><select id="shop-sort"><option value="default">По умолчанию</option><option value="price_asc">Сначала дешёвые</option><option value="price_desc">Сначала дорогие</option></select></div>
+          </div>
+          <div id="shop-grid" class="shop-grid"></div>
+        `;
+
+        grid = document.getElementById('shop-grid');
+        searchInput = document.getElementById('shop-search');
+        categorySelect = document.getElementById('shop-category');
+        sortSelect = document.getElementById('shop-sort');
+
+        refreshCurrentUser().then(() => {
+          if (currentUserDoc?.activeTheme === 'dark') {
+            document.body.classList.add('dark-theme');
+          } else {
+            document.body.classList.remove('dark-theme');
+          }
+        });
+
+        await loadShopItems();
+
+        const catContainer = document.getElementById('shop-categories');
+        catContainer.querySelector('.shop-category-btn[data-category=""]').addEventListener('click', () => {
+          catContainer.querySelectorAll('.shop-category-btn').forEach(b => b.classList.remove('active'));
+          catContainer.querySelector('.shop-category-btn[data-category=""]').classList.add('active');
+          categorySelect.value = '';
+          renderShop();
+        });
+
+        searchInput.addEventListener('input', renderShop);
+        categorySelect.addEventListener('change', function() {
+          catContainer.querySelectorAll('.shop-category-btn').forEach(b => b.classList.remove('active'));
+          const ab = document.querySelector(`.shop-category-btn[data-category="${this.value}"]`) || catContainer.querySelector('.shop-category-btn[data-category=""]');
+          if (ab) ab.classList.add('active');
+          renderShop();
+        });
+        sortSelect.addEventListener('change', renderShop);
+      });
+    })();
+  </script>
+</body>
+</html>

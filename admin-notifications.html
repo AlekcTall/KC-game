@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Уведомления – Админ-панель – Геймификация КЦ</title>
+  <link rel="stylesheet" href="css/style.css">
+  <style>
+    .admin-page { max-width: 800px; margin: 0 auto; padding: 1.5rem; }
+    .back-link { display: inline-block; margin-bottom: 1rem; color: var(--color-primary); text-decoration: none; }
+    .mass-notif-form { background: #f9f9fb; padding: 1.5rem; border-radius: 12px; margin-top: 1rem; }
+    .mass-notif-form select, .mass-notif-form input, .mass-notif-form textarea { width: 100%; padding: 0.5rem; margin-bottom: 1rem; border: 1px solid #ddd; border-radius: 6px; }
+    .progress-bar { width: 100%; background: #eee; border-radius: 8px; height: 20px; margin: 1rem 0; overflow: hidden; display: none; }
+    .progress-fill { height: 100%; background: #27ae60; width: 0%; transition: width 0.2s; }
+  </style>
+</head>
+<body>
+  <header class="header">
+    <div class="container header__inner">
+      <a href="index.html" class="logo">КЦ-Игры</a>
+      <button class="burger" id="burger-btn" aria-label="Меню">☰</button>
+      <nav class="nav" id="main-nav">
+        <ul class="nav__list">
+          <li><a href="index.html" class="nav__link">Главная</a></li>
+          <li><a href="games.html" class="nav__link">Игры</a></li>
+          <li><a href="leaderboard.html" class="nav__link">Рейтинг</a></li>
+          <li><a href="shop.html" class="nav__link">Магазин</a></li>
+          <li><a href="profile.html" class="nav__link">Профиль</a></li>
+          <li><a href="admin.html" class="nav__link active">Админ</a></li>
+        </ul>
+      </nav>
+      <div id="auth-status" class="auth-status"></div>
+    </div>
+  </header>
+
+  <main class="main">
+    <div class="container admin-page" id="admin-container">
+      <p>Загрузка...</p>
+    </div>
+  </main>
+
+  <footer class="footer"><div class="container"><p>© 2026 ваши амбассадоры</p></div></footer>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore-compat.js"></script>
+  <script src="js/firebase-config.js"></script>
+  <script src="js/firebase-auth.js"></script>
+  <script src="js/storage.js"></script>
+  <script src="js/achievements.js"></script>
+  <script src="js/easter-eggs.js"></script>
+  <script src="js/notifications.js"></script>
+  <script src="js/main.js"></script>
+  <script src="js/feedback.js"></script>
+
+  <script>
+    (function() {
+      document.addEventListener('DOMContentLoaded', async () => {
+        const container = document.getElementById('admin-container');
+
+        auth.onAuthStateChanged(async fbUser => {
+          if (!fbUser) { container.innerHTML = '<p>Вы не авторизованы.</p>'; return; }
+          try {
+            const d = await db.collection('users').doc(fbUser.uid).get();
+            if (!d.exists || d.data().role !== 'admin') {
+              container.innerHTML = '<p>Доступ запрещён.</p>';
+              return;
+            }
+            renderPage();
+          } catch (e) { container.innerHTML = `<p>Ошибка: ${e.message}</p>`; }
+        });
+
+        function renderPage() {
+          container.innerHTML = `
+            <a href="admin.html" class="back-link">← В админку</a>
+            <h2>📢 Массовая рассылка уведомлений</h2>
+            <div class="mass-notif-form">
+              <div class="form-group">
+                <label>Кому</label>
+                <select id="notif-target">
+                  <option value="all">Всем</option>
+                  <option value="department">По отделу</option>
+                  <option value="role">По роли</option>
+                  <option value="user">Конкретному</option>
+                </select>
+              </div>
+              <div class="form-group" id="notif-filter-group" style="display:none;">
+                <label>Значение</label>
+                <select id="notif-filter-value"></select>
+              </div>
+              <div class="form-group">
+                <label>Текст</label>
+                <textarea id="notif-message" rows="3" required></textarea>
+              </div>
+              <div class="form-group">
+                <label>Ссылка</label>
+                <input type="text" id="notif-link">
+              </div>
+              <button class="btn" id="send-notif-btn">Отправить</button>
+              <div class="progress-bar" id="notif-progress">
+                <div class="progress-fill" id="notif-progress-fill"></div>
+              </div>
+              <p id="notif-status" class="auth-message"></p>
+            </div>
+          `;
+
+          const ts = document.getElementById('notif-target'),
+                fg = document.getElementById('notif-filter-group'),
+                fv = document.getElementById('notif-filter-value'),
+                mi = document.getElementById('notif-message'),
+                li = document.getElementById('notif-link'),
+                sb = document.getElementById('send-notif-btn'),
+                pb = document.getElementById('notif-progress'),
+                pf = document.getElementById('notif-progress-fill'),
+                sm = document.getElementById('notif-status');
+
+          async function updateFilterOptions() {
+            const t = ts.value;
+            fg.style.display = t === 'all' ? 'none' : 'block';
+            fv.innerHTML = '';
+            if (t === 'department') {
+              const snap = await db.collection('users').get();
+              const depts = [...new Set(snap.docs.map(d => d.data().department).filter(Boolean))];
+              depts.forEach(d => fv.add(new Option(d, d)));
+            } else if (t === 'role') {
+              ['user', 'admin'].forEach(r => fv.add(new Option(r, r)));
+            } else if (t === 'user') {
+              const snap = await db.collection('users').get();
+              snap.forEach(doc => {
+                const d = doc.data();
+                fv.add(new Option(d.username || d.email, doc.id));
+              });
+            }
+          }
+          ts.addEventListener('change', updateFilterOptions);
+          updateFilterOptions();
+
+          sb.addEventListener('click', async () => {
+            const msg = mi.value.trim();
+            if (!msg) { sm.textContent = 'Введите текст.'; return; }
+            const link = li.value.trim();
+            sb.disabled = true;
+            pb.style.display = 'block';
+            pf.style.width = '0%';
+            sm.textContent = 'Отправка...';
+
+            try {
+              let users = [];
+              const t = ts.value;
+              if (t === 'all') {
+                const snap = await db.collection('users').get();
+                snap.forEach(doc => users.push(doc.id));
+              } else {
+                const field = t === 'department' ? 'department' : t === 'role' ? 'role' : '__name__';
+                const v = fv.value;
+                if (!v) { sm.textContent = 'Выберите значение.'; sb.disabled = false; return; }
+                const snap = await db.collection('users').where(field, '==', v).get();
+                snap.forEach(doc => users.push(doc.id));
+              }
+
+              if (!users.length) { sm.textContent = 'Нет пользователей.'; sb.disabled = false; return; }
+
+              let sent = 0;
+              for (const uid of users) {
+                await addNotification(uid, msg, 'admin', link || '');
+                sent++;
+                pf.style.width = (sent / users.length * 100) + '%';
+              }
+              sm.textContent = `Отправлено (${sent} шт.)`;
+              showToast(`Разослано ${sent}`, 'success');
+            } catch (err) {
+              sm.textContent = 'Ошибка: ' + err.message;
+            } finally {
+              sb.disabled = false;
+              pb.style.display = 'none';
+            }
+          });
+        }
+      });
+    })();
+  </script>
+</body>
+</html>

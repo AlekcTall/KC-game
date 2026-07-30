@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <!-- Шестерёнка -->
+  <circle cx="32" cy="32" r="18" fill="#FBBF24" stroke="#F59E0B" stroke-width="2"/>
+  <!-- Зубцы -->
+  <path d="M32 12 L34 16 L38 14 L38 18 L42 18 L40 22 L44 24 L42 28 L46 30 L44 34 L48 36 L44 38 L44 42 L40 42 L38 46 L34 46 L32 50 L30 46 L26 48 L26 44 L22 44 L24 40 L20 38 L22 34 L18 32 L22 30 L18 28 L22 24 L26 24 L26 20 L30 18 L32 12Z" fill="#FBBF24" stroke="#F59E0B" stroke-width="2"/>
+  <!-- Центр -->
+  <circle cx="32" cy="32" r="6" fill="#F59E0B"/>
+  <circle cx="32" cy="32" r="3" fill="#FBBF24"/>
+  <!-- Блик -->
+  <circle cx="28" cy="20" r="4" fill="white" opacity="0.3"/>
+</svg>

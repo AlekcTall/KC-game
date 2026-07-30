@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Кликер – КЦ Игры</title>
+  <link rel="stylesheet" href="../css/style.css">
+  <style>
+    :root {
+      --primary-gradient: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+      --button-gradient: linear-gradient(180deg, #ff9a9e 0%, #fecfef 99%, #fecfef 100%);
+      --button-shadow: 0 8px 0 #d94662, 0 15px 20px rgba(217, 70, 98, 0.4);
+      --button-active-shadow: 0 0 0 #d94662, 0 0 0 rgba(217, 70, 98, 0.4);
+    }
+
+    .clicker-game { 
+      max-width: 550px; 
+      margin: 2rem auto; 
+      text-align: center; 
+      background: rgba(255, 255, 255, 0.95); 
+      padding: 2rem; 
+      border-radius: 24px; 
+      box-shadow: 0 10px 30px rgba(0,0,0,0.08); 
+      backdrop-filter: blur(10px);
+      position: relative;
+      overflow: hidden; /* Чтобы всплывающий текст не вылезал за границы */
+    }
+
+    .clicker-header { margin-bottom: 1.5rem; }
+    .clicker-header h2 { margin: 0; color: #1e293b; font-size: 1.8rem; }
+    .clicker-header p { color: #64748b; margin-top: 0.5rem; font-size: 0.95rem; }
+
+    /* Прогресс-бар */
+    .progress-container {
+      background: #e2e8f0;
+      border-radius: 99px;
+      height: 12px;
+      width: 80%;
+      margin: 0 auto 1.5rem;
+      overflow: hidden;
+      position: relative;
+    }
+    .progress-bar {
+      height: 100%;
+      background: var(--primary-gradient);
+      width: 0%;
+      border-radius: 99px;
+      transition: width 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+      box-shadow: 0 0 10px rgba(245, 87, 108, 0.5);
+    }
+    .progress-text {
+      font-size: 0.85rem;
+      color: #64748b;
+      margin-top: -1.2rem;
+      margin-bottom: 1.5rem;
+      font-weight: 600;
+    }
+
+    .clicker-score { 
+      font-size: 4.5rem; 
+      font-weight: 800; 
+      margin: 0.5rem 0; 
+      color: #1e293b; 
+      font-variant-numeric: tabular-nums; /* Чтобы цифры не прыгали */
+      transition: transform 0.1s;
+    }
+    .clicker-score.pulse { 
+      animation: scorePulse 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); 
+      color: #f5576c;
+    }
+
+    /* 3D Кнопка */
+    .clicker-btn { 
+      background: linear-gradient(180deg, #ff758c 0%, #ff7eb3 100%); 
+      color: white; 
+      border: none; 
+      font-size: 1.8rem; 
+      font-weight: 800;
+      padding: 1.2rem 3rem; 
+      border-radius: 20px; 
+      cursor: pointer; 
+      user-select: none; 
+      -webkit-tap-highlight-color: transparent;
+      box-shadow: var(--button-shadow);
+      transform: translateY(0);
+      transition: transform 0.1s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.1s;
+      outline: none;
+      position: relative;
+      z-index: 10;
+    }
+    .clicker-btn:hover { filter: brightness(1.05); }
+    .clicker-btn:active { 
+      transform: translateY(8px); 
+      box-shadow: var(--button-active-shadow); 
+    }
+
+    /* Всплывающий текст (Floating Text) */
+    .floating-text {
+      position: absolute;
+      font-weight: 800;
+      font-size: 1.5rem;
+      color: #f5576c;
+      pointer-events: none;
+      animation: floatUp 0.8s ease-out forwards;
+      z-index: 20;
+      text-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    .floating-text.bonus {
+      color: #f59e0b;
+      font-size: 1.8rem;
+    }
+
+    @keyframes floatUp {
+      0% { opacity: 1; transform: translateY(0) scale(1); }
+      100% { opacity: 0; transform: translateY(-60px) scale(1.2); }
+    }
+    @keyframes scorePulse {
+      0% { transform: scale(1); }
+      50% { transform: scale(1.1); }
+      100% { transform: scale(1); }
+    }
+
+    /* Таблица и прочее */
+    .leaderboard-clicker { margin-top: 2.5rem; text-align: left; background: #f8fafc; padding: 1rem; border-radius: 16px; }
+    .leaderboard-clicker h3 { text-align: center; margin-bottom: 1rem; font-size: 1.1rem; color: #334155; }
+    .leaderboard-clicker table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+    .leaderboard-clicker th, .leaderboard-clicker td { padding: 0.6rem 0.5rem; border-bottom: 1px solid #e2e8f0; text-align: center; }
+    .leaderboard-clicker th { background: transparent; font-weight: 700; color: #64748b; }
+    .leaderboard-clicker .me { background: #dbeafe; font-weight: 700; color: #1e40af; border-radius: 6px; }
+    .auth-warning { text-align: center; display: none; margin-top: 0.5rem; color: #94a3b8; font-size: 0.9rem; }
+    
+    .clicker-back { display: inline-flex; align-items: center; gap: 0.5rem; margin-top: 1.5rem; color: #64748b; text-decoration: none; font-weight: 500; transition: color 0.2s; }
+    .clicker-back:hover { color: #f5576c; }
+
+    /* Toast (уведомления) */
+    #toast-container { position: fixed; top: 1rem; right: 1rem; z-index: 9999; display: flex; flex-direction: column; gap: 0.5rem; pointer-events: none; }
+    .toast { padding: 0.8rem 1.2rem; border-radius: 12px; color: #fff; font-weight: 600; font-size: 0.95rem; box-shadow: 0 4px 12px rgba(0,0,0,0.15); opacity: 0; transform: translateX(100%); transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); pointer-events: auto; max-width: 350px; backdrop-filter: blur(4px); }
+    .toast--visible { opacity: 1; transform: translateX(0); }
+    .toast--success { background: rgba(39, 174, 96, 0.95); } 
+    .toast--info { background: rgba(52, 152, 219, 0.95); }
+
+    @media (max-width: 480px) {
+      .clicker-game { padding: 1.5rem 1rem; margin: 1rem; }
+      .clicker-score { font-size: 3.5rem; }
+      .clicker-btn { font-size: 1.5rem; padding: 1rem 2rem; width: 100%; }
+    }
+  </style>
+</head>
+<body>
+  <div class="clicker-game">
+    <div class="clicker-header">
+      <h2>🖱️ Супер Кликер</h2>
+      <p>Кликайте, чтобы заработать баллы. Награда каждые <strong>20</strong> кликов!</p>
+    </div>
+
+    <div class="clicker-score" id="score">0</div>
+    
+    <!-- Прогресс до следующей награды -->
+    <div class="progress-container">
+      <div class="progress-bar" id="progress-bar"></div>
+    </div>
+    <div class="progress-text" id="progress-text">0 / 20 до награды</div>
+
+    <button class="clicker-btn" id="click-btn">КЛИК!</button>
+    <p id="message" style="margin-top: 1.5rem; font-weight: 600; min-height: 1.5rem; color: #f59e0b;"></p>
+
+    <div class="leaderboard-clicker" id="clicker-leaderboard">
+      <h3>🏆 Лучшие кликеры (всего кликов)</h3>
+      <table id="top-table">
+        <thead><tr><th>#</th><th>Игрок</th><th>Кликов</th></tr></thead>
+        <tbody></tbody>
+      </table>
+      <p class="auth-warning" id="auth-warning">Войдите в аккаунт, чтобы увидеть рейтинг.</p>
+    </div>
+
+    <a href="../games.html" class="clicker-back">← Вернуться к играм</a>
+  </div>
+
+  <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore-compat.js"></script>
+  <script src="../js/firebase-config.js"></script>
+  <script src="../js/firebase-auth.js"></script>
+  <script src="../js/storage.js"></script>
+  <script src="../js/achievements.js"></script>
+  <script src="../js/notifications.js"></script>
+  <script src="../js/easter-eggs.js"></script>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      if (typeof initEasterEggs === 'function') initEasterEggs();
+    });
+
+    // --- Утилиты ---
+    function showToast(msg, type = 'info') { 
+      let c = document.getElementById('toast-container'); 
+      if (!c) { c = document.createElement('div'); c.id = 'toast-container'; document.body.appendChild(c); } 
+      const t = document.createElement('div'); 
+      t.className = `toast toast--${type}`; 
+      t.textContent = msg; 
+      c.appendChild(t); 
+      // Форсируем reflow для анимации
+      t.offsetHeight; 
+      t.classList.add('toast--visible'); 
+      setTimeout(() => { 
+        t.classList.remove('toast--visible'); 
+        t.addEventListener('transitionend', () => { if (t.parentNode) t.remove(); if (!c.children.length) c.remove(); }); 
+      }, 3500); 
+    }
+
+    function spawnFloatingText(x, y, text, isBonus = false) {
+      const el = document.createElement('div');
+      el.className = `floating-text ${isBonus ? 'bonus' : ''}`;
+      el.textContent = text;
+      // Небольшой случайный разброс по X, чтобы текст не накладывался идеально друг на друга
+      const randomX = (Math.random() - 0.5) * 40;
+      el.style.left = `${x + randomX}px`;
+      el.style.top = `${y - 20}px`;
+      document.body.appendChild(el);
+      setTimeout(() => { if (el.parentNode) el.remove(); }, 800);
+    }
+
+    // --- Состояние игры ---
+    const CLICKS_PER_REWARD = 20;
+    const POINTS_PER_REWARD = 1;
+    
+    let totalClicks = 0;        // Общее количество за всё время (для рекорда)
+    let clicksSinceReward = 0;  // Прогресс до следующей награды (0 to 19)
+    let currentUid = null;
+
+    const scoreEl = document.getElementById('score');
+    const progressBar = document.getElementById('progress-bar');
+    const progressText = document.getElementById('progress-text');
+    const clickBtn = document.getElementById('click-btn');
+    const msgEl = document.getElementById('message');
+
+    // --- Инициализация ---
+    function updateProgressUI() {
+      scoreEl.textContent = totalClicks.toLocaleString();
+      const percentage = (clicksSinceReward / CLICKS_PER_REWARD) * 100;
+      progressBar.style.width = `${percentage}%`;
+      progressText.textContent = `${clicksSinceReward} / ${CLICKS_PER_REWARD} до награды`;
+    }
+
+    if (typeof auth !== 'undefined') {
+      auth.onAuthStateChanged(user => {
+        if (user) {
+          loadBest();
+        } else {
+          updateTopVisibility();
+          updateProgressUI(); // Показываем 0, если не вошел
+        }
+      });
+    } else {
+      console.warn('Firebase не загружен. Демо-режим.');
+      updateProgressUI();
+    }
+
+    async function loadBest() {
+      const cu = typeof getCurrentUser === 'function' ? getCurrentUser() : null;
+      if (cu) currentUid = cu.uid || cu.id;
+
+      // Пытаемся загрузить из локального состояния или Firebase
+      let loadedClicks = 0;
+      if (cu?.gameStats?.clicker?.totalClicks) {
+        loadedClicks = cu.gameStats.clicker.totalClicks;
+      }
+      
+      if (typeof auth !== 'undefined' && auth.currentUser && typeof db !== 'undefined') {
+        try {
+          const d = await db.collection('users').doc(auth.currentUser.uid).get(); 
+          if (d.exists && d.data().gameStats?.clicker?.totalClicks) { 
+            loadedClicks = d.data().gameStats.clicker.totalClicks; 
+          }
+        } catch (e) { console.error('Ошибка загрузки:', e); }
+      }
+
+      totalClicks = loadedClicks;
+      clicksSinceReward = totalClicks % CLICKS_PER_REWARD; // Восстанавливаем прогресс
+      updateProgressUI();
+      updateTopVisibility();
+      updateTop();
+    }
+
+    function updateTopVisibility() {
+      const table = document.getElementById('top-table');
+      const warning = document.getElementById('auth-warning');
+      const isAuth = typeof auth !== 'undefined' && auth.currentUser;
+      
+      if (!isAuth) {
+        if (table) table.style.display = 'none';
+        if (warning) warning.style.display = 'block';
+      } else {
+        if (table) table.style.display = '';
+        if (warning) warning.style.display = 'none';
+      }
+    }
+
+    async function updateTop() {
+      const tbody = document.querySelector('#top-table tbody'); 
+      if (!tbody || typeof auth === 'undefined' || !auth.currentUser || typeof db === 'undefined') return;
+      
+      try {
+        const snap = await db.collection('users').get();
+        const players = [];
+        snap.forEach(doc => {
+          const d = doc.data();
+          if (d.role === 'admin') return;
+          const cl = d.gameStats?.clicker?.totalClicks || 0;
+          if (cl > 0) players.push({ uid: doc.id, username: d.username || 'Аноним', clicks: cl });
+        });
+        players.sort((a, b) => b.clicks - a.clicks); 
+        const top10 = players.slice(0, 10);
+        
+        tbody.innerHTML = top10.map((p, i) => {
+          const me = (currentUid && p.uid === currentUid) ? ' class="me"' : '';
+          return `<tr${me}><td>${i + 1}</td><td>${p.username}</td><td>${p.clicks.toLocaleString()}</td></tr>`;
+        }).join('') || '<tr><td colspan="3">Пока нет рекордов</td></tr>';
+      } catch (e) { console.error(e); }
+    }
+
+    // --- Основная логика клика ---
+    clickBtn.addEventListener('pointerdown', async (e) => { // pointerdown работает и для мыши, и для тача быстрее чем click
+      e.preventDefault(); // Предотвращаем зум и стандартное поведение
+      clickBtn.blur(); 
+
+      // 1. Обновляем счетчики
+      totalClicks++;
+      clicksSinceReward++;
+      
+      // 2. Визуальная отдача
+      spawnFloatingText(e.clientX, e.clientY, '+1');
+      
+      // 3. Проверка на награду
+      if (clicksSinceReward >= CLICKS_PER_REWARD) {
+        clicksSinceReward = 0; // Сброс прогресса
+        scoreEl.classList.add('pulse');
+        setTimeout(() => scoreEl.classList.remove('pulse'), 300);
+        
+        // Начисление баллов
+        const cu = typeof getCurrentUser === 'function' ? getCurrentUser() : null;
+        if (cu && cu.uid && typeof auth !== 'undefined' && auth.currentUser) {
+          try {
+            if (typeof addPointsToCurrentUser === 'function') {
+              const result = await addPointsToCurrentUser(POINTS_PER_REWARD, 'clicker');
+              if (result && result.success) {
+                const earned = result.points;
+                const hasDouble = earned > POINTS_PER_REWARD;
+                const toastMsg = `🎉 Награда! +${earned} балл(ов)${hasDouble ? ' (x2 бонус)' : ''}`;
+                
+                msgEl.textContent = toastMsg;
+                spawnFloatingText(e.clientX, e.clientY - 40, `+${earned} ⭐`, true);
+                showToast(toastMsg, 'success');
+                
+                if (typeof syncGameStats === 'function') {
+                  await syncGameStats('clicker', { totalClicks: totalClicks });
+                }
+                if (typeof checkAndAwardAchievements === 'function') {
+                  checkAndAwardAchievements();
+                }
+                updateTop();
+              }
+            }
+          } catch (err) { console.error('Ошибка начисления:', err); }
+        } else {
+          msgEl.textContent = '💡 Войдите в профиль, чтобы получать баллы за клики!';
+          setTimeout(() => { if(msgEl.textContent.includes('Войдите')) msgEl.textContent = ''; }, 3000);
+        }
+      }
+
+      // 4. Обновляем UI
+      updateProgressUI();
+    });
+
+    // Сохранение при закрытии (на всякий случай, хотя основные сохранения идут по факту награды)
+    window.addEventListener('beforeunload', () => { 
+      if (typeof auth !== 'undefined' && auth.currentUser && typeof syncGameStats === 'function') { 
+        // Используем sendBeacon для надежности при закрытии вкладки, если функция поддерживает, или просто sync
+        syncGameStats('clicker', { totalClicks: totalClicks }); 
+      } 
+    });
+  </script>
+</body>
+</html>

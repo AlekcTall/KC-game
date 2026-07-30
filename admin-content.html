@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Контент – Админ-панель – Геймификация КЦ</title>
+  <link rel="stylesheet" href="css/style.css">
+  <style>
+    .admin-page { max-width: 1100px; margin: 0 auto; padding: 1.5rem; }
+    .admin-tabs { display: flex; gap: 0.5rem; margin-bottom: 1.5rem; border-bottom: 2px solid #eee; padding-bottom: 0.5rem; }
+    .admin-tab { background: none; border: none; padding: 0.5rem 1rem; font-size: 1rem; cursor: pointer; border-radius: 4px 4px 0 0; }
+    .admin-tab.active { background: var(--color-primary); color: white; }
+    .back-link { display: inline-block; margin-bottom: 1rem; color: var(--color-primary); text-decoration: none; }
+    .announcements-list, .awards-list, .dept-list { list-style: none; padding: 0; }
+    .announcements-list li, .awards-list li, .dept-list li { display: flex; justify-content: space-between; align-items: center; padding: 0.5rem; border-bottom: 1px solid #eee; }
+    .announcements-list li button, .awards-list li button, .dept-list li button { margin-left: 1rem; }
+    .btn-small { padding: 0.25rem 0.5rem; font-size: 0.8rem; margin: 0 0.1rem; }
+    .btn-danger { background: #e74c3c; color: white; }
+    .award-icon-preview { width: 32px; height: 32px; vertical-align: middle; margin-right: 0.5rem; }
+    .add-form { background: #f9fafb; border-radius: 12px; padding: 1.5rem; max-width: 600px; margin-top: 1.5rem; }
+    .add-form h4 { margin-bottom: 1rem; }
+    .form-group { margin-bottom: 1rem; }
+    .form-group label { display: block; font-weight: 600; font-size: 0.85rem; margin-bottom: 0.3rem; }
+    .form-group input, .form-group select, .form-group textarea { width: 100%; padding: 0.5rem; border: 1px solid #d1d5db; border-radius: 6px; }
+    .skeleton-row td { padding: 0.5rem; }
+    .skeleton-cell { height: 1rem; background: #e0e0e0; border-radius: 4px; animation: shimmer 1.5s infinite; }
+    @keyframes shimmer { 0% { opacity: 0.6; } 50% { opacity: 1; } 100% { opacity: 0.6; } }
+  </style>
+</head>
+<body>
+  <header class="header">
+    <div class="container header__inner">
+      <a href="index.html" class="logo">КЦ-Игры</a>
+      <button class="burger" id="burger-btn" aria-label="Меню">☰</button>
+      <nav class="nav" id="main-nav">
+        <ul class="nav__list">
+          <li><a href="index.html" class="nav__link">Главная</a></li>
+          <li><a href="games.html" class="nav__link">Игры</a></li>
+          <li><a href="leaderboard.html" class="nav__link">Рейтинг</a></li>
+          <li><a href="shop.html" class="nav__link">Магазин</a></li>
+          <li><a href="profile.html" class="nav__link">Профиль</a></li>
+          <li><a href="admin.html" class="nav__link active">Админ</a></li>
+        </ul>
+      </nav>
+      <div id="auth-status" class="auth-status"></div>
+    </div>
+  </header>
+
+  <main class="main">
+    <div class="container admin-page" id="admin-container">
+      <p>Загрузка...</p>
+    </div>
+  </main>
+
+  <!-- Модальные окна -->
+  <div class="modal-overlay" id="news-modal" style="display:none;">
+    <div class="modal" style="max-width:600px;"><span class="modal-close" id="news-modal-close">&times;</span><h3 id="news-modal-title">Новость</h3>
+      <div class="form-group"><label>Заголовок</label><input type="text" id="news-title" required></div>
+      <div class="form-group"><label>Текст</label><textarea id="news-body" rows="4"></textarea></div>
+      <div class="form-group"><label>Иконка</label><input type="text" id="news-icon" placeholder="📢"></div>
+      <div class="form-group"><label>Изображение URL</label><input type="text" id="news-image-url"></div>
+      <div class="form-group"><label>Видео URL</label><input type="text" id="news-video-url"></div>
+      <div class="form-group"><label>Ссылка</label><input type="text" id="news-link"></div>
+      <div class="form-group"><label>Опубликовать с</label><input type="datetime-local" id="news-publish-at"></div>
+      <div class="form-group"><label>Скрыть после</label><input type="datetime-local" id="news-expire-at"></div>
+      <div class="form-group"><label><input type="checkbox" id="news-notify-all"> Оповестить всех</label></div>
+      <button class="btn" id="news-save-btn">Сохранить</button><p id="news-message" class="auth-message"></p>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="award-modal" style="display:none;">
+    <div class="modal" style="max-width:500px;"><span class="modal-close" id="award-modal-close">&times;</span><h3 id="award-modal-title">Награда</h3>
+      <div class="form-group"><label>ID</label><input type="text" id="award-id" required></div>
+      <div class="form-group"><label>Название</label><input type="text" id="award-name" required></div>
+      <div class="form-group"><label>Описание</label><textarea id="award-desc" rows="2"></textarea></div>
+      <div class="form-group"><label>SVG файл</label><input type="text" id="award-icon-file" placeholder="gold-star.svg" required></div>
+      <div class="form-group"><label>Локоинов</label><input type="number" id="award-lokoin" value="0" min="0"></div>
+      <button class="btn" id="award-save-btn">Сохранить</button><p id="award-message" class="auth-message"></p>
+    </div>
+  </div>
+
+  <footer class="footer"><div class="container"><p>© 2026 ваши амбассадоры</p></div></footer>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore-compat.js"></script>
+  <script src="js/firebase-config.js"></script>
+  <script src="js/firebase-auth.js"></script>
+  <script src="js/storage.js"></script>
+  <script src="js/achievements.js"></script>
+  <script src="js/easter-eggs.js"></script>
+  <script src="js/notifications.js"></script>
+  <script src="js/main.js"></script>
+  <script src="js/feedback.js"></script>
+
+  <script>
+    (function() {
+      const CACHE_NEWS_KEY = 'krugames_admin_news';
+      const CACHE_AWARDS_KEY = 'krugames_admin_awards';
+      const CACHE_TTL = 2 * 60 * 1000;
+
+      let allNews = [];
+      let allAwards = [];
+      let departmentsCache = [];
+
+      function getCached(key) {
+        const cached = sessionStorage.getItem(key);
+        if (cached) {
+          try {
+            const parsed = JSON.parse(cached);
+            if (Date.now() - parsed.timestamp < CACHE_TTL) return parsed.data;
+          } catch (e) {}
+        }
+        return null;
+      }
+      function setCached(key, data) {
+        sessionStorage.setItem(key, JSON.stringify({ timestamp: Date.now(), data }));
+      }
+
+      async function loadDepartments() {
+        try {
+          const s = await db.collection('departments').orderBy('name').get();
+          departmentsCache = [];
+          s.forEach(d => departmentsCache.push({ id: d.id, name: d.data().name }));
+          if (!departmentsCache.length) {
+            const def = ['РБ','МСБ','ТМ','Депозиты','ОКК','ООБП','Боссы','Заблудшие души'];
+            for (const n of def) await db.collection('departments').add({ name: n });
+            return loadDepartments();
+          }
+        } catch (e) {
+          departmentsCache = def.map((n,i)=>({id:'fb'+i, name:n}));
+        }
+      }
+
+      let curNewsId = null, curAwardId = null;
+
+      document.addEventListener('DOMContentLoaded', async () => {
+        const container = document.getElementById('admin-container');
+        await loadDepartments();
+
+        auth.onAuthStateChanged(async fbUser => {
+          if (!fbUser) { container.innerHTML = '<p>Вы не авторизованы.</p>'; return; }
+          try {
+            const d = await db.collection('users').doc(fbUser.uid).get();
+            if (!d.exists || d.data().role !== 'admin') {
+              container.innerHTML = '<p>Доступ запрещён.</p>';
+              return;
+            }
+            renderPage();
+          } catch (e) { container.innerHTML = `<p>Ошибка: ${e.message}</p>`; }
+        });
+
+        function renderPage() {
+          container.innerHTML = `
+            <a href="admin.html" class="back-link">← В админку</a>
+            <h2>📝 Управление контентом</h2>
+            <div class="admin-tabs">
+              <button class="admin-tab active" data-tab="news">Новости</button>
+              <button class="admin-tab" data-tab="awards">Награды</button>
+              <button class="admin-tab" data-tab="departments">Отделы</button>
+            </div>
+            <div id="admin-tab-content"></div>
+          `;
+
+          const tabs = document.querySelectorAll('.admin-tab');
+          const content = document.getElementById('admin-tab-content');
+          tabs.forEach(t => t.addEventListener('click', () => {
+            tabs.forEach(b => b.classList.remove('active'));
+            t.classList.add('active');
+            loadTab(t.dataset.tab);
+          }));
+          loadTab('news');
+
+          function loadTab(tab) {
+            if (tab === 'news') renderNewsTab();
+            else if (tab === 'awards') renderAwardsTab();
+            else if (tab === 'departments') renderDepartmentsTab();
+          }
+        }
+
+        // ========== НОВОСТИ ==========
+        async function renderNewsTab() {
+          const content = document.getElementById('admin-tab-content');
+          content.innerHTML = '<p>Загрузка...</p>';
+
+          const cached = getCached(CACHE_NEWS_KEY);
+          if (cached) { allNews = cached; renderNewsList(); }
+          else content.innerHTML = '<ul class="announcements-list"><li class="skeleton-row"><div class="skeleton-cell" style="width:80%;"></div></li></ul>';
+
+          try {
+            const snap = await db.collection('announcements').orderBy('createdAt', 'desc').get();
+            allNews = [];
+            snap.forEach(d => allNews.push({ id: d.id, ...d.data() }));
+            setCached(CACHE_NEWS_KEY, allNews);
+            renderNewsList();
+          } catch (e) {
+            console.error(e);
+            if (!allNews.length) content.innerHTML = '<p>Ошибка загрузки.</p>';
+          }
+        }
+
+        function renderNewsList() {
+          const content = document.getElementById('admin-tab-content');
+          let html = `<h3>Новости (${allNews.length})</h3><ul class="announcements-list">`;
+          allNews.forEach(x => {
+            const dt = x.createdAt ? new Date(x.createdAt.seconds * 1000).toLocaleString('ru-RU') : '';
+            html += `<li><div><strong>${x.title}</strong> — ${(x.body || '').substring(0, 50)}...<br><small>${dt}</small></div><div><button class="btn btn-small edit-news-btn" data-news-id="${x.id}">✏️</button><button class="btn btn-small btn-danger delete-news-btn" data-news-id="${x.id}">Удалить</button></div></li>`;
+          });
+          html += '</ul><button class="btn" id="add-news-btn" style="margin-top:1rem;">➕ Создать</button>';
+          content.innerHTML = html;
+
+          document.getElementById('add-news-btn').addEventListener('click', () => openNewsModal());
+          document.querySelectorAll('.edit-news-btn').forEach(b => b.addEventListener('click', e => {
+            const news = allNews.find(n => n.id === e.target.dataset.newsId);
+            if (news) openNewsModal(news);
+          }));
+          document.querySelectorAll('.delete-news-btn').forEach(b => b.addEventListener('click', async e => {
+            if (confirm('Удалить?')) {
+              await db.collection('announcements').doc(e.target.dataset.newsId).delete();
+              showToast('Удалена', 'success');
+              renderNewsTab();
+            }
+          }));
+        }
+
+        function openNewsModal(news = null) {
+          document.getElementById('news-message').textContent = '';
+          if (news) {
+            curNewsId = news.id;
+            document.getElementById('news-modal-title').textContent = 'Редактировать';
+            document.getElementById('news-title').value = news.title || '';
+            document.getElementById('news-body').value = news.body || '';
+            document.getElementById('news-icon').value = news.icon || '📢';
+            document.getElementById('news-image-url').value = news.imageUrl || '';
+            document.getElementById('news-video-url').value = news.videoUrl || '';
+            document.getElementById('news-link').value = news.link || '';
+            document.getElementById('news-publish-at').value = news.publishAt ? toDatetimeLocal(news.publishAt.toDate()) : '';
+            document.getElementById('news-expire-at').value = news.expireAt ? toDatetimeLocal(news.expireAt.toDate()) : '';
+            document.getElementById('news-notify-all').checked = false;
+          } else {
+            curNewsId = null;
+            document.getElementById('news-modal-title').textContent = 'Создать';
+            ['news-title','news-body','news-icon','news-image-url','news-video-url','news-link','news-publish-at','news-expire-at'].forEach(id => document.getElementById(id).value = '');
+            document.getElementById('news-icon').value = '📢';
+            document.getElementById('news-notify-all').checked = false;
+          }
+          document.getElementById('news-modal').style.display = 'flex';
+        }
+        function toDatetimeLocal(date) { return date.toISOString().slice(0,16); }
+        document.getElementById('news-modal-close').addEventListener('click', () => document.getElementById('news-modal').style.display = 'none');
+        document.getElementById('news-save-btn').addEventListener('click', async () => {
+          const title = document.getElementById('news-title').value.trim();
+          if (!title) { document.getElementById('news-message').textContent = 'Введите заголовок'; return; }
+          const data = {
+            title,
+            body: document.getElementById('news-body').value.trim(),
+            icon: document.getElementById('news-icon').value.trim() || '📢',
+            imageUrl: document.getElementById('news-image-url').value.trim(),
+            videoUrl: document.getElementById('news-video-url').value.trim(),
+            link: document.getElementById('news-link').value.trim(),
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+          };
+          const ps = document.getElementById('news-publish-at').value;
+          data.publishAt = ps ? firebase.firestore.Timestamp.fromDate(new Date(ps)) : firebase.firestore.FieldValue.serverTimestamp();
+          const es = document.getElementById('news-expire-at').value;
+          data.expireAt = es ? firebase.firestore.Timestamp.fromDate(new Date(es)) : null;
+          try {
+            if (curNewsId) await db.collection('announcements').doc(curNewsId).update(data);
+            else {
+              data.createdAt = firebase.firestore.FieldValue.serverTimestamp();
+              await db.collection('announcements').add(data);
+            }
+            if (document.getElementById('news-notify-all').checked) {
+              const s = await db.collection('users').get();
+              for (const doc of s.docs) await addNotification(doc.id, `Новая новость: ${title}`, 'system', 'index.html');
+            }
+            showToast(curNewsId ? 'Обновлена' : 'Создана', 'success');
+            document.getElementById('news-modal').style.display = 'none';
+            renderNewsTab();
+          } catch (err) { document.getElementById('news-message').textContent = 'Ошибка: ' + err.message; }
+        });
+
+        // ========== НАГРАДЫ ==========
+        async function renderAwardsTab() {
+          const content = document.getElementById('admin-tab-content');
+          content.innerHTML = '<p>Загрузка...</p>';
+
+          const cached = getCached(CACHE_AWARDS_KEY);
+          if (cached) { allAwards = cached; renderAwardsList(); }
+          else content.innerHTML = '<ul class="awards-list"><li class="skeleton-row"><div class="skeleton-cell" style="width:80%;"></div></li></ul>';
+
+          try {
+            const snap = await db.collection('awards').get();
+            allAwards = [];
+            snap.forEach(d => allAwards.push({ id: d.id, ...d.data() }));
+            setCached(CACHE_AWARDS_KEY, allAwards);
+            renderAwardsList();
+          } catch (e) {
+            console.error(e);
+            if (!allAwards.length) content.innerHTML = '<p>Ошибка загрузки.</p>';
+          }
+        }
+
+        function renderAwardsList() {
+          const content = document.getElementById('admin-tab-content');
+          let html = `<h3>🎖️ Награды (${allAwards.length})</h3>`;
+          if (allAwards.length) {
+            html += '<ul class="awards-list">';
+            allAwards.forEach(x => {
+              html += `<li><span><img src="img/awards/${x.icon}" class="award-icon-preview" onerror="this.style.display='none'"> <strong>${x.name}</strong> (${x.id})${x.lokoinReward>0?` — +${x.lokoinReward} лок.`:''}</span><div><button class="btn btn-small edit-award-btn" data-award-id="${x.id}">✏️</button><button class="btn btn-small btn-danger delete-award-btn" data-award-id="${x.id}">Удалить</button></div></li>`;
+            });
+            html += '</ul>';
+          } else html += '<p>Нет наград.</p>';
+          html += '<button class="btn" id="add-award-btn" style="margin-top:1rem;">➕ Создать</button>';
+          content.innerHTML = html;
+
+          document.getElementById('add-award-btn').addEventListener('click', () => openAwardModal());
+          document.querySelectorAll('.edit-award-btn').forEach(b => b.addEventListener('click', e => {
+            const award = allAwards.find(a => a.id === e.target.dataset.awardId);
+            if (award) openAwardModal(award);
+          }));
+          document.querySelectorAll('.delete-award-btn').forEach(b => b.addEventListener('click', async e => {
+            if (confirm('Удалить?')) {
+              await db.collection('awards').doc(e.target.dataset.awardId).delete();
+              showToast('Удалена', 'success');
+              renderAwardsTab();
+            }
+          }));
+        }
+
+        function openAwardModal(award = null) {
+          document.getElementById('award-message').textContent = '';
+          if (award) {
+            curAwardId = award.id;
+            document.getElementById('award-modal-title').textContent = 'Редактировать';
+            document.getElementById('award-id').value = award.id;
+            document.getElementById('award-id').disabled = true;
+            document.getElementById('award-name').value = award.name || '';
+            document.getElementById('award-desc').value = award.description || '';
+            document.getElementById('award-icon-file').value = award.icon || '';
+            document.getElementById('award-lokoin').value = award.lokoinReward || 0;
+          } else {
+            curAwardId = null;
+            document.getElementById('award-modal-title').textContent = 'Создать';
+            document.getElementById('award-id').value = '';
+            document.getElementById('award-id').disabled = false;
+            document.getElementById('award-name').value = '';
+            document.getElementById('award-desc').value = '';
+            document.getElementById('award-icon-file').value = '';
+            document.getElementById('award-lokoin').value = 0;
+          }
+          document.getElementById('award-modal').style.display = 'flex';
+        }
+        document.getElementById('award-modal-close').addEventListener('click', () => document.getElementById('award-modal').style.display = 'none');
+        document.getElementById('award-save-btn').addEventListener('click', async () => {
+          const id = document.getElementById('award-id').value.trim(),
+                name = document.getElementById('award-name').value.trim(),
+                icon = document.getElementById('award-icon-file').value.trim();
+          if (!id || !name || !icon) { document.getElementById('award-message').textContent = 'Заполните ID, название и файл.'; return; }
+          const data = {
+            name,
+            description: document.getElementById('award-desc').value.trim(),
+            icon,
+            lokoinReward: parseInt(document.getElementById('award-lokoin').value, 10) || 0
+          };
+          try {
+            await db.collection('awards').doc(id).set(data);
+            showToast('Сохранена', 'success');
+            document.getElementById('award-modal').style.display = 'none';
+            renderAwardsTab();
+          } catch (err) { document.getElementById('award-message').textContent = 'Ошибка: ' + err.message; }
+        });
+
+        // ========== ОТДЕЛЫ ==========
+        function renderDepartmentsTab() {
+          const content = document.getElementById('admin-tab-content');
+          let html = '<h3>Отделы</h3><ul class="dept-list">';
+          departmentsCache.forEach(d => {
+            html += `<li><span>${d.name}</span><button class="btn btn-small btn-danger delete-dept-btn" data-dept-id="${d.id}">Удалить</button></li>`;
+          });
+          html += '</ul><div class="form-group"><label>Новый</label><div style="display:flex;gap:0.5rem;"><input type="text" id="new-dept-name"><button class="btn" id="add-dept-btn">Добавить</button></div></div>';
+          content.innerHTML = html;
+
+          document.getElementById('add-dept-btn').addEventListener('click', async () => {
+            const n = document.getElementById('new-dept-name').value.trim();
+            if (!n) { showToast('Введите название', 'error'); return; }
+            await db.collection('departments').add({ name: n });
+            await loadDepartments();
+            renderDepartmentsTab();
+            showToast('Добавлен', 'success');
+          });
+          document.querySelectorAll('.delete-dept-btn').forEach(b => b.addEventListener('click', async e => {
+            if (confirm('Удалить?')) {
+              await db.collection('departments').doc(e.target.dataset.deptId).delete();
+              await loadDepartments();
+              renderDepartmentsTab();
+              showToast('Удалён', 'success');
+            }
+          }));
+        }
+      });
+    })();
+  </script>
+</body>
+</html>

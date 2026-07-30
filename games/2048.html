@@ -1,0 +1,678 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>2048 – КЦ Игры</title>
+    <link rel="stylesheet" href="../css/style.css">
+    <style>
+        :root {
+            --bg-game: #faf8ef;
+            --grid-bg: #bbada0;
+            --text-dark: #776e65;
+            --text-light: #f9f6f2;
+        }
+        .game-2048 { 
+            max-width: 480px; 
+            margin: 2rem auto; 
+            text-align: center; 
+            background: rgba(255, 255, 255, 0.95); 
+            padding: 2rem; 
+            border-radius: 24px; 
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08); 
+            backdrop-filter: blur(10px);
+        }
+        .stats-2048 { 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center; 
+            margin-bottom: 1.5rem; 
+        }
+        .stat-box { 
+            background: var(--grid-bg); 
+            color: white; 
+            padding: 0.5rem 1.2rem; 
+            border-radius: 8px; 
+            font-size: 1.3rem; 
+            font-weight: 700;
+            min-width: 90px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .stat-box small { 
+            display: block; 
+            font-size: 0.65rem; 
+            text-transform: uppercase; 
+            letter-spacing: 1px;
+            opacity: 0.9; 
+            font-weight: 600;
+        }
+        .game-title { margin: 0 0 0.5rem 0; color: var(--text-dark); font-size: 2.5rem; font-weight: 800; }
+        .game-subtitle { color: #999; font-size: 0.9rem; margin-bottom: 1.5rem; }
+        
+        canvas { 
+            border-radius: 12px; 
+            background: var(--grid-bg); 
+            display: block; 
+            margin: 0 auto; 
+            box-shadow: 0 8px 20px rgba(187, 173, 160, 0.4); 
+            touch-action: none; /* Критично для предотвращения скролла при свайпах */
+        }
+        
+        .mobile-arrows { 
+            display: none; 
+            margin: 1.5rem auto 0; 
+            max-width: 200px;
+        }
+        @media (max-width: 600px) { 
+            .mobile-arrows { 
+                display: grid; 
+                grid-template-areas: ". up ." "left . right" ". down ."; 
+                gap: 0.5rem; 
+                justify-content: center; 
+            } 
+            .mobile-arrows button { 
+                width: 60px; height: 60px; 
+                font-size: 1.5rem; 
+                background: var(--grid-bg); 
+                border: none; 
+                border-radius: 12px; 
+                color: white; 
+                box-shadow: 0 4px 0 #9e8e82, 0 6px 10px rgba(0,0,0,0.15); 
+                cursor: pointer; 
+                touch-action: manipulation; 
+                transition: transform 0.1s, box-shadow 0.1s;
+            } 
+            .mobile-arrows button:active { 
+                transform: translateY(4px); 
+                box-shadow: 0 0 0 #9e8e82, 0 2px 4px rgba(0,0,0,0.15); 
+            } 
+            .up { grid-area: up; } .down { grid-area: down; } .left { grid-area: left; } .right { grid-area: right; } 
+        }
+
+        .message-2048 { font-weight: 600; min-height: 1.5rem; margin: 1rem 0; color: #e67e22; font-size: 1.1rem; }
+        .btn-back-2048 { display: inline-flex; align-items: center; gap: 0.5rem; margin-top: 1.5rem; color: var(--text-dark); text-decoration: none; font-weight: 600; transition: color 0.2s; }
+        .btn-back-2048:hover { color: #e67e22; }
+
+        /* Модальные окна */
+        .modal-overlay { 
+            position: fixed; top: 0; left: 0; right: 0; bottom: 0; 
+            background: rgba(119, 110, 101, 0.7); 
+            backdrop-filter: blur(4px);
+            display: flex; align-items: center; justify-content: center; 
+            z-index: 1000; 
+            animation: fadeIn 0.3s ease;
+        }
+        .modal { 
+            background: white; padding: 2rem; border-radius: 20px; 
+            max-width: 340px; width: 90%; text-align: center; 
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1); 
+            animation: slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+        } 
+        .modal h3 { margin-bottom: 1rem; font-size: 1.8rem; color: var(--text-dark); } 
+        .modal p { margin-bottom: 1.5rem; font-size: 1rem; line-height: 1.6; color: #666; } 
+        .modal button { 
+            margin: 0.3rem; padding: 0.8rem 1.5rem; border: none; border-radius: 10px; 
+            cursor: pointer; font-size: 1rem; font-weight: 600; transition: all 0.2s; 
+        } 
+        .btn-play { background: #8f7a66; color: white; } 
+        .btn-play:hover { background: #7a6652; transform: translateY(-2px); } 
+        .btn-secondary { background: #e0e0e0; color: #333; } 
+        .btn-secondary:hover { background: #d0d0d0; }
+        .btn-continue { background: #edc22e; color: white; }
+        .btn-continue:hover { background: #d4ac26; }
+
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes slideUp { from { opacity: 0; transform: translateY(20px) scale(0.95); } to { opacity: 1; transform: translateY(0) scale(1); } }
+
+        /* Лидерборд */
+        .leaderboard-2048 { margin-top: 2rem; text-align: left; background: #f8fafc; padding: 1rem; border-radius: 16px; } 
+        .leaderboard-2048 h3 { text-align: center; margin-bottom: 1rem; font-size: 1.1rem; color: var(--text-dark); } 
+        .leaderboard-2048 table { width: 100%; border-collapse: collapse; font-size: 0.9rem; } 
+        .leaderboard-2048 th, .leaderboard-2048 td { padding: 0.6rem 0.5rem; border-bottom: 1px solid #e2e8f0; text-align: center; } 
+        .leaderboard-2048 th { background: transparent; font-weight: 700; color: #64748b; } 
+        .leaderboard-2048 .me { background: #dbeafe; font-weight: 700; color: #1e40af; border-radius: 6px; }
+        .auth-warning { text-align: center; display: none; margin-top: 0.5rem; color: #94a3b8; font-size: 0.9rem; }
+    </style>
+</head>
+<body>
+
+<!-- Стартовый модал -->
+<div id="startModal" class="modal-overlay">
+    <div class="modal">
+        <h3>🔢 2048</h3>
+        <p>Соединяйте плитки с одинаковыми числами.<br>Используйте <strong>стрелки</strong> или <strong>свайпы</strong>.<br>Достигните плитки <strong>2048</strong>!</p>
+        <button class="btn-play" id="btnPlay">Начать игру</button>
+        <button class="btn-secondary" id="btnBack">Назад</button>
+        <p style="margin-top:1rem;color:#888;font-size:0.85rem;">или нажмите <strong>Enter</strong></p>
+    </div>
+</div>
+
+<!-- Модал окончания игры -->
+<div id="gameOverModal" class="modal-overlay" style="display: none;">
+    <div class="modal">
+        <h3 id="endGameTitle">Игра окончена!</h3>
+        <p id="endGameMessage">Нет доступных ходов.</p>
+        <div style="display: flex; gap: 0.5rem; justify-content: center; flex-wrap: wrap;">
+            <button class="btn-play" id="btnRestart">Заново</button>
+            <button class="btn-continue" id="btnContinue" style="display: none;">Продолжить</button>
+        </div>
+    </div>
+</div>
+
+<div class="game-2048">
+    <h1 class="game-title">2048</h1>
+    <p class="game-subtitle">Соединяйте числа, чтобы получить 2048!</p>
+    
+    <div class="stats-2048">
+        <div class="stat-box">
+            <small>Счёт</small>
+            <span id="scoreDisplay">0</span>
+        </div>
+        <div class="stat-box" style="background: #8f7a66;">
+            <small>Рекорд</small>
+            <span id="bestDisplay">0</span>
+        </div>
+    </div>
+
+    <canvas id="gameCanvas" width="400" height="400"></canvas>
+    
+    <div class="mobile-arrows">
+        <button class="up">▲</button>
+        <button class="left">◀</button>
+        <button class="right">▶</button>
+        <button class="down">▼</button>
+    </div>
+    
+    <p class="message-2048" id="message"></p>
+    
+    <div class="leaderboard-2048" id="leaderboard-2048">
+        <h3>🏆 Лучшие результаты</h3>
+        <table id="top-table">
+            <thead><tr><th>#</th><th>Игрок</th><th>Очки</th></tr></thead>
+            <tbody></tbody>
+        </table>
+        <p class="auth-warning" id="auth-warning">Войдите в аккаунт, чтобы увидеть рейтинг.</p>
+    </div>
+    
+    <a href="../games.html" class="btn-back-2048">← Вернуться к играм</a>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore-compat.js"></script>
+<script src="../js/firebase-config.js"></script>
+<script src="../js/firebase-auth.js"></script>
+<script src="../js/storage.js"></script>
+<script src="../js/achievements.js"></script>
+<script src="../js/notifications.js"></script>
+<script src="../js/easter-eggs.js"></script>
+<script src="../js/main.js"></script>
+
+<script>
+    document.addEventListener('DOMContentLoaded', () => { 
+        if (typeof initEasterEggs === 'function') initEasterEggs(); 
+    });
+
+    const startModal = document.getElementById('startModal');
+    const gameOverModal = document.getElementById('gameOverModal');
+    const btnPlay = document.getElementById('btnPlay');
+    const btnBack = document.getElementById('btnBack');
+    const btnRestart = document.getElementById('btnRestart');
+    const btnContinue = document.getElementById('btnContinue');
+    
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const scoreDisplay = document.getElementById('scoreDisplay');
+    const bestDisplay = document.getElementById('bestDisplay');
+    const messageEl = document.getElementById('message');
+    const endGameTitle = document.getElementById('endGameTitle');
+    const endGameMessage = document.getElementById('endGameMessage');
+
+    const SIZE = 4;
+    const DISPLAY_SIZE = 400;
+    
+    // Поддержка Retina/HiDPI для четкой картинки
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = DISPLAY_SIZE * dpr;
+    canvas.height = DISPLAY_SIZE * dpr;
+    canvas.style.width = `${DISPLAY_SIZE}px`;
+    canvas.style.height = `${DISPLAY_SIZE}px`;
+    ctx.scale(dpr, dpr);
+    
+    const CELL_SIZE = DISPLAY_SIZE / SIZE;
+    const GAP = 10;
+    const TILE_SIZE = CELL_SIZE - GAP;
+
+    const COLORS = { 
+        0: '#cdc1b4', 2: '#eee4da', 4: '#ede0c8', 8: '#f2b179', 
+        16: '#f59563', 32: '#f67c5f', 64: '#f65e3b', 128: '#edcf72', 
+        256: '#edcc61', 512: '#edc850', 1024: '#edc53f', 2048: '#edc22e', 
+        4096: '#3c3a32', 8192: '#3c3a32' 
+    };
+    const TEXT_COLORS = { 2: '#776e65', 4: '#776e65' };
+
+    let grid = [], score = 0, bestScore = 0, currentUid = null;
+    let gameActive = false, gameOverFlag = false, hasWonCurrentGame = false;
+    let awardedLevel = 0, maxTile = 0;
+
+    function emptyGrid() { return Array(SIZE).fill().map(() => Array(SIZE).fill(0)); }
+    
+    function addRandomTile() { 
+        const emptyCells = []; 
+        for (let r = 0; r < SIZE; r++) { 
+            for (let c = 0; c < SIZE; c++) { 
+                if (grid[r][c] === 0) emptyCells.push({ r, c }); 
+            } 
+        } 
+        if (emptyCells.length === 0) return false; 
+        const { r, c } = emptyCells[Math.floor(Math.random() * emptyCells.length)]; 
+        grid[r][c] = Math.random() < 0.9 ? 2 : 4; 
+        return true; 
+    }
+
+    function newGame() { 
+        grid = emptyGrid(); 
+        score = 0; 
+        awardedLevel = 0; 
+        gameActive = true; 
+        gameOverFlag = false; 
+        hasWonCurrentGame = false; // Сброс флага победы для новой игры
+        maxTile = 0; 
+        addRandomTile(); 
+        addRandomTile(); 
+        updateScore(); 
+        messageEl.textContent = bestScore > 0 ? `Ваш рекорд: ${bestScore}` : 'Удачи!'; 
+        gameOverModal.style.display = 'none';
+        drawGrid(); 
+    }
+
+    function drawRoundRect(ctx, x, y, width, height, radius, fill) {
+        ctx.beginPath();
+        ctx.moveTo(x + radius, y);
+        ctx.lineTo(x + width - radius, y);
+        ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+        ctx.lineTo(x + width, y + height - radius);
+        ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+        ctx.lineTo(x + radius, y + height);
+        ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
+        ctx.lineTo(x, y + radius);
+        ctx.quadraticCurveTo(x, y, x + radius, y);
+        ctx.closePath();
+        ctx.fillStyle = fill;
+        ctx.fill();
+    }
+
+    function drawGrid() { 
+        ctx.clearRect(0, 0, DISPLAY_SIZE, DISPLAY_SIZE); 
+        
+        for (let r = 0; r < SIZE; r++) { 
+            for (let c = 0; c < SIZE; c++) { 
+                const x = c * CELL_SIZE + GAP / 2;
+                const y = r * CELL_SIZE + GAP / 2;
+                drawRoundRect(ctx, x, y, TILE_SIZE, TILE_SIZE, 6, COLORS[0]);
+            } 
+        }
+
+        for (let r = 0; r < SIZE; r++) { 
+            for (let c = 0; c < SIZE; c++) { 
+                const value = grid[r][c]; 
+                if (value !== 0) {
+                    const x = c * CELL_SIZE + GAP / 2;
+                    const y = r * CELL_SIZE + GAP / 2;
+                    const color = COLORS[value] || '#3c3a32';
+                    
+                    ctx.shadowColor = 'rgba(0,0,0,0.15)';
+                    ctx.shadowBlur = 4;
+                    ctx.shadowOffsetY = 2;
+                    
+                    drawRoundRect(ctx, x, y, TILE_SIZE, TILE_SIZE, 6, color);
+                    
+                    ctx.shadowColor = 'transparent';
+                    ctx.shadowBlur = 0;
+                    ctx.shadowOffsetY = 0;
+
+                    let fontSize = 36;
+                    if (value >= 1024) fontSize = 28;
+                    if (value >= 10000) fontSize = 22;
+                    
+                    ctx.font = `bold ${fontSize}px "Clear Sans", "Segoe UI", sans-serif`; 
+                    ctx.textAlign = 'center'; 
+                    ctx.textBaseline = 'middle'; 
+                    ctx.fillStyle = TEXT_COLORS[value] || '#f9f6f2'; 
+                    ctx.fillText(value, x + TILE_SIZE / 2, y + TILE_SIZE / 2 + 2); 
+                } 
+            } 
+        } 
+    }
+
+    function updateScore() { 
+        scoreDisplay.textContent = score.toLocaleString(); 
+        bestDisplay.textContent = bestScore.toLocaleString(); 
+    }
+
+    function slideRow(row) { 
+        let arr = row.filter(v => v !== 0); 
+        for (let i = 0; i < arr.length - 1; i++) { 
+            if (arr[i] === arr[i + 1]) { 
+                arr[i] *= 2; 
+                score += arr[i]; 
+                arr[i + 1] = 0; 
+            } 
+        } 
+        arr = arr.filter(v => v !== 0); 
+        while (arr.length < SIZE) arr.push(0); 
+        return arr; 
+    }
+
+    function moveLeft() { 
+        let moved = false; 
+        for (let r = 0; r < SIZE; r++) { 
+            const oldRow = [...grid[r]]; 
+            grid[r] = slideRow(grid[r]); 
+            if (oldRow.join(',') !== grid[r].join(',')) moved = true; 
+        } 
+        return moved; 
+    }
+    function moveRight() { 
+        let moved = false; 
+        for (let r = 0; r < SIZE; r++) { 
+            const reversed = [...grid[r]].reverse(); 
+            const newReversed = slideRow(reversed); 
+            const newRow = newReversed.reverse(); 
+            if (grid[r].join(',') !== newRow.join(',')) moved = true; 
+            grid[r] = newRow; 
+        } 
+        return moved; 
+    }
+    function moveUp() { 
+        let moved = false; 
+        for (let c = 0; c < SIZE; c++) { 
+            const col = grid.map(row => row[c]); 
+            const newCol = slideRow(col); 
+            for (let r = 0; r < SIZE; r++) { 
+                if (grid[r][c] !== newCol[r]) moved = true; 
+                grid[r][c] = newCol[r]; 
+            } 
+        } 
+        return moved; 
+    }
+    function moveDown() { 
+        let moved = false; 
+        for (let c = 0; c < SIZE; c++) { 
+            const col = grid.map(row => row[c]).reverse(); 
+            const newCol = slideRow(col).reverse(); 
+            for (let r = 0; r < SIZE; r++) { 
+                if (grid[r][c] !== newCol[r]) moved = true; 
+                grid[r][c] = newCol[r]; 
+            } 
+        } 
+        return moved; 
+    }
+
+    function isGameOver() { 
+        for (let r = 0; r < SIZE; r++) { 
+            for (let c = 0; c < SIZE; c++) { 
+                if (grid[r][c] === 0) return false; 
+            } 
+        } 
+        for (let r = 0; r < SIZE; r++) { 
+            for (let c = 0; c < SIZE - 1; c++) { 
+                if (grid[r][c] === grid[r][c + 1]) return false; 
+            } 
+        } 
+        for (let c = 0; c < SIZE; c++) { 
+            for (let r = 0; r < SIZE - 1; r++) { 
+                if (grid[r][c] === grid[r + 1][c]) return false; 
+            } 
+        } 
+        return true; 
+    }
+
+    // === КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ АНИМАЦИИ ===
+    async function performMove(moveFunc) { 
+        if (!gameActive || gameOverFlag) return; 
+        
+        const moved = moveFunc(); 
+        if (moved) { 
+            addRandomTile(); 
+            updateScore(); 
+            
+            // 1. Вычисляем реальный максимум на доске прямо сейчас
+            let currentMax = 0;
+            for (let r = 0; r < SIZE; r++) { 
+                for (let c = 0; c < SIZE; c++) { 
+                    if (grid[r][c] > currentMax) currentMax = grid[r][c]; 
+                } 
+            }
+            
+            // 2. Обновляем глобальный maxTile для сохранения в БД
+            if (currentMax > maxTile) {
+                maxTile = currentMax;
+            }
+
+            // 3. ОТРИСОВКА ДОЛЖНА БЫТЬ ЗДЕСЬ, ДО ЛЮБЫХ AWAIT!
+            // Это гарантирует мгновенный отклик интерфейса
+            drawGrid(); 
+
+            // 4. Начисление баллов за порог (логика)
+            const threshold = 500;
+            const newLevel = Math.floor(score / threshold);
+            if (newLevel > awardedLevel) {
+                const pointsToAdd = newLevel - awardedLevel;
+                awardedLevel = newLevel;
+                // Запускаем асинхронно, но не блокируем UI оператором await здесь
+                awardPoints(pointsToAdd);
+            }
+
+            // 5. Проверка победы/поражения
+            if (currentMax >= 2048 && !hasWonCurrentGame) {
+                hasWonCurrentGame = true;
+                showEndGameModal(true);
+            } else if (isGameOver()) { 
+                gameActive = false; 
+                gameOverFlag = true; 
+                showEndGameModal(false);
+            } 
+
+            // 6. Асинхронное сохранение в БД (теперь оно не блокирует отрисовку)
+            if (typeof auth !== 'undefined' && auth.currentUser && typeof syncGameStats === 'function') {
+                syncGameStats('2048', { maxTile: maxTile }).catch(console.error);
+                if (typeof checkAndAwardAchievements === 'function') {
+                    checkAndAwardAchievements().catch(console.error);
+                }
+            }
+        } 
+    }
+
+    async function awardPoints(amount) {
+        if (amount <= 0) return;
+        const cu = typeof getCurrentUser === 'function' ? getCurrentUser() : null;
+        if (cu && cu.uid && typeof auth !== 'undefined' && auth.currentUser) {
+            try {
+                if (typeof addPointsToCurrentUser === 'function') {
+                    const result = await addPointsToCurrentUser(amount, '2048');
+                    if (result && result.success) {
+                        const earned = result.points;
+                        const hasDouble = earned > amount;
+                        const msg = `🎉 Бонус за прогресс: +${earned} балл(ов)${hasDouble ? ' (x2 бонус)' : ''}!`;
+                        if (typeof showToast === 'function') showToast(msg, 'success');
+                        messageEl.textContent = msg;
+                    }
+                }
+            } catch (e) { console.error('Ошибка начисления:', e); }
+        }
+    }
+
+    function showEndGameModal(isWin) {
+        if (isWin) {
+            endGameTitle.textContent = '🎉 Вы достигли 2048!';
+            endGameMessage.textContent = `Отличный результат! Ваш текущий счёт: ${score}. Хотите продолжить и набрать ещё больше?`;
+            btnContinue.style.display = 'inline-block';
+        } else {
+            endGameTitle.textContent = 'Игра окончена';
+            endGameMessage.textContent = `Нет доступных ходов. Ваш финальный счёт: ${score}`;
+            btnContinue.style.display = 'none';
+        }
+        gameOverModal.style.display = 'flex';
+        handleGameEnd();
+    }
+
+    async function handleGameEnd() { 
+        if (score > bestScore) { 
+            bestScore = score; 
+            updateScore(); 
+            if (typeof auth !== 'undefined' && auth.currentUser && typeof syncGameStats === 'function') { 
+                await syncGameStats('2048', { maxScore: bestScore, maxTile: maxTile }); 
+                if (typeof checkAndAwardAchievements === 'function') await checkAndAwardAchievements(); 
+            } 
+            messageEl.textContent = `🔥 Новый рекорд: ${bestScore}!`; 
+        } 
+        updateTop(); 
+    }
+
+    // Управление с клавиатуры
+    document.addEventListener('keydown', (e) => { 
+        if (e.code === 'Space' || e.key === 'Enter') { 
+            if (gameOverModal.style.display !== 'none') {
+                e.preventDefault();
+                newGame();
+            }
+            return; 
+        } 
+        if (!gameActive || gameOverFlag) return; 
+        switch (e.key) { 
+            case 'ArrowLeft': e.preventDefault(); performMove(moveLeft); break; 
+            case 'ArrowRight': e.preventDefault(); performMove(moveRight); break; 
+            case 'ArrowUp': e.preventDefault(); performMove(moveUp); break; 
+            case 'ArrowDown': e.preventDefault(); performMove(moveDown); break; 
+        } 
+    });
+
+    // Управление мобильными кнопками
+    document.querySelector('.mobile-arrows').addEventListener('click', (e) => { 
+        if (!gameActive || gameOverFlag) return; 
+        if (e.target.classList.contains('up')) performMove(moveUp); 
+        else if (e.target.classList.contains('down')) performMove(moveDown); 
+        else if (e.target.classList.contains('left')) performMove(moveLeft); 
+        else if (e.target.classList.contains('right')) performMove(moveRight); 
+    });
+
+    // Управление свайпами
+    let touchStartX = 0, touchStartY = 0;
+    canvas.addEventListener('touchstart', (e) => { 
+        e.preventDefault(); 
+        touchStartX = e.touches[0].clientX; 
+        touchStartY = e.touches[0].clientY; 
+    }, { passive: false });
+    
+    canvas.addEventListener('touchend', (e) => { 
+        if (!gameActive || gameOverFlag || touchStartX === 0) return; 
+        const dx = e.changedTouches[0].clientX - touchStartX; 
+        const dy = e.changedTouches[0].clientY - touchStartY; 
+        const absDx = Math.abs(dx); 
+        const absDy = Math.abs(dy); 
+        if (Math.max(absDx, absDy) < 30) return; 
+        if (absDx > absDy) { 
+            if (dx > 0) performMove(moveRight); 
+            else performMove(moveLeft); 
+        } else { 
+            if (dy > 0) performMove(moveDown); 
+            else performMove(moveUp); 
+        } 
+        touchStartX = 0; 
+    });
+
+    btnPlay.addEventListener('click', () => { startModal.style.display = 'none'; newGame(); });
+    btnBack.addEventListener('click', () => window.location.href = '../games.html');
+    btnRestart.addEventListener('click', () => newGame());
+    btnContinue.addEventListener('click', () => { 
+        gameOverModal.style.display = 'none'; 
+        gameActive = true; 
+        gameOverFlag = false; 
+    });
+
+    document.addEventListener('keydown', function(e) { 
+        if (e.key === 'Enter' && startModal.style.display !== 'none') { 
+            e.preventDefault(); 
+            startModal.style.display = 'none'; 
+            newGame(); 
+        } 
+    });
+
+    // Безопасная инициализация Firebase
+    if (typeof auth !== 'undefined') {
+        auth.onAuthStateChanged(user => { 
+            if (user) { loadBestAndTop(); } 
+            else { updateTopVisibility(); } 
+        });
+    } else {
+        console.warn('Firebase не загружен. Игра работает в демо-режиме.');
+        updateTopVisibility();
+    }
+
+    async function loadBestAndTop() { 
+        const cu = typeof getCurrentUser === 'function' ? getCurrentUser() : null;
+        if (cu) currentUid = cu.uid || cu.id; 
+        
+        if (cu?.gameStats?.['2048']?.maxTile) maxTile = cu.gameStats['2048'].maxTile; 
+        if (cu?.gameStats?.['2048']?.maxScore) bestScore = cu.gameStats['2048'].maxScore; 
+        
+        if (typeof auth !== 'undefined' && auth.currentUser && typeof db !== 'undefined') { 
+            try { 
+                const docSnap = await db.collection('users').doc(auth.currentUser.uid).get(); 
+                if (docSnap.exists) { 
+                    const stats = docSnap.data().gameStats?.['2048'] || {}; 
+                    if (stats.maxScore) bestScore = stats.maxScore; 
+                    if (stats.maxTile) maxTile = stats.maxTile; 
+                } 
+            } catch (e) { console.error(e); } 
+        } 
+        updateScore(); 
+        updateTopVisibility(); 
+        updateTop(); 
+        messageEl.textContent = bestScore > 0 ? `Ваш рекорд: ${bestScore}` : 'Удачи!'; 
+    }
+
+    function updateTopVisibility() { 
+        const table = document.getElementById('top-table'); 
+        const warning = document.getElementById('auth-warning'); 
+        const isAuth = typeof auth !== 'undefined' && auth.currentUser;
+        
+        if (!isAuth) { 
+            if (table) table.style.display = 'none'; 
+            if (warning) warning.style.display = 'block'; 
+        } else { 
+            if (table) table.style.display = ''; 
+            if (warning) warning.style.display = 'none'; 
+        } 
+    }
+
+    async function updateTop() { 
+        const tbody = document.querySelector('#top-table tbody'); 
+        if (!tbody || typeof auth === 'undefined' || !auth.currentUser || typeof db === 'undefined') return; 
+        
+        try { 
+            const snap = await db.collection('users').get(); 
+            const players = []; 
+            snap.forEach(doc => { 
+                const d = doc.data(); 
+                if (d.role === 'admin') return; 
+                const sc = d.gameStats?.['2048']?.maxScore || 0; 
+                if (sc > 0) players.push({ uid: doc.id, username: d.username || 'Аноним', score: sc }); 
+            }); 
+            players.sort((a, b) => b.score - a.score); 
+            const top10 = players.slice(0, 10); 
+            
+            tbody.innerHTML = top10.map((p, i) => { 
+                const me = (currentUid && p.uid === currentUid) ? ' class="me"' : ''; 
+                return `<tr${me}><td>${i+1}</td><td>${p.username}</td><td>${p.score.toLocaleString()}</td></tr>`; 
+            }).join('') || '<tr><td colspan="3">Пока нет рекордов</td></tr>'; 
+        } catch (e) { console.error(e); } 
+    }
+
+    // Старт
+    grid = emptyGrid();
+    drawGrid();
+</script>
+</body>
+</html>

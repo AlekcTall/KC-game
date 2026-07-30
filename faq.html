@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Помощь – Геймификация КЦ</title>
+  <link rel="stylesheet" href="css/style.css">
+  <style>
+    .faq-page { max-width: 900px; margin: 2rem auto; background: white; padding: 2rem; border-radius: var(--border-radius); box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
+    .faq-category { margin-bottom: 2rem; }
+    .faq-category h3 { font-size: 1.3rem; color: var(--color-header); margin-bottom: 0.8rem; border-bottom: 1px solid #eee; padding-bottom: 0.5rem; }
+    .faq-category h3 .cat-icon { margin-right: 0.5rem; }
+    .faq-item { background: #fafbfc; border: 1px solid #eee; border-radius: 8px; margin-bottom: 0.5rem; overflow: hidden; }
+    .faq-item__question { width: 100%; padding: 0.8rem 1.2rem; background: none; border: none; text-align: left; font-weight: 600; color: var(--color-header); cursor: pointer; display: flex; justify-content: space-between; align-items: center; transition: background 0.2s; }
+    .faq-item__question:hover { background: #f0f4f8; }
+    .faq-item__arrow { font-size: 0.8rem; transition: transform 0.3s; }
+    .faq-item.open .faq-item__arrow { transform: rotate(180deg); }
+    .faq-item__answer { max-height: 0; overflow: hidden; transition: max-height 0.4s ease-out, padding 0.4s; padding: 0 1.2rem; background: white; color: var(--color-text); line-height: 1.6; }
+    .faq-item.open .faq-item__answer { max-height: 300px; padding: 0.8rem 1.2rem; }
+    .faq-nav { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 1.5rem; }
+    .faq-nav a { padding: 0.3rem 0.8rem; background: #f0f0f0; border-radius: 20px; text-decoration: none; font-size: 0.85rem; color: #555; transition: background 0.2s; }
+    .faq-nav a:hover { background: #e0e0e0; }
+    body.dark-theme .faq-page { background: var(--color-white); color: #eee; }
+    body.dark-theme .faq-item { background: #2c2c3e; border-color: #444; }
+    body.dark-theme .faq-item__question { color: #eee; }
+    body.dark-theme .faq-item__question:hover { background: #3a3a4e; }
+    body.dark-theme .faq-item__answer { background: #2c2c3e; color: #ccc; }
+    body.dark-theme .faq-category h3 { color: #fff; border-bottom-color: #444; }
+    @media (max-width: 480px) { .faq-page { margin: 1rem; padding: 1.2rem; } }
+  </style>
+</head>
+<body>
+  <header class="header">
+    <div class="container header__inner">
+      <a href="index.html" class="logo">КЦ-Игры</a>
+      <button class="burger" id="burger-btn" aria-label="Меню">☰</button>
+      <nav class="nav" id="main-nav">
+        <ul class="nav__list">
+          <li><a href="index.html" class="nav__link">Главная</a></li>
+          <li><a href="games.html" class="nav__link">Игры</a></li>
+          <li><a href="leaderboard.html" class="nav__link">Рейтинг</a></li>
+          <li><a href="shop.html" class="nav__link">Магазин</a></li>
+          <li><a href="profile.html" class="nav__link">Профиль</a></li>
+          <li><a href="admin.html" class="nav__link">Админ</a></li>
+        </ul>
+      </nav>
+      <div id="auth-status" class="auth-status"></div>
+    </div>
+  </header>
+
+  <main class="main">
+    <div class="container faq-page">
+      <h2>📚 Справка и правила</h2>
+      <p style="margin-bottom:1.5rem; color:#666;">Здесь собраны ответы на самые частые вопросы. Нажмите на вопрос, чтобы увидеть ответ.</p>
+      
+      <div class="faq-nav">
+        <a href="#points">⭐ Баллы</a>
+        <a href="#lokoins">💰 Локоины</a>
+        <a href="#games">🎮 Игры</a>
+        <a href="#achievements">🏆 Достижения</a>
+        <a href="#shop">🛒 Магазин</a>
+        <a href="#events">🎪 Ивенты</a>
+        <a href="#leaderboard">📊 Рейтинг</a>
+        <a href="#notifications">🔔 Уведомления</a>
+        <a href="#daily">📅 Ежедневный вход</a>
+        <a href="#profile">👤 Профиль</a>
+        <a href="#easter">🥚 Пасхалки</a>
+        <a href="#theme">🎨 Тёмная тема</a>
+        <a href="#feedback">💬 Обратная связь</a>
+      </div>
+
+      <!-- Баллы -->
+      <div class="faq-category" id="points"><h3><span class="cat-icon">⭐</span> Баллы</h3>
+        <div class="faq-item"><button class="faq-item__question"><span>Как заработать баллы?</span><span class="faq-item__arrow">▼</span></button><div class="faq-item__answer">Баллы начисляются за любую игровую активность, участие в событиях и выполнение достижений. Точные условия получения баллов указаны в описании каждой игры или события.</div></div>
+        <div class="faq-item"><button class="faq-item__question"><span>Где посмотреть историю начислений?</span><span class="faq-item__arrow">▼</span></button><div class="faq-item__answer">В вашем профиле есть раздел «История игр», где отображаются последние игровые сессии с указанием заработанных баллов.</div></div>
+        <div class="faq-item"><button class="faq-item__question"><span>Можно ли потерять баллы?</span><span class="faq-item__arrow">▼</span></button><div class="faq-item__answer">Нет, баллы только накапливаются. Штрафов за проигрыш в играх не предусмотрено.</div></div>
+      </div>
+
+      <!-- Локоины -->
+      <div class="faq-category" id="lokoins"><h3><span class="cat-icon">💰</span> Локоины</h3>
+        <div class="faq-item"><button class="faq-item__question"><span>Что такое локоины?</span><span class="faq-item__arrow">▼</span></button><div class="faq-item__answer">Локоины — внутренняя валюта портала. Их можно заработать за активность (за каждые 10 баллов вы получаете 1 лок.) и ежедневный вход. Локоины тратятся на товары в магазине.</div></div>
+        <div class="faq-item"><button class="faq-item__question"><span>Как получить локоины быстро?</span><span class="faq-item__arrow">▼</span></button><div class="faq-item__answer">Играйте в игры, участвуйте в событиях и заходите на сайт каждый день — серия ежедневных входов приносит всё больше локоинов.</div></div>
+        <div class="faq-item"><button class="faq-item__question"><span>Где посмотреть баланс?</span><span class="faq-item__arrow">▼</span></button><div class="faq-item__answer">Баланс отображается в вашем профиле под именем.</div></div>
+      </div>
+
+      <!-- Игры -->
+      <div class="faq-category" id="games"><h3><span class="cat-icon">🎮</span> Игры</h3>
+        <div class="faq-item"><button class="faq-item__question"><span>Какие игры доступны?</span><span class="faq-item__arrow">▼</span></button><div class="faq-item__answer">Вас ждут знакомые с детства игры — от простых кликеров до логических головоломок. Загляните в каталог игр, чтобы увидеть полный список и выбрать, во что поиграть сегодня.</div></div>
+        <div class="faq-item"><button class="faq-item__question"><span>Как играть с коллегами?</span><span class="faq-item__arrow">▼</span></button><div class="faq-item__answer">Некоторые игры позволяют соревноваться с коллегами в реальном времени. Создайте игровую сессию и поделитесь её номером с коллегой, либо присоединитесь к уже созданной игре.</div></div>
+        <div class="faq-item"><button class="faq-item__question"><span>Есть ли ограничения на мобильных устройствах?</span><span class="faq-item__arrow">▼</span></button><div class="faq-item__answer">Большинство игр удобно работают на телефонах и планшетах, но некоторые лучше проходить на компьютере — это указано в описании конкретной игры.</div></div>
+      </div>
+
+      <!-- Достижения -->
+      <div class="faq-category" id="achievements"><h3><span class="cat-icon">🏆</span> Достижения</h3>
+        <div class="faq-item"><button class="faq-item__question"><span>Как открыть достижение?</span><span class="faq-item__arrow">▼</span></button><div class="faq-item__answer">Достижения открываются автоматически при выполнении определённых условий. Полный список доступных достижений можно посмотреть в своём профиле.</div></div>
+        <div class="faq-item"><button class="faq-item__question"><span>Что дают достижения?</span><span class="faq-item__arrow">▼</span></button><div class="faq-item__answer">Каждое достижение приносит баллы и украшает ваш профиль. Некоторые достижения скрыты — попробуйте угадать условия!</div></div>
+        <div class="faq-item"><button class="faq-item__question"><span>Скрытые достижения — как их получить?</span><span class="faq-item__arrow">▼</span></button><div class="faq-item__answer">Условия скрытых достижений не раскрываются. Экспериментируйте в играх, ищите пасхалки и нестандартные способы игры.</div></div>
+      </div>
+
+      <!-- Магазин -->
+      <div class="faq-category" id="shop"><h3><span class="cat-icon">🛒</span> Магазин</h3>
+        <div class="faq-item"><button class="faq-item__question"><span>Как купить товар?</span><span class="faq-item__arrow">▼</span></button><div class="faq-item__answer">В магазине выберите товар, нажмите «Купить», подтвердите покупку. Стоимость спишется с вашего баланса локоинов.</div></div>
+        <div class="faq-item"><button class="faq-item__question"><span>Что можно купить?</span><span class="faq-item__arrow">▼</span></button><div class="faq-item__answer">В магазине представлены различные категории: от кастомизации профиля до игровых бонусов и особых привилегий. Подробное описание каждого товара доступно при клике на него.</div></div>
+        <div class="faq-item"><button class="faq-item__question"><span>Как долго действуют товары?</span><span class="faq-item__arrow">▼</span></button><div class="faq-item__answer">Длительность указана в описании товара. Некоторые товары действуют бессрочно после покупки, другие — ограниченное время.</div></div>
+      </div>
+
+      <!-- Ивенты -->
+      <div class="faq-category" id="events"><h3><span class="cat-icon">🎪</span> Ивенты</h3>
+        <div class="faq-item"><button class="faq-item__question"><span>Как участвовать в ивенте?</span><span class="faq-item__arrow">▼</span></button><div class="faq-item__answer">Время от времени на портале появляются временные события. Информация о текущих событиях отображается на главной странице. Нажмите на карточку события, чтобы перейти к участию.</div></div>
+        <div class="faq-item"><button class="faq-item__question"><span>Какие бывают ивенты?</span><span class="faq-item__arrow">▼</span></button><div class="faq-item__answer">Формат событий может быть разным — от кооперативных задач до соревнований и викторин. Каждое событие сопровождается подробными правилами на своей странице.</div></div>
+        <div class="faq-item"><button class="faq-item__question"><span>Как определяются победители?</span><span class="faq-item__arrow">▼</span></button><div class="faq-item__answer">После завершения события администратор подводит итоги. Лучшие участники получают дополнительные баллы и локоины, а также могут быть отмечены в специальной таблице.</div></div>
+      </div>
+
+      <!-- Рейтинг -->
+      <div class="faq-category" id="leaderboard"><h3><span class="cat-icon">📊</span> Рейтинг</h3>
+        <div class="faq-item"><button class="faq-item__question"><span>Как формируется рейтинг?</span><span class="faq-item__arrow">▼</span></button><div class="faq-item__answer">Игроки сортируются по количеству баллов. Можно фильтровать по отделам, диапазону баллов и наличию достижений.</div></div>
+        <div class="faq-item"><button class="faq-item__question"><span>Почему меня нет в рейтинге?</span><span class="faq-item__arrow">▼</span></button><div class="faq-item__answer">Убедитесь, что вы авторизованы. Администраторы исключены из общего рейтинга.</div></div>
+      </div>
+
+      <!-- Уведомления -->
+      <div class="faq-category" id="notifications"><h3><span class="cat-icon">🔔</span> Уведомления</h3>
+        <div class="faq-item"><button class="faq-item__question"><span>Как работают уведомления?</span><span class="faq-item__arrow">▼</span></button><div class="faq-item__answer">Колокольчик в шапке показывает количество непрочитанных уведомлений. Нажмите на него, чтобы открыть список. При новом уведомлении счётчик обновляется автоматически.</div></div>
+        <div class="faq-item"><button class="faq-item__question"><span>Какие бывают уведомления?</span><span class="faq-item__arrow">▼</span></button><div class="faq-item__answer">Уведомления о достижениях, ежедневном входе, наградах, покупках, ответах администратора и системных событиях.</div></div>
+        <div class="faq-item"><button class="faq-item__question"><span>Можно ли отключить уведомления?</span><span class="faq-item__arrow">▼</span></button><div class="faq-item__answer">Пока такой возможности нет, но вы можете очистить все уведомления кнопкой «Очистить все» в выпадающем списке.</div></div>
+      </div>
+
+      <!-- Ежедневный вход -->
+      <div class="faq-category" id="daily"><h3><span class="cat-icon">📅</span> Ежедневный вход</h3>
+        <div class="faq-item"><button class="faq-item__question"><span>Что даёт ежедневный вход?</span><span class="faq-item__arrow">▼</span></button><div class="faq-item__answer">Каждый день вы получаете награду: баллы и локоины. Размер награды растёт с увеличением серии дней подряд (до 7-го дня).</div></div>
+        <div class="faq-item"><button class="faq-item__question"><span>Что будет, если пропустить день?</span><span class="faq-item__arrow">▼</span></button><div class="faq-item__answer">Серия сбрасывается, и награда начнётся с первого дня. Общее количество входов и рекордная серия сохраняются.</div></div>
+      </div>
+
+      <!-- Профиль -->
+      <div class="faq-category" id="profile"><h3><span class="cat-icon">👤</span> Профиль</h3>
+        <div class="faq-item"><button class="faq-item__question"><span>Как изменить имя в профиле?</span><span class="faq-item__arrow">▼</span></button><div class="faq-item__answer">Обратитесь к администратору — он может изменить имя через панель управления.</div></div>
+        <div class="faq-item"><button class="faq-item__question"><span>Как сменить пароль?</span><span class="faq-item__arrow">▼</span></button><div class="faq-item__answer">В профиле откройте раздел «Сменить пароль», введите старый и новый пароли.</div></div>
+        <div class="faq-item"><button class="faq-item__question"><span>Как подтвердить email?</span><span class="faq-item__arrow">▼</span></button><div class="faq-item__answer">После регистрации на указанный адрес приходит письмо со ссылкой. Если письма нет, проверьте папку «Спам» или нажмите «Отправить письмо повторно» в профиле.</div></div>
+      </div>
+
+      <!-- Пасхалки -->
+      <div class="faq-category" id="easter"><h3><span class="cat-icon">🥚</span> Пасхалки</h3>
+        <div class="faq-item"><button class="faq-item__question"><span>На сайте есть секреты?</span><span class="faq-item__arrow">▼</span></button><div class="faq-item__answer">Да, спрятано несколько пасхалок. Они могут быть где угодно: в логотипе, футере, на главной странице или реагировать на определённые комбинации клавиш. За каждую найденную пасхалку начисляются баллы.</div></div>
+        <div class="faq-item"><button class="faq-item__question"><span>Сколько всего пасхалок?</span><span class="faq-item__arrow">▼</span></button><div class="faq-item__answer">Ищите сами! Подсказка: некоторые спрятаны в известных игровых кодах и секретных словах.</div></div>
+      </div>
+
+      <!-- Тёмная тема -->
+      <div class="faq-category" id="theme"><h3><span class="cat-icon">🎨</span> Тёмная тема</h3>
+        <div class="faq-item"><button class="faq-item__question"><span>Как включить тёмную тему?</span><span class="faq-item__arrow">▼</span></button><div class="faq-item__answer">Тёмная тема может быть доступна после покупки соответствующего товара в магазине. Затем перейдите в профиль и переключите тему на тёмную.</div></div>
+        <div class="faq-item"><button class="faq-item__question"><span>Тёмная тема работает на всех страницах?</span><span class="faq-item__arrow">▼</span></button><div class="faq-item__answer">Да, она применяется ко всем страницам, включая игры и админ-панель.</div></div>
+      </div>
+
+      <!-- Обратная связь -->
+      <div class="faq-category" id="feedback"><h3><span class="cat-icon">💬</span> Обратная связь</h3>
+        <div class="faq-item"><button class="faq-item__question"><span>Как связаться с администратором?</span><span class="faq-item__arrow">▼</span></button><div class="faq-item__answer">Используйте кнопку обратной связи (💬) в правом нижнем углу экрана. Опишите проблему или предложение — администратор получит ваше сообщение и сможет ответить. Ответ придёт в виде уведомления.</div></div>
+        <div class="faq-item"><button class="faq-item__question"><span>Как долго ждать ответа?</span><span class="faq-item__arrow">▼</span></button><div class="faq-item__answer">Обычно администратор отвечает в течение рабочего дня. Статус вашего обращения можно отследить в уведомлениях.</div></div>
+      </div>
+    </div>
+  </main>
+
+  <footer class="footer"><div class="container"><p>© 2026 ваши амбассадоры</p></div></footer>
+
+  <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore-compat.js"></script>
+  <script src="js/firebase-config.js"></script>
+  <script src="js/firebase-auth.js"></script>
+  <script src="js/storage.js"></script>
+  <script src="js/achievements.js"></script>
+  <script src="js/notifications.js"></script>
+  <script src="js/easter-eggs.js"></script>
+  <script src="js/feedback.js"></script>
+  <script src="js/main.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      // Аккордеон
+      document.querySelectorAll('.faq-item__question').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const item = btn.parentElement;
+          item.classList.toggle('open');
+        });
+      });
+
+      // Плавная прокрутка к якорям
+      document.querySelectorAll('.faq-nav a').forEach(link => {
+        link.addEventListener('click', e => {
+          e.preventDefault();
+          const id = link.getAttribute('href').substring(1);
+          const target = document.getElementById(id);
+          if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        });
+      });
+    });
+  </script>
+</body>
+</html>

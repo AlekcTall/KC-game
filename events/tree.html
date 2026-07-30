@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Живое дерево – КЦ Игры</title>
+  <link rel="stylesheet" href="../css/style.css">
+  <style>
+    .tree-page { max-width: 650px; margin: 2rem auto; text-align: center; background: white; padding: 2rem; border-radius: var(--border-radius); box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
+    .tree-health-bar { width: 100%; height: 24px; background: #eee; border-radius: 12px; overflow: hidden; margin: 1rem 0; }
+    .tree-health-fill { height: 100%; background: linear-gradient(90deg, #e74c3c, #f39c12, #27ae60); transition: width 0.5s ease; }
+    .tree-icon { font-size: 5rem; margin: 1rem 0; transition: all 0.5s ease; }
+    .tree-stats { display: flex; justify-content: space-around; margin: 1rem 0; font-weight: 600; }
+    .tree-actions { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 0.8rem; margin: 1.5rem 0; }
+    .tree-action-btn { background: #f0f4f8; border: 2px solid #d0d8e0; border-radius: 12px; padding: 0.8rem 0.5rem; cursor: pointer; transition: all 0.2s; text-align: center; }
+    .tree-action-btn:hover:not(:disabled) { background: #e6f0ff; border-color: #3498db; transform: translateY(-2px); }
+    .tree-action-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .tree-action-btn .action-icon { font-size: 2rem; display: block; margin-bottom: 0.2rem; }
+    .tree-action-btn .action-name { font-weight: 600; font-size: 0.9rem; }
+    .tree-action-btn .action-effect { font-size: 0.75rem; color: #666; display: block; margin-top: 0.2rem; }
+    .tree-action-btn .action-limit { font-size: 0.7rem; color: #888; }
+    .tree-message { font-weight: bold; min-height: 1.5rem; margin: 0.5rem 0; }
+    .tree-back { display: inline-block; margin-top: 1rem; color: var(--color-primary); text-decoration: none; }
+    .admin-events-log { margin-top: 1.5rem; text-align: left; }
+    .admin-events-log h4 { text-align: center; }
+    .admin-event-item { background: #fffbe6; border: 1px solid #f0c040; border-radius: 8px; padding: 0.6rem 0.8rem; margin-bottom: 0.4rem; font-size: 0.9rem; }
+    .timer-bar { font-size: 0.9rem; color: #888; margin-bottom: 0.5rem; }
+    .activity-feed { margin-top: 1.5rem; text-align: left; max-height: 200px; overflow-y: auto; background: #f9fafb; border-radius: 8px; padding: 0.8rem; }
+    .activity-feed h4 { text-align: center; margin-bottom: 0.5rem; }
+    .activity-item { font-size: 0.85rem; padding: 0.3rem 0; border-bottom: 1px solid #eee; display: flex; align-items: center; gap: 0.5rem; }
+    .activity-item .act-icon { font-size: 1.2rem; }
+    .top-participants { margin-top: 1.5rem; text-align: left; }
+    .top-participants h4 { text-align: center; }
+    .top-participants table, .final-stats table { width: 100%; font-size: 0.85rem; border-collapse: collapse; }
+    .top-participants th, .top-participants td, .final-stats th, .final-stats td { padding: 0.3rem 0.5rem; border-bottom: 1px solid #eee; }
+    .top-participants th, .final-stats th { background: #f5f5f5; }
+    .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 1rem; margin-top: 1rem; }
+    .stat-card { background: #f9f9fb; border-radius: 12px; padding: 1rem; display: flex; align-items: center; gap: 0.8rem; }
+    .stat-icon { font-size: 1.8rem; }
+    .stat-detail { display: flex; flex-direction: column; }
+    .stat-value { font-size: 1.2rem; font-weight: 700; color: var(--color-header); }
+    .stat-label { font-size: 0.75rem; color: #888; }
+    .final-stats { margin-top: 1rem; }
+    @media (max-width: 480px) { .tree-actions { grid-template-columns: 1fr 1fr; } }
+  </style>
+</head>
+<body>
+  <div class="tree-page">
+    <h2>🌳 Живое дерево</h2>
+    <div class="timer-bar" id="timer-bar">Загрузка...</div>
+    <div class="tree-icon" id="tree-icon">🌱</div>
+    <div class="tree-health-bar"><div class="tree-health-fill" id="health-fill" style="width: 100%;"></div></div>
+    <div class="tree-stats"><span>❤️ <span id="health-text">1000</span>/<span id="max-health-text">1000</span></span><span>📉 <span id="decay-rate">-5</span>%/ч</span></div>
+    <p class="tree-message" id="tree-message"></p>
+    <div class="tree-actions" id="tree-actions"></div>
+    <div class="top-participants" id="top-participants"></div>
+    <div class="activity-feed" id="activity-feed"></div>
+    <div class="admin-events-log" id="admin-events-log"></div>
+    <a href="../index.html" class="tree-back">← На главную</a>
+  </div>
+  <div class="modal-overlay" id="confirm-lokoin-modal" style="display:none;"><div class="modal" style="max-width:350px; text-align:center;"><p id="confirm-lokoin-text"></p><button class="btn" id="confirm-lokoin-yes">Да</button><button class="btn btn-cancel" id="confirm-lokoin-no">Отмена</button></div></div>
+  <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore-compat.js"></script>
+  <script src="../js/firebase-config.js"></script>
+  <script src="../js/firebase-auth.js"></script>
+  <script src="../js/storage.js"></script>
+  <script src="../js/achievements.js"></script>
+  <script src="../js/notifications.js"></script>
+  <script src="../js/easter-eggs.js"></script>
+  <script src="../js/main.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', () => { if (typeof initEasterEggs === 'function') initEasterEggs(); });
+    const params = new URLSearchParams(window.location.search); const eventId = params.get('id');
+    if (!eventId) { document.body.innerHTML = '<p>Ивент не указан.</p>'; throw new Error('eventId missing'); }
+    const healthFill = document.getElementById('health-fill'), healthText = document.getElementById('health-text'), maxHealthText = document.getElementById('max-health-text'), decayRateEl = document.getElementById('decay-rate'), treeIcon = document.getElementById('tree-icon'), treeMessage = document.getElementById('tree-message'), treeActions = document.getElementById('tree-actions'), timerBar = document.getElementById('timer-bar'), adminEventsLog = document.getElementById('admin-events-log'), activityFeed = document.getElementById('activity-feed'), topParticipants = document.getElementById('top-participants'), confirmLokoinModal = document.getElementById('confirm-lokoin-modal'), confirmLokoinText = document.getElementById('confirm-lokoin-text'), confirmLokoinYes = document.getElementById('confirm-lokoin-yes'), confirmLokoinNo = document.getElementById('confirm-lokoin-no');
+    let pendingLokoinAction = null;
+    confirmLokoinYes.addEventListener('click', async () => { confirmLokoinModal.style.display = 'none'; if (pendingLokoinAction) await pendingLokoinAction(); pendingLokoinAction = null; });
+    confirmLokoinNo.addEventListener('click', () => { confirmLokoinModal.style.display = 'none'; pendingLokoinAction = null; });
+    let eventData = null, currentHealth = 1000, participantsData = {}, userActions = {}, unsubscribeEvent = null, unsubscribeAdminEvents = null, unsubscribeActivity = null, activityLog = [];
+    const ACTIONS = {
+      water: { icon: '💧', name: 'Полить', healthBoost: 8, pointsReward: 1, limit: 5, effect: '+8% ❤️ +1 ⭐' },
+      bugs: { icon: '🐛', name: 'Снять жуков', healthBoost: 5, pointsReward: 2, limit: 3, effect: '+5% ❤️ +2 ⭐' },
+      birds: { icon: '🦅', name: 'Отогнать птиц', healthBoost: 6, pointsReward: 2, limit: 3, effect: '+6% ❤️ +2 ⭐' },
+      fertilize: { icon: '🌿', name: 'Удобрить', healthBoost: 15, pointsReward: 3, limit: 2, effect: '+15% ❤️ +3 ⭐' },
+      tie: { icon: '🪴', name: 'Подвязать ветки', healthBoost: 3, pointsReward: 1, limit: 10, effect: '+3% ❤️ +1 ⭐' },
+      sing: { icon: '🎵', name: 'Спеть песню', healthBoost: 2, pointsReward: 1, limit: 10, effect: '+2% ❤️ +1 ⭐' },
+      lokoin: { icon: '🌞', name: 'Подарить свет', healthBoost: 20, pointsReward: 0, limit: 999, costLokoin: 5, effect: '+20% ❤️ -5 💰' }
+    };
+    async function init() { auth.onAuthStateChanged(async (user) => { if (!user) { document.body.innerHTML = '<p>Войдите, чтобы участвовать.</p>'; return; } await loadEvent(); }); }
+    async function loadEvent() {
+      const doc = await db.collection('events').doc(eventId).get();
+      if (!doc.exists) { document.body.innerHTML = '<p>Ивент не найден.</p>'; return; }
+      eventData = { id: doc.id, ...doc.data() };
+      if (eventData.status === 'finished') { renderFinishedState(); return; }
+      if (eventData.status !== 'active') { document.body.innerHTML = '<p>Ивент не активен.</p>'; return; }
+      participantsData = eventData.participants || {}; const userId = auth.currentUser.uid;
+      const d = new Date(); const moscowTime = new Date(d.getTime() + (3 * 60 * 60 * 1000)); const today = moscowTime.toISOString().slice(0, 10);
+      const userData = participantsData[userId] || { actions: {}, lastResetDate: '' };
+      if (userData.lastResetDate !== today) { userData.actions = {}; userData.lastResetDate = today; participantsData[userId] = userData; }
+      userActions = userData.actions || {};
+      const settings = eventData.settings || {}; const maxHealth = settings.maxHealth || 1000; const decayPerHour = settings.decayPerHour || 5;
+      const lastDecay = participantsData._lastDecay || (eventData.startTime?.seconds * 1000) || Date.now();
+      const hoursPassed = (Date.now() - lastDecay) / 3600000;
+      let actualDecay = decayPerHour;
+      if (settings.adaptiveMode !== false) { const totalActionsToday = Object.values(participantsData).reduce((s, p) => s + (p.lastResetDate === today ? Object.values(p.actions || {}).reduce((a, b) => a + b, 0) : 0), 0); if (totalActionsToday > 200) actualDecay *= 0.9; else if (totalActionsToday < 50) actualDecay *= 1.1; }
+      currentHealth = Math.max(settings.minHealth || 50, (eventData.health !== undefined ? eventData.health : maxHealth) - hoursPassed * actualDecay);
+      const adminEventsSnap = await db.collection('events').doc(eventId).collection('events').get(); let adminEventEffect = 0; adminEventsSnap.forEach(doc => { if (doc.data().healthChange) adminEventEffect += doc.data().healthChange; });
+      currentHealth = Math.min(maxHealth, Math.max(settings.minHealth || 50, currentHealth + adminEventEffect));
+      const activitySnap = await db.collection('events').doc(eventId).collection('activity').orderBy('timestamp', 'desc').limit(30).get(); activityLog = []; activitySnap.forEach(doc => activityLog.push(doc.data()));
+      updateUI(); setupRealtime();
+    }
+    function setupRealtime() {
+      if (unsubscribeEvent) unsubscribeEvent();
+      unsubscribeEvent = db.collection('events').doc(eventId).onSnapshot(doc => { if (!doc.exists) return; const data = doc.data(); eventData = { id: doc.id, ...data }; if (data.status === 'finished') { if (unsubscribeAdminEvents) unsubscribeAdminEvents(); if (unsubscribeActivity) unsubscribeActivity(); renderFinishedState(); return; } participantsData = data.participants || {}; const userId = auth.currentUser ? auth.currentUser.uid : null; if (userId) { const userData = participantsData[userId] || {}; userActions = userData.actions || {}; } updateUI(); });
+      if (unsubscribeAdminEvents) unsubscribeAdminEvents(); unsubscribeAdminEvents = db.collection('events').doc(eventId).collection('events').orderBy('timestamp', 'desc').limit(10).onSnapshot(s => { renderAdminEvents(s); });
+      if (unsubscribeActivity) unsubscribeActivity(); unsubscribeActivity = db.collection('events').doc(eventId).collection('activity').orderBy('timestamp', 'desc').limit(30).onSnapshot(s => { activityLog = []; s.forEach(doc => activityLog.push(doc.data())); renderActivityFeed(); });
+    }
+    function renderFinishedState() {
+      const settings = eventData.settings || {}; const maxHealth = settings.maxHealth || 1000; const finalHealth = eventData.health || 0; const healthPercent = Math.round((finalHealth / maxHealth) * 100);
+      const finalStats = eventData.finalStats || {}; const stats = eventData.statistics || {};
+      document.querySelector('.tree-page').innerHTML = `<h2>🌳 Ивент завершён!</h2><div class="tree-icon">${healthPercent > 50 ? '🍎' : '🌱'}</div><h3>${eventData.title}</h3><div class="tree-health-bar"><div class="tree-health-fill" style="width: ${healthPercent}%;"></div></div><p>Финальное здоровье: <strong>${Math.round(finalHealth)}/${maxHealth}</strong> (${healthPercent}%)</p>
+        <div class="stats-grid"><div class="stat-card"><span class="stat-icon">👥</span><div class="stat-detail"><div class="stat-value">${finalStats.uniqueParticipants || stats.uniqueParticipants || 0}</div><div class="stat-label">Участников</div></div></div><div class="stat-card"><span class="stat-icon">🎯</span><div class="stat-detail"><div class="stat-value">${finalStats.totalActions || stats.totalActions || 0}</div><div class="stat-label">Действий</div></div></div><div class="stat-card"><span class="stat-icon">⭐</span><div class="stat-detail"><div class="stat-value">${finalStats.totalPoints || 0}</div><div class="stat-label">Баллов выдано</div></div></div></div>
+        ${finalStats.topPlayer ? `<p style="margin-top:1rem;"><strong>👑 Лучший игрок:</strong> ${finalStats.topPlayer.username} (${finalStats.topPlayer.department || '—'}) — ${finalStats.topPlayer.totalActions} действий</p>` : ''}
+        ${finalStats.departments && finalStats.departments.length > 0 ? `<div class="final-stats"><h4>🏢 По отделам</h4><table><tr><th>Отдел</th><th>Действий</th><th>Лучший игрок</th></tr>${finalStats.departments.map(d => `<tr><td>${d.name}</td><td>${d.totalActions}</td><td>${d.topPlayer}</td></tr>`).join('')}</table></div>` : ''}
+        ${finalStats.topParticipants ? `<div class="top-participants"><h4>🏆 Топ участников</h4><table><tr><th>#</th><th>Игрок</th><th>Отдел</th><th>Действий</th></tr>${finalStats.topParticipants.map((p, i) => `<tr><td>${i+1}</td><td>${p.username}</td><td>${p.department || '—'}</td><td>${p.total}</td></tr>`).join('')}</table></div>` : ''}
+        <a href="../index.html" class="tree-back">← На главную</a>`;
+    }
+    function updateUI() {
+      const settings = eventData.settings || {}; const maxHealth = settings.maxHealth || 1000; const healthPercent = Math.round((currentHealth / maxHealth) * 100);
+      healthFill.style.width = healthPercent + '%'; healthText.textContent = Math.round(currentHealth); maxHealthText.textContent = maxHealth; decayRateEl.textContent = '-' + (settings.decayPerHour || 5).toFixed(1);
+      treeIcon.textContent = healthPercent <= 20 ? '🌱' : healthPercent <= 40 ? '🌿' : healthPercent <= 60 ? '🌳' : healthPercent <= 80 ? '🌸' : '🍎';
+      if (eventData.endTime) { const diff = eventData.endTime.seconds * 1000 - Date.now(); timerBar.textContent = diff > 0 ? `До конца: ${Math.floor(diff/86400000)} дн. ${Math.floor((diff%86400000)/3600000)} ч.` : 'Ивент завершён'; }
+      treeMessage.textContent = currentHealth <= (settings.minHealth || 50) ? '⚠️ Дерево при смерти!' : currentHealth >= maxHealth * 0.8 ? '😊 Дерево прекрасно себя чувствует!' : '';
+      renderActions(); renderTopParticipants(); renderActivityFeed();
+    }
+    function renderActions() {
+      const limits = eventData.settings?.dailyActionLimits || { water: 5, bugs: 3, birds: 3, fertilize: 2, tie: 10, sing: 10 };
+      treeActions.innerHTML = Object.entries(ACTIONS).map(([key, a]) => { const limit = limits[key] !== undefined ? limits[key] : a.limit; const used = userActions[key] || 0; const remaining = Math.max(0, limit - used); return `<button class="tree-action-btn" data-action="${key}" ${remaining === 0 && limit !== 999 ? 'disabled' : ''}><span class="action-icon">${a.icon}</span><span class="action-name">${a.name}</span><span class="action-effect">${a.effect}</span><span class="action-limit">${limit === 999 ? '∞' : remaining + '/' + limit}</span></button>`; }).join('');
+      document.querySelectorAll('.tree-action-btn:not([disabled])').forEach(btn => { btn.addEventListener('click', () => { const key = btn.dataset.action; if (key === 'lokoin') { confirmLokoinText.textContent = `Потратить 5 локоинов на +20% здоровья?`; confirmLokoinModal.style.display = 'flex'; pendingLokoinAction = () => performAction(key); } else performAction(key); }); });
+    }
+    async function performAction(key) {
+      if (!auth.currentUser) return; const action = ACTIONS[key]; if (!action) return;
+      if (action.costLokoin) { const bal = (await db.collection('users').doc(auth.currentUser.uid).get()).data().lokoin_balance || 0; if (bal < action.costLokoin) { showToast('Недостаточно локоинов.', 'error'); return; } await db.collection('users').doc(auth.currentUser.uid).update({ lokoin_balance: firebase.firestore.FieldValue.increment(-action.costLokoin) }); }
+      const userId = auth.currentUser.uid, username = (await db.collection('users').doc(userId).get()).data()?.username || 'Аноним';
+      const today = new Date(new Date().getTime() + 3*3600000).toISOString().slice(0,10);
+      const userData = participantsData[userId] || { actions: {}, lastResetDate: '' }; if (userData.lastResetDate !== today) { userData.actions = {}; userData.lastResetDate = today; }
+      userData.actions[key] = (userData.actions[key] || 0) + 1; participantsData[userId] = userData; userActions = userData.actions;
+      if (action.pointsReward > 0) { await addPointsToCurrentUser(action.pointsReward, 'event_tree'); showToast(`+${action.pointsReward} баллов!`, 'success'); } else if (action.costLokoin) showToast(`-${action.costLokoin} локоинов`, 'info');
+      currentHealth = Math.min(eventData.settings?.maxHealth || 1000, currentHealth + action.healthBoost); participantsData._lastDecay = Date.now();
+      const stats = eventData.statistics || { totalActions: 0, uniqueParticipants: 0 }; stats.totalActions++; if (!eventData.participants?.[userId]) stats.uniqueParticipants++;
+      await db.collection('events').doc(eventId).collection('activity').add({ userId, username, actionKey: key, actionIcon: action.icon, actionName: action.name, healthBoost: action.healthBoost, pointsReward: action.pointsReward, costLokoin: action.costLokoin || 0, timestamp: firebase.firestore.FieldValue.serverTimestamp() });
+      await db.collection('events').doc(eventId).update({ health: currentHealth, participants: participantsData, statistics: stats });
+      updateUI();
+    }
+    async function renderTopParticipants() {
+      const ranked = []; for (const [uid, data] of Object.entries(participantsData)) { if (uid === '_lastDecay') continue; const u = (await db.collection('users').doc(uid).get()).data() || {}; if (u.role === 'admin') continue; ranked.push({ username: u.username || 'Аноним', total: Object.values(data.actions || {}).reduce((a, b) => a + b, 0) }); }
+      ranked.sort((a, b) => b.total - a.total); const top5 = ranked.slice(0, 5);
+      topParticipants.innerHTML = top5.length ? '<h4>🏆 Топ сегодня</h4><table><tr><th>#</th><th>Игрок</th><th>Действий</th></tr>' + top5.map((p, i) => `<tr><td>${i+1}</td><td>${p.username}</td><td>${p.total}</td></tr>`).join('') + '</table>' : '';
+    }
+    async function renderActivityFeed() {
+      if (!activityLog.length) { activityFeed.innerHTML = '<h4>📜 Последние действия</h4><p style="text-align:center;color:#888;">Пока нет действий</p>'; return; }
+      const nameMap = {}; for (const a of activityLog) { if (!nameMap[a.userId]) nameMap[a.userId] = (await db.collection('users').doc(a.userId).get()).data()?.username || 'Аноним'; }
+      activityFeed.innerHTML = '<h4>📜 Последние действия</h4>' + activityLog.slice(0, 15).map(a => `<div class="activity-item"><span class="act-icon">${a.actionIcon || '🎯'}</span><span><strong>${nameMap[a.userId]}</strong> ${a.actionName || ''} ${a.healthBoost ? '+' + a.healthBoost + '%' : ''}</span><span style="margin-left:auto;color:#888;font-size:0.75rem;">${a.timestamp ? new Date(a.timestamp.seconds*1000).toLocaleTimeString('ru-RU') : ''}</span></div>`).join('');
+    }
+    function renderAdminEvents(s) { adminEventsLog.innerHTML = s.empty ? '' : '<h4>⚡ События администратора</h4>' + s.docs.map(d => `<div class="admin-event-item">${d.data().icon || '⚡'} ${d.data().name}<br><small>${d.data().timestamp ? new Date(d.data().timestamp.seconds*1000).toLocaleString('ru-RU') : ''}</small></div>`).join(''); }
+    window.addEventListener('beforeunload', () => { if (unsubscribeEvent) unsubscribeEvent(); if (unsubscribeAdminEvents) unsubscribeAdminEvents(); if (unsubscribeActivity) unsubscribeActivity(); });
+    init();
+  </script>
+</body>
+</html>

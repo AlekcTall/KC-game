@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <!-- Задние сообщения -->
+  <rect x="10" y="42" width="40" height="16" rx="3" fill="#F59E0B" stroke="#D97706" stroke-width="1.5"/>
+  <line x1="16" y1="48" x2="44" y2="48" stroke="#FEF3C7" stroke-width="1.5"/>
+  <!-- Средние сообщения -->
+  <rect x="14" y="34" width="40" height="16" rx="3" fill="#FBBF24" stroke="#F59E0B" stroke-width="1.5"/>
+  <line x1="20" y1="40" x2="44" y2="40" stroke="#FEF3C7" stroke-width="1.5"/>
+  <!-- Передние сообщения -->
+  <rect x="18" y="26" width="40" height="16" rx="3" fill="#FDE047" stroke="#FBBF24" stroke-width="1.5"/>
+  <line x1="24" y1="32" x2="44" y2="32" stroke="#B45309" stroke-width="1.5"/>
+  <!-- Иконка сообщения -->
+  <path d="M26 20 C26 14 34 10 38 14 L40 8 L42 14 C46 10 54 14 54 20 L54 26 L26 26 Z" fill="#FDE047" stroke="#FBBF24" stroke-width="1.5"/>
+  <!-- Блик -->
+  <path d="M22 28 L30 28" stroke="white" stroke-width="2" opacity="0.3"/>
+</svg>

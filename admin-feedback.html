@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Обращения – Админ-панель – Геймификация КЦ</title>
+  <link rel="stylesheet" href="css/style.css">
+  <style>
+    .admin-page { max-width: 900px; margin: 0 auto; padding: 1.5rem; }
+    .back-link { display: inline-block; margin-bottom: 1rem; color: var(--color-primary); text-decoration: none; }
+    .feedback-list { margin-top: 1rem; }
+    .feedback-item { background: #fff; border: 1px solid #eee; border-radius: 8px; padding: 1rem; margin-bottom: 1rem; }
+    .feedback-item-header { margin-bottom: 0.5rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem; }
+    .feedback-item-header small { color: #999; }
+    .feedback-item-body { margin-bottom: 0.5rem; }
+    .feedback-item-actions { display: flex; gap: 0.3rem; flex-wrap: wrap; }
+    .btn-small { padding: 0.25rem 0.5rem; font-size: 0.8rem; }
+    .btn-danger { background: #e74c3c; color: white; }
+    .skeleton-item { animation: shimmer 1.5s infinite; }
+    .skeleton-item .skeleton-cell { height: 1rem; background: #e0e0e0; border-radius: 4px; margin-bottom: 0.5rem; }
+    @keyframes shimmer { 0% { opacity: 0.6; } 50% { opacity: 1; } 100% { opacity: 0.6; } }
+    .status-badge { font-size: 0.8rem; padding: 0.2rem 0.6rem; border-radius: 12px; font-weight: 600; }
+    .status-new { background: #fff3cd; color: #856404; }
+    .status-progress { background: #cce5ff; color: #004085; }
+    .status-closed { background: #d4edda; color: #155724; }
+    .replies-list { margin-top: 0.8rem; padding-top: 0.8rem; border-top: 1px dashed #eee; }
+    .reply-item { display: flex; gap: 0.5rem; margin-bottom: 0.4rem; font-size: 0.85rem; }
+    .reply-author { font-weight: 600; min-width: 80px; }
+    .reply-text { color: #555; }
+    .reply-date { color: #aaa; font-size: 0.75rem; margin-left: auto; }
+    .modal textarea { width: 100%; padding: 0.5rem; border: 1px solid #ccc; border-radius: 6px; margin-top: 0.5rem; }
+  </style>
+</head>
+<body>
+  <header class="header">
+    <div class="container header__inner">
+      <a href="index.html" class="logo">КЦ-Игры</a>
+      <button class="burger" id="burger-btn" aria-label="Меню">☰</button>
+      <nav class="nav" id="main-nav">
+        <ul class="nav__list">
+          <li><a href="index.html" class="nav__link">Главная</a></li>
+          <li><a href="games.html" class="nav__link">Игры</a></li>
+          <li><a href="leaderboard.html" class="nav__link">Рейтинг</a></li>
+          <li><a href="shop.html" class="nav__link">Магазин</a></li>
+          <li><a href="profile.html" class="nav__link">Профиль</a></li>
+          <li><a href="admin.html" class="nav__link active">Админ</a></li>
+        </ul>
+      </nav>
+      <div id="auth-status" class="auth-status"></div>
+    </div>
+  </header>
+
+  <main class="main">
+    <div class="container admin-page" id="admin-container">
+      <p>Загрузка...</p>
+    </div>
+  </main>
+
+  <!-- Модальное окно для ответа -->
+  <div class="modal-overlay" id="reply-modal" style="display:none;">
+    <div class="modal" style="max-width:500px;">
+      <span class="modal-close" id="reply-modal-close">&times;</span>
+      <h3>Ответить на обращение</h3>
+      <p id="reply-feedback-info"></p>
+      <div class="form-group">
+        <label for="reply-message">Сообщение</label>
+        <textarea id="reply-message" rows="4" placeholder="Введите ответ..."></textarea>
+      </div>
+      <button class="btn" id="reply-submit">Отправить</button>
+      <p id="reply-message-status" class="auth-message"></p>
+    </div>
+  </div>
+
+  <footer class="footer"><div class="container"><p>© 2026 ваши амбассадоры</p></div></footer>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore-compat.js"></script>
+  <script src="js/firebase-config.js"></script>
+  <script src="js/firebase-auth.js"></script>
+  <script src="js/storage.js"></script>
+  <script src="js/achievements.js"></script>
+  <script src="js/easter-eggs.js"></script>
+  <script src="js/notifications.js"></script>
+  <script src="js/main.js"></script>
+  <script src="js/feedback.js"></script>
+
+  <script>
+    (function() {
+      const CACHE_KEY = 'krugames_admin_feedback';
+      const CACHE_TTL = 2 * 60 * 1000;
+      let allFeedback = [];
+
+      function getCachedFeedback() {
+        const cached = sessionStorage.getItem(CACHE_KEY);
+        if (cached) {
+          try {
+            const parsed = JSON.parse(cached);
+            if (Date.now() - parsed.timestamp < CACHE_TTL) return parsed.data;
+          } catch (e) {}
+        }
+        return null;
+      }
+
+      function setCachedFeedback(feedback) {
+        sessionStorage.setItem(CACHE_KEY, JSON.stringify({ timestamp: Date.now(), data: feedback }));
+      }
+
+      document.addEventListener('DOMContentLoaded', async () => {
+        const container = document.getElementById('admin-container');
+
+        auth.onAuthStateChanged(async fbUser => {
+          if (!fbUser) { container.innerHTML = '<p>Вы не авторизованы.</p>'; return; }
+          try {
+            const d = await db.collection('users').doc(fbUser.uid).get();
+            if (!d.exists || d.data().role !== 'admin') {
+              container.innerHTML = '<p>Доступ запрещён.</p>';
+              return;
+            }
+            renderPage();
+          } catch (e) { container.innerHTML = `<p>Ошибка: ${e.message}</p>`; }
+        });
+
+        function renderPage() {
+          container.innerHTML = `
+            <a href="admin.html" class="back-link">← В админку</a>
+            <h2>💬 Обращения пользователей</h2>
+            <div id="feedback-list-container"></div>
+          `;
+          loadFeedback();
+        }
+
+        async function loadFeedback() {
+          const listContainer = document.getElementById('feedback-list-container');
+          listContainer.innerHTML = '<p>Загрузка...</p>';
+
+          const cached = getCachedFeedback();
+          if (cached) {
+            allFeedback = cached;
+            renderFeedbackList();
+          } else {
+            listContainer.innerHTML = Array.from({ length: 3 }, () => `
+              <div class="feedback-item skeleton-item">
+                <div class="skeleton-cell" style="width:60%;"></div>
+                <div class="skeleton-cell" style="width:80%;"></div>
+                <div class="skeleton-cell" style="width:40%;"></div>
+              </div>
+            `).join('');
+          }
+
+          try {
+            const snap = await db.collection('feedback').orderBy('createdAt', 'desc').get();
+            allFeedback = [];
+            snap.forEach(d => {
+              const x = d.data();
+              allFeedback.push({
+                id: d.id,
+                ...x,
+                createdAt: x.createdAt ? x.createdAt.toDate() : null,
+                status: x.status || 'new',
+                replies: x.replies || []
+              });
+            });
+            setCachedFeedback(allFeedback);
+            renderFeedbackList();
+          } catch (e) {
+            console.error(e);
+            if (!allFeedback.length) listContainer.innerHTML = '<p>Ошибка загрузки.</p>';
+          }
+        }
+
+        function renderFeedbackList() {
+          const listContainer = document.getElementById('feedback-list-container');
+          if (!allFeedback.length) {
+            listContainer.innerHTML = '<p>Нет обращений.</p>';
+            return;
+          }
+
+          let html = `<div class="feedback-list">`;
+          allFeedback.forEach(f => {
+            const dateStr = f.createdAt ? f.createdAt.toLocaleString('ru-RU') : '—';
+            const statusClass = f.status === 'new' ? 'status-new' : (f.status === 'progress' ? 'status-progress' : 'status-closed');
+            const statusText = f.status === 'new' ? '🆕 Новое' : (f.status === 'progress' ? '✍️ В работе' : '✅ Закрыто');
+
+            let repliesHtml = '';
+            if (f.replies && f.replies.length > 0) {
+              repliesHtml = '<div class="replies-list">';
+              f.replies.forEach(r => {
+                const replyDate = r.timestamp ? new Date(r.timestamp.seconds * 1000).toLocaleString('ru-RU') : '';
+                repliesHtml += `
+                  <div class="reply-item">
+                    <span class="reply-author">${r.isAdmin ? 'Администратор' : (f.name || 'Пользователь')}:</span>
+                    <span class="reply-text">${r.message}</span>
+                    <span class="reply-date">${replyDate}</span>
+                  </div>
+                `;
+              });
+              repliesHtml += '</div>';
+            }
+
+            html += `
+              <div class="feedback-item">
+                <div class="feedback-item-header">
+                  <div>
+                    <strong>${f.topic}</strong> от ${f.name || 'Аноним'} <small>${dateStr}</small>
+                    <span class="status-badge ${statusClass}">${statusText}</span>
+                  </div>
+                  <div>
+                    <small>ID: ${f.userId || '—'}</small>
+                  </div>
+                </div>
+                <div class="feedback-item-body">
+                  <p>${f.message}</p>
+                </div>
+                ${repliesHtml}
+                <div class="feedback-item-actions">
+                  <button class="btn btn-small reply-feedback-btn" data-fb-id="${f.id}" data-fb-user="${f.userId || ''}" data-fb-topic="${f.topic}">💬 Ответить</button>
+                  ${f.status !== 'progress' ? `<button class="btn btn-small progress-feedback-btn" data-fb-id="${f.id}">✍️ В работу</button>` : ''}
+                  ${f.status !== 'closed' ? `<button class="btn btn-small close-feedback-btn" data-fb-id="${f.id}">✅ Закрыть</button>` : ''}
+                  <button class="btn btn-small btn-danger delete-feedback-btn" data-fb-id="${f.id}">🗑️ Удалить</button>
+                </div>
+              </div>
+            `;
+          });
+          html += '</div>';
+          listContainer.innerHTML = html;
+
+          // Обработчики с диагностикой
+          document.querySelectorAll('.delete-feedback-btn').forEach(btn => {
+            btn.addEventListener('click', async e => {
+              if (confirm('Удалить обращение?')) {
+                await db.collection('feedback').doc(e.target.dataset.fbId).delete();
+                showToast('Удалено', 'success');
+                loadFeedback();
+              }
+            });
+          });
+
+          document.querySelectorAll('.reply-feedback-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+              openReplyModal(btn.dataset.fbId, btn.dataset.fbUser, btn.dataset.fbTopic);
+            });
+          });
+
+          document.querySelectorAll('.progress-feedback-btn').forEach(btn => {
+            btn.addEventListener('click', async () => {
+              try {
+                await db.collection('feedback').doc(btn.dataset.fbId).update({ status: 'progress' });
+                showToast('Статус изменён на «В работе»', 'success');
+                loadFeedback();
+              } catch (err) {
+                alert('Ошибка при обновлении статуса: ' + err.message);
+              }
+            });
+          });
+
+          document.querySelectorAll('.close-feedback-btn').forEach(btn => {
+            btn.addEventListener('click', async () => {
+              try {
+                await db.collection('feedback').doc(btn.dataset.fbId).update({ status: 'closed' });
+                showToast('Обращение закрыто', 'success');
+                loadFeedback();
+              } catch (err) {
+                alert('Ошибка при закрытии: ' + err.message);
+              }
+            });
+          });
+        }
+
+        function openReplyModal(fbId, userId, topic) {
+          document.getElementById('reply-feedback-info').textContent = `Тема: ${topic}`;
+          document.getElementById('reply-message').value = '';
+          document.getElementById('reply-message-status').textContent = '';
+          document.getElementById('reply-modal').style.display = 'flex';
+
+          document.getElementById('reply-submit').onclick = async () => {
+            const message = document.getElementById('reply-message').value.trim();
+            if (!message) {
+              document.getElementById('reply-message-status').textContent = 'Введите сообщение.';
+              return;
+            }
+            try {
+              await db.collection('feedback').doc(fbId).collection('replies').add({
+                message: message,
+                isAdmin: true,
+                timestamp: firebase.firestore.FieldValue.serverTimestamp()
+              });
+
+              const fbDoc = await db.collection('feedback').doc(fbId).get();
+              if (fbDoc.exists && fbDoc.data().status === 'new') {
+                await db.collection('feedback').doc(fbId).update({ status: 'progress' });
+              }
+
+              if (userId && typeof addNotification === 'function') {
+                await addNotification(userId, `📬 Ответ на ваше обращение «${topic}»: ${message}`, 'feedback', 'profile.html');
+              }
+
+              showToast('Ответ отправлен', 'success');
+              document.getElementById('reply-modal').style.display = 'none';
+              loadFeedback();
+            } catch (err) {
+              document.getElementById('reply-message-status').textContent = 'Ошибка: ' + err.message;
+            }
+          };
+        }
+
+        document.getElementById('reply-modal-close').addEventListener('click', () => {
+          document.getElementById('reply-modal').style.display = 'none';
+        });
+      });
+    })();
+  </script>
+</body>
+</html>

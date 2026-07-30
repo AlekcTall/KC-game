@@ -1,0 +1,666 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Тетрис – КЦ Игры</title>
+    <link rel="stylesheet" href="../css/style.css">
+    <style>
+        .tetris-game {
+            max-width: 700px;
+            margin: 2rem auto;
+            text-align: center;
+            background: white;
+            padding: 1.5rem;
+            border-radius: var(--border-radius);
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+        }
+        canvas {
+            border: 2px solid #333;
+            border-radius: 8px;
+            background: #fafafa;
+            display: block;
+            margin: 0 auto 1rem;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            image-rendering: crisp-edges;
+        }
+        .tetris-stats {
+            display: flex;
+            justify-content: space-around;
+            margin: 0.5rem 0 1rem;
+            font-weight: 600;
+            gap: 1rem;
+            flex-wrap: wrap;
+        }
+        .stat-card {
+            background: #f9fafb;
+            border-radius: 12px;
+            padding: 0.5rem 1.2rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+            font-size: 0.95rem;
+        }
+        .stat-card .stat-icon { font-size: 1.3rem; }
+        .stat-value { font-weight: 700; color: #2c3e50; }
+        .next-piece {
+            background: #f9fafb;
+            border-radius: 12px;
+            padding: 1rem;
+            display: inline-block;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+            margin: 0.5rem 0;
+        }
+        .next-piece strong { display: block; margin-bottom: 0.5rem; color: #555; }
+        .mobile-controls {
+            display: none;
+            grid-template-areas:
+                ". up ."
+                "left . right"
+                ". down ."
+                ". space .";
+            gap: 0.5rem;
+            justify-content: center;
+            margin-top: 1rem;
+        }
+        .mobile-controls button {
+            width: 55px;
+            height: 55px;
+            font-size: 1.5rem;
+            background: #cdc1b4;
+            border: none;
+            border-radius: 10px;
+            color: #776e65;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+            cursor: pointer;
+            touch-action: manipulation;
+        }
+        .mobile-controls button:active { background: #bbada0; color: white; }
+        .up { grid-area: up; } .down { grid-area: down; } .left { grid-area: left; } .right { grid-area: right; } .space { grid-area: space; }
+        @media (max-width: 600px) { .mobile-controls { display: grid; } }
+        .leaderboard-tetris { margin-top: 1.5rem; text-align: left; }
+        .leaderboard-tetris h3 { text-align: center; margin-bottom: 0.5rem; font-size: 1.1rem; }
+        .leaderboard-tetris table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+        .leaderboard-tetris th, .leaderboard-tetris td { padding: 0.4rem 0.5rem; border-bottom: 1px solid #eee; }
+        .leaderboard-tetris th { background: #f5f5f5; font-weight: 600; }
+        .leaderboard-tetris .me { background: #e6f7ff; font-weight: 600; }
+        .tabs { display: flex; gap: 0.5rem; margin-bottom: 1.5rem; border-bottom: 2px solid #eee; padding-bottom: 0.5rem; }
+        .tab { background: none; border: none; padding: 0.5rem 1rem; font-size: 1rem; cursor: pointer; border-radius: 4px 4px 0 0; }
+        .tab.active { background: var(--color-primary); color: white; }
+        .back-link { display: inline-block; margin-top: 1rem; color: var(--color-primary); text-decoration: none; }
+        /* Оверлей Game Over */
+        .game-over-overlay {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0, 0, 0, 0.6); display: flex; flex-direction: column;
+            align-items: center; justify-content: center; border-radius: 8px;
+            animation: fadeIn 0.4s ease; z-index: 10;
+        }
+        .game-over-overlay .game-over-text { color: white; font-size: 2rem; font-weight: bold; margin-bottom: 0.5rem; text-shadow: 2px 2px 4px rgba(0,0,0,0.5); }
+        .game-over-overlay .game-over-score { color: #f1c40f; font-size: 1.2rem; margin-bottom: 1.5rem; }
+        .game-over-overlay .btn {
+            background: white; color: #333; font-weight: 600; padding: 0.6rem 2rem;
+            border-radius: 20px; cursor: pointer; border: none;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+        .canvas-wrapper { position: relative; display: inline-block; }
+    </style>
+</head>
+<body>
+<div class="tetris-game" id="game-container">
+    <h2>🧱 Тетрис</h2>
+    <div class="tabs">
+        <button class="tab active" data-tab="game">Игра</button>
+        <button class="tab" data-tab="leaderboard">Рекорды</button>
+    </div>
+    <div id="tab-content"></div>
+    <a href="../games.html" class="back-link">← Вернуться к играм</a>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore-compat.js"></script>
+<script src="../js/firebase-config.js"></script>
+<script src="../js/firebase-auth.js"></script>
+<script src="../js/storage.js"></script>
+<script src="../js/achievements.js"></script>
+<script src="../js/notifications.js"></script>
+<script src="../js/easter-eggs.js"></script>
+<script src="../js/main.js"></script>
+
+<script>
+    (function() {
+        const COLS = 10;
+        const ROWS = 20;
+        const CELL_SIZE = 30;
+        // Основные цвета блоков (индексы 0..6)
+        const BASE_COLORS = ['#00f0f0', '#f0f000', '#a000f0', '#00f000', '#f00000', '#0000f0', '#f0a000'];
+        // Светлые оттенки для градиента (верхняя левая часть)
+        const LIGHT_COLORS = ['#7fffff', '#ffff7f', '#d07fff', '#7fff7f', '#ff7f7f', '#7f7fff', '#ffd07f'];
+        // Тёмные оттенки для градиента (нижняя правая часть)
+        const DARK_COLORS = ['#009f9f', '#9f9f00', '#60009f', '#009f00', '#9f0000', '#00009f', '#9f6000'];
+
+        const SHAPES = [
+            [[1,1,1,1]],                         // I
+            [[1,1],[1,1]],                       // O
+            [[0,1,0],[1,1,1]],                   // T
+            [[1,0,0],[1,1,1]],                   // J
+            [[0,0,1],[1,1,1]],                   // L
+            [[0,1,1],[1,1,0]],                   // S
+            [[1,1,0],[0,1,1]]                    // Z
+        ];
+
+        const gameContainer = document.getElementById('tab-content');
+        let canvas, ctx, nextCanvas, nextCtx;
+        let board = [], currentPiece = null, nextPiece = null;
+        let score = 0, lines = 0, level = 1;
+        let gameActive = false, gamePaused = false;
+        let gameInterval = null, fallSpeed = 500;
+        let bestScore = 0, bestLines = 0, bestLevel = 1;
+        let currentUid = null;
+
+        // Переменные для анимации очистки линий
+        let clearingRows = [];       // номера строк, которые нужно очистить
+        let clearingTimer = null;   // таймер анимации
+        let flashOn = false;        // состояние вспышки
+
+        let bgCanvas = null;        // фоновый canvas с сеткой
+
+        auth.onAuthStateChanged(user => {
+            if (user) {
+                currentUid = user.uid;
+                loadBestResults();
+            } else {
+                currentUid = null;
+            }
+            switchTab('game');
+        });
+
+        document.querySelectorAll('.tab').forEach(tab => {
+            tab.addEventListener('click', () => {
+                document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                tab.classList.add('active');
+                switchTab(tab.dataset.tab);
+            });
+        });
+
+        function switchTab(tab) {
+            if (tab === 'game') renderGameTab();
+            else if (tab === 'leaderboard') renderLeaderboardTab();
+        }
+
+        async function loadBestResults() {
+            if (!auth.currentUser) return;
+            try {
+                const doc = await db.collection('users').doc(auth.currentUser.uid).get();
+                if (doc.exists) {
+                    const stats = doc.data().gameStats?.tetris || {};
+                    if (stats.maxScore) bestScore = stats.maxScore;
+                    if (stats.maxLines) bestLines = stats.maxLines;
+                    if (stats.maxLevel) bestLevel = stats.maxLevel;
+                }
+            } catch (e) { console.error(e); }
+        }
+
+        function createBackground() {
+            if (!bgCanvas) {
+                bgCanvas = document.createElement('canvas');
+                bgCanvas.width = COLS * CELL_SIZE;
+                bgCanvas.height = ROWS * CELL_SIZE;
+            }
+            const bgCtx = bgCanvas.getContext('2d');
+            // Лёгкий градиент фона
+            const gradient = bgCtx.createLinearGradient(0, 0, COLS * CELL_SIZE, ROWS * CELL_SIZE);
+            gradient.addColorStop(0, '#fdfdfd');
+            gradient.addColorStop(1, '#f0f0f0');
+            bgCtx.fillStyle = gradient;
+            bgCtx.fillRect(0, 0, bgCanvas.width, bgCanvas.height);
+            // Сетка
+            bgCtx.strokeStyle = '#e0e0e0';
+            bgCtx.lineWidth = 0.5;
+            for (let i = 0; i <= COLS; i++) {
+                bgCtx.beginPath();
+                bgCtx.moveTo(i * CELL_SIZE, 0);
+                bgCtx.lineTo(i * CELL_SIZE, ROWS * CELL_SIZE);
+                bgCtx.stroke();
+            }
+            for (let j = 0; j <= ROWS; j++) {
+                bgCtx.beginPath();
+                bgCtx.moveTo(0, j * CELL_SIZE);
+                bgCtx.lineTo(COLS * CELL_SIZE, j * CELL_SIZE);
+                bgCtx.stroke();
+            }
+        }
+
+        function renderGameTab() {
+            gameContainer.innerHTML = `
+                <div class="tetris-stats">
+                    <div class="stat-card"><span class="stat-icon">🏆</span> <span>Очки: <span id="score" class="stat-value">0</span></span></div>
+                    <div class="stat-card"><span class="stat-icon">📏</span> <span>Линии: <span id="lines" class="stat-value">0</span></span></div>
+                    <div class="stat-card"><span class="stat-icon">⬆️</span> <span>Уровень: <span id="level" class="stat-value">1</span></span></div>
+                </div>
+                <div style="display:flex; justify-content:center; gap:1.5rem; flex-wrap:wrap;">
+                    <div class="canvas-wrapper" id="canvas-wrapper">
+                        <canvas id="tetris-canvas" width="${COLS * CELL_SIZE}" height="${ROWS * CELL_SIZE}"></canvas>
+                    </div>
+                    <div>
+                        <div class="next-piece">
+                            <strong>Следующая</strong>
+                            <canvas id="next-canvas" width="${4 * CELL_SIZE}" height="${4 * CELL_SIZE}"></canvas>
+                        </div>
+                        <div style="margin-top:0.5rem;">
+                            <button class="btn" id="new-game-btn">Новая игра</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="mobile-controls" id="mobile-controls">
+                    <button class="up">▲</button>
+                    <button class="left">◀</button>
+                    <button class="right">▶</button>
+                    <button class="down">▼</button>
+                    <button class="space">⏬</button>
+                </div>
+            `;
+
+            canvas = document.getElementById('tetris-canvas');
+            ctx = canvas.getContext('2d');
+            nextCanvas = document.getElementById('next-canvas');
+            nextCtx = nextCanvas.getContext('2d');
+
+            createBackground();
+
+            document.getElementById('new-game-btn').addEventListener('click', newGame);
+            document.getElementById('mobile-controls').addEventListener('click', (e) => {
+                if (!gameActive || gamePaused || clearingRows.length > 0) return;
+                if (e.target.classList.contains('up')) rotatePiece();
+                else if (e.target.classList.contains('down')) moveDown();
+                else if (e.target.classList.contains('left')) moveLeft();
+                else if (e.target.classList.contains('right')) moveRight();
+                else if (e.target.classList.contains('space')) hardDrop();
+            });
+
+            document.addEventListener('keydown', handleKeyDown);
+            newGame();
+        }
+
+        function handleKeyDown(e) {
+            if (!gameActive || gamePaused) {
+                if (e.code === 'KeyN' || e.code === 'Space') {
+                    e.preventDefault();
+                    newGame();
+                }
+                return;
+            }
+            if (clearingRows.length > 0) return;
+            switch (e.code) {
+                case 'ArrowLeft': e.preventDefault(); moveLeft(); break;
+                case 'ArrowRight': e.preventDefault(); moveRight(); break;
+                case 'ArrowDown': e.preventDefault(); moveDown(); break;
+                case 'ArrowUp': e.preventDefault(); rotatePiece(); break;
+                case 'Space': e.preventDefault(); hardDrop(); break;
+                case 'KeyP': e.preventDefault(); togglePause(); break;
+            }
+        }
+
+        function newGame() {
+            // Очищаем предыдущий оверлей
+            const overlay = document.querySelector('.game-over-overlay');
+            if (overlay) overlay.remove();
+
+            board = Array(ROWS).fill().map(() => Array(COLS).fill(0));
+            score = 0; lines = 0; level = 1; fallSpeed = 500;
+            gameActive = true; gamePaused = false;
+            clearingRows = [];
+            if (clearingTimer) { clearInterval(clearingTimer); clearingTimer = null; }
+            updateStats();
+            spawnPiece();
+            startGameLoop();
+        }
+
+        function startGameLoop() {
+            if (gameInterval) clearInterval(gameInterval);
+            gameInterval = setInterval(() => {
+                if (gameActive && !gamePaused && clearingRows.length === 0) {
+                    if (!moveDown()) lockPiece();
+                }
+                draw();
+            }, fallSpeed);
+        }
+
+        function spawnPiece() {
+            if (!nextPiece) {
+                currentPiece = randomPiece();
+                nextPiece = randomPiece();
+            } else {
+                currentPiece = nextPiece;
+                nextPiece = randomPiece();
+            }
+            currentPiece.x = Math.floor((COLS - currentPiece.shape[0].length) / 2);
+            currentPiece.y = 0;
+
+            if (!isValidPosition(currentPiece.shape, currentPiece.x, currentPiece.y)) {
+                gameActive = false;
+                clearInterval(gameInterval);
+                endGame();
+            }
+        }
+
+        function randomPiece() {
+            const idx = Math.floor(Math.random() * SHAPES.length);
+            return { shape: SHAPES[idx], color: idx, x: 0, y: 0 };
+        }
+
+        function isValidPosition(shape, x, y) {
+            for (let r = 0; r < shape.length; r++) {
+                for (let c = 0; c < shape[r].length; c++) {
+                    if (shape[r][c]) {
+                        const boardX = x + c;
+                        const boardY = y + r;
+                        if (boardX < 0 || boardX >= COLS || boardY >= ROWS || (boardY >= 0 && board[boardY][boardX])) {
+                            return false;
+                        }
+                    }
+                }
+            }
+            return true;
+        }
+
+        function moveLeft() {
+            if (isValidPosition(currentPiece.shape, currentPiece.x - 1, currentPiece.y)) {
+                currentPiece.x--;
+                draw();
+            }
+        }
+
+        function moveRight() {
+            if (isValidPosition(currentPiece.shape, currentPiece.x + 1, currentPiece.y)) {
+                currentPiece.x++;
+                draw();
+            }
+        }
+
+        function moveDown() {
+            if (isValidPosition(currentPiece.shape, currentPiece.x, currentPiece.y + 1)) {
+                currentPiece.y++;
+                return true;
+            }
+            return false;
+        }
+
+        function rotatePiece() {
+            const shape = currentPiece.shape;
+            const rotated = shape[0].map((_, idx) => shape.map(row => row[idx]).reverse());
+            if (isValidPosition(rotated, currentPiece.x, currentPiece.y)) {
+                currentPiece.shape = rotated;
+            }
+            draw();
+        }
+
+        function hardDrop() {
+            while (isValidPosition(currentPiece.shape, currentPiece.x, currentPiece.y + 1)) {
+                currentPiece.y++;
+            }
+            lockPiece();
+        }
+
+        function lockPiece() {
+            const { shape, x, y, color } = currentPiece;
+            for (let r = 0; r < shape.length; r++) {
+                for (let c = 0; c < shape[r].length; c++) {
+                    if (shape[r][c]) {
+                        const boardY = y + r;
+                        const boardX = x + c;
+                        if (boardY >= 0) board[boardY][boardX] = color + 1;
+                    }
+                }
+            }
+            clearLines();
+            spawnPiece();
+        }
+
+        function clearLines() {
+            const filledRows = [];
+            for (let r = ROWS - 1; r >= 0; r--) {
+                if (board[r].every(cell => cell !== 0)) {
+                    filledRows.push(r);
+                }
+            }
+            if (filledRows.length > 0) {
+                // Запускаем анимацию очистки
+                clearingRows = filledRows;
+                flashOn = true;
+                // Приостанавливаем основную логику
+                draw(); // покажем вспышку
+                if (clearingTimer) clearInterval(clearingTimer);
+                let flashes = 0;
+                clearingTimer = setInterval(() => {
+                    flashOn = !flashOn;
+                    draw();
+                    flashes++;
+                    if (flashes >= 3) { // 3 переключения = ~180мс при 60мс интервале
+                        clearInterval(clearingTimer);
+                        clearingTimer = null;
+                        // Удаляем линии
+                        for (const row of clearingRows.sort((a,b) => a - b)) {
+                            board.splice(row, 1);
+                            board.unshift(Array(COLS).fill(0));
+                        }
+                        clearingRows = [];
+                        // Начисляем очки и т.д.
+                        const cleared = filledRows.length;
+                        const linePoints = [0, 100, 300, 500, 800];
+                        score += linePoints[cleared] || 0;
+                        lines += cleared;
+                        level = Math.floor(lines / 10) + 1;
+                        fallSpeed = Math.max(50, 500 - (level - 1) * 50);
+                        updateStats();
+                        startGameLoop(); // перезапускаем интервал с новой скоростью
+                        draw();
+
+                        // Проверка достижений
+                        if (cleared >= 4 && auth.currentUser) {
+                            syncGameStats('tetris', { tetrisCleared: true });
+                            if (typeof checkAndAwardAchievements === 'function') {
+                                checkAndAwardAchievements();
+                            }
+                        }
+                    }
+                }, 60);
+            }
+        }
+
+        function updateStats() {
+            document.getElementById('score').textContent = score;
+            document.getElementById('lines').textContent = lines;
+            document.getElementById('level').textContent = level;
+        }
+
+        function togglePause() {
+            gamePaused = !gamePaused;
+            showToast(gamePaused ? 'Пауза' : 'Продолжить', 'info');
+        }
+
+        // Рисование объёмного блока
+        function drawBlock(ctx, x, y, colorKey, size = CELL_SIZE) {
+            const baseColor = BASE_COLORS[colorKey];
+            const lightColor = LIGHT_COLORS[colorKey];
+            const darkColor = DARK_COLORS[colorKey];
+
+            // Основной градиент (светлый верхний левый угол -> тёмный нижний правый)
+            const gradient = ctx.createLinearGradient(x, y, x + size, y + size);
+            gradient.addColorStop(0, lightColor);
+            gradient.addColorStop(0.6, baseColor);
+            gradient.addColorStop(1, darkColor);
+            ctx.fillStyle = gradient;
+            ctx.fillRect(x, y, size, size);
+
+            // Блик (белая полоса сверху слева)
+            ctx.fillStyle = 'rgba(255,255,255,0.3)';
+            ctx.fillRect(x + 2, y + 2, size - 4, 4);
+            ctx.fillRect(x + 2, y + 2, 4, size - 4);
+
+            // Внутренняя обводка для разделения блоков
+            ctx.strokeStyle = 'rgba(0,0,0,0.2)';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(x + 0.5, y + 0.5, size - 1, size - 1);
+        }
+
+        function draw() {
+            if (!ctx) return;
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            // Фон с сеткой
+            if (bgCanvas) {
+                ctx.drawImage(bgCanvas, 0, 0);
+            }
+
+            // Рисуем статичные блоки на доске
+            for (let r = 0; r < ROWS; r++) {
+                for (let c = 0; c < COLS; c++) {
+                    if (board[r][c]) {
+                        const colorIndex = board[r][c] - 1;
+                        // Если строка в процессе очистки и flashOn, рисуем белым
+                        if (clearingRows.includes(r) && flashOn) {
+                            ctx.fillStyle = '#ffffff';
+                            ctx.fillRect(c * CELL_SIZE, r * CELL_SIZE, CELL_SIZE, CELL_SIZE);
+                            ctx.strokeStyle = 'rgba(0,0,0,0.2)';
+                            ctx.strokeRect(c * CELL_SIZE + 0.5, r * CELL_SIZE + 0.5, CELL_SIZE - 1, CELL_SIZE - 1);
+                        } else {
+                            drawBlock(ctx, c * CELL_SIZE, r * CELL_SIZE, colorIndex);
+                        }
+                    }
+                }
+            }
+
+            // Рисуем текущую фигуру (если не в режиме очистки)
+            if (currentPiece && gameActive && clearingRows.length === 0) {
+                for (let r = 0; r < currentPiece.shape.length; r++) {
+                    for (let c = 0; c < currentPiece.shape[r].length; c++) {
+                        if (currentPiece.shape[r][c]) {
+                            const px = (currentPiece.x + c) * CELL_SIZE;
+                            const py = (currentPiece.y + r) * CELL_SIZE;
+                            drawBlock(ctx, px, py, currentPiece.color);
+                        }
+                    }
+                }
+            }
+
+            // Отрисовка следующей фигуры
+            nextCtx.clearRect(0, 0, nextCanvas.width, nextCanvas.height);
+            if (nextPiece) {
+                const offX = Math.floor((4 - nextPiece.shape[0].length) / 2);
+                const offY = Math.floor((4 - nextPiece.shape.length) / 2);
+                for (let r = 0; r < nextPiece.shape.length; r++) {
+                    for (let c = 0; c < nextPiece.shape[r].length; c++) {
+                        if (nextPiece.shape[r][c]) {
+                            drawBlock(nextCtx, (offX + c) * CELL_SIZE, (offY + r) * CELL_SIZE, nextPiece.color);
+                        }
+                    }
+                }
+            }
+        }
+
+        async function endGame() {
+            gameActive = false;
+            if (gameInterval) clearInterval(gameInterval);
+            document.removeEventListener('keydown', handleKeyDown);
+
+            const newBestScore = score > bestScore;
+            const newBestLines = lines > bestLines;
+            const newBestLevel = level > bestLevel;
+
+            if (newBestScore || newBestLines || newBestLevel) {
+                if (newBestScore) bestScore = score;
+                if (newBestLines) bestLines = lines;
+                if (newBestLevel) bestLevel = level;
+                if (auth.currentUser) {
+                    await syncGameStats('tetris', { maxScore: bestScore, maxLines: bestLines, maxLevel: bestLevel });
+                }
+            }
+
+            if (auth.currentUser && typeof addPointsToCurrentUser === 'function') {
+                const pointsEarned = Math.floor(score / 500);
+                if (pointsEarned > 0) {
+                    const result = await addPointsToCurrentUser(pointsEarned, 'tetris');
+                    if (result && result.success) {
+                        const earned = result.points;
+                        const hasDouble = earned > pointsEarned;
+                        showToast(`+${earned} баллов${hasDouble ? ' (x2 бонус)' : ''} за тетрис!`, 'success');
+                    }
+                }
+            }
+
+            if (typeof checkAndAwardAchievements === 'function') {
+                await checkAndAwardAchievements();
+            }
+
+            // Показываем оверлей Game Over
+            const wrapper = document.getElementById('canvas-wrapper');
+            if (wrapper) {
+                const old = wrapper.querySelector('.game-over-overlay');
+                if (old) old.remove();
+                const overlay = document.createElement('div');
+                overlay.className = 'game-over-overlay';
+                overlay.innerHTML = `
+                    <div class="game-over-text">Игра окончена</div>
+                    <div class="game-over-score">Очки: ${score}</div>
+                    <button class="btn" id="restart-from-overlay">Играть снова</button>
+                `;
+                wrapper.appendChild(overlay);
+                document.getElementById('restart-from-overlay').addEventListener('click', () => {
+                    overlay.remove();
+                    newGame();
+                    requestAnimationFrame(() => draw());
+                });
+            }
+
+            draw();
+        }
+
+        async function renderLeaderboardTab() {
+            gameContainer.innerHTML = '<p>Загрузка...</p>';
+            try {
+                const snap = await db.collection('users').get();
+                const scoreList = [], linesList = [], levelList = [];
+                snap.forEach(doc => {
+                    const d = doc.data();
+                    if (d.role === 'admin') return;
+                    const stats = d.gameStats?.tetris || {};
+                    if (stats.maxScore > 0) scoreList.push({ username: d.username || 'Аноним', value: stats.maxScore, uid: doc.id });
+                    if (stats.maxLines > 0) linesList.push({ username: d.username || 'Аноним', value: stats.maxLines, uid: doc.id });
+                    if (stats.maxLevel > 1) levelList.push({ username: d.username || 'Аноним', value: stats.maxLevel, uid: doc.id });
+                });
+                scoreList.sort((a,b) => b.value - a.value);
+                linesList.sort((a,b) => b.value - a.value);
+                levelList.sort((a,b) => b.value - a.value);
+
+                let html = '';
+                html += buildTable('🏆 Лучшие очки', scoreList.slice(0, 10), 'очк.');
+                html += buildTable('📏 Лучшие линии', linesList.slice(0, 10), 'лин.');
+                html += buildTable('⬆️ Лучший уровень', levelList.slice(0, 10), 'ур.');
+                gameContainer.innerHTML = html || '<p>Нет рекордов.</p>';
+            } catch (e) { gameContainer.innerHTML = '<p>Ошибка загрузки.</p>'; }
+        }
+
+        function buildTable(title, data, suffix) {
+            if (!data.length) return '';
+            let html = `<div class="leaderboard-tetris"><h3>${title}</h3><table><tr><th>#</th><th>Игрок</th><th>${suffix}</th></tr>`;
+            data.forEach((p, i) => {
+                const me = p.uid === currentUid ? ' class="me"' : '';
+                html += `<tr${me}><td>${i+1}</td><td>${p.username}</td><td>${p.value}</td></tr>`;
+            });
+            html += '</table></div>';
+            return html;
+        }
+
+        window.addEventListener('beforeunload', () => {
+            if (gameInterval) clearInterval(gameInterval);
+            if (clearingTimer) clearInterval(clearingTimer);
+            document.removeEventListener('keydown', handleKeyDown);
+        });
+    })();
+</script>
+</body>
+</html>

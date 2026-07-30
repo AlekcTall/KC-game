@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Квиз – КЦ Игры</title>
+  <link rel="stylesheet" href="../css/style.css">
+  <style>
+    .quiz-page { max-width: 700px; margin: 2rem auto; background: white; padding: 2rem; border-radius: var(--border-radius); box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
+    .quiz-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; }
+    .quiz-timer { font-size: 1.2rem; font-weight: 700; background: #f0f0f0; padding: 0.5rem 1rem; border-radius: 8px; }
+    .quiz-question { font-size: 1.3rem; font-weight: 600; margin-bottom: 1.5rem; }
+    .quiz-options { display: flex; flex-direction: column; gap: 0.8rem; }
+    .quiz-option { background: #f9fafb; border: 2px solid #e0e0e0; border-radius: 10px; padding: 1rem 1.2rem; cursor: pointer; transition: all 0.2s; font-size: 1rem; text-align: left; }
+    .quiz-option:hover:not(:disabled) { border-color: var(--color-primary); background: #f0f6ff; }
+    .quiz-option.selected { border-color: var(--color-primary); background: #e6f0ff; }
+    .quiz-option.correct { border-color: #27ae60; background: #e6f7e6; }
+    .quiz-option.wrong { border-color: #e74c3c; background: #fff0f0; }
+    .quiz-option:disabled { cursor: default; }
+    .quiz-feedback { margin-top: 1rem; font-weight: 600; min-height: 1.5rem; }
+    .quiz-next { margin-top: 1rem; }
+    .quiz-results { text-align: center; }
+    .quiz-back { display: inline-block; margin-top: 1rem; color: var(--color-primary); text-decoration: none; }
+    .quiz-progress { font-size: 0.9rem; color: #888; margin-bottom: 0.5rem; }
+  </style>
+</head>
+<body>
+  <div class="quiz-page" id="quiz-container">
+    <h2>🧠 Квиз</h2>
+    <p id="loading-msg">Загрузка...</p>
+    <div id="quiz-content" style="display:none;"></div>
+  </div>
+
+  <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore-compat.js"></script>
+  <script src="../js/firebase-config.js"></script>
+  <script src="../js/firebase-auth.js"></script>
+  <script src="../js/storage.js"></script>
+  <script src="../js/achievements.js"></script>
+  <script src="../js/notifications.js"></script>
+  <script src="../js/main.js"></script>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', async () => {
+      const params = new URLSearchParams(window.location.search);
+      const eventId = params.get('id');
+      if (!eventId) {
+        document.getElementById('loading-msg').textContent = 'Ивент не указан.';
+        return;
+      }
+
+      const quizContainer = document.getElementById('quiz-container');
+      const loadingMsg = document.getElementById('loading-msg');
+      const quizContent = document.getElementById('quiz-content');
+
+      let eventData, questions, userProgress, timerInterval, questionTimer, questionTimeout;
+      const QUESTION_TIME = 30; // по умолчанию 30 секунд на вопрос
+
+      // Функция перемешивания массива (Фишер-Йетс)
+      function shuffle(arr) {
+        const a = [...arr];
+        for (let i = a.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [a[i], a[j]] = [a[j], a[i]];
+        }
+        return a;
+      }
+
+      // Инициализация после авторизации
+      auth.onAuthStateChanged(async user => {
+        if (!user) {
+          loadingMsg.textContent = 'Войдите, чтобы участвовать.';
+          return;
+        }
+        await loadEvent();
+      });
+
+      async function loadEvent() {
+        const doc = await db.collection('events').doc(eventId).get();
+        if (!doc.exists) {
+          loadingMsg.textContent = 'Ивент не найден.';
+          return;
+        }
+        eventData = { id: doc.id, ...doc.data() };
+        if (eventData.status !== 'active') {
+          loadingMsg.textContent = 'Ивент не активен.';
+          return;
+        }
+
+        // Загружаем вопросы из подколлекции
+        const qSnap = await db.collection('events').doc(eventId).collection('questions').get();
+        questions = [];
+        qSnap.forEach(d => questions.push({ id: d.id, ...d.data() }));
+
+        if (!questions.length) {
+          loadingMsg.textContent = 'Вопросы ещё не добавлены.';
+          return;
+        }
+
+        // Получаем или создаём прогресс пользователя
+        const participants = eventData.participants || {};
+        let progress = participants[auth.currentUser.uid];
+        if (!progress) {
+          // Генерируем порядок вопросов
+          let order = questions.map(q => q.id);
+          if (eventData.settings?.randomOrder !== false) {
+            order = shuffle(order);
+          }
+          progress = {
+            order: order,
+            answers: {},
+            score: 0,
+            currentIndex: 0,
+            started: firebase.firestore.FieldValue.serverTimestamp()
+          };
+          participants[auth.currentUser.uid] = progress;
+          await db.collection('events').doc(eventId).update({ participants });
+        }
+
+        userProgress = progress;
+        renderCurrentQuestion();
+      }
+
+      function renderCurrentQuestion() {
+        loadingMsg.style.display = 'none';
+        quizContent.style.display = 'block';
+
+        if (userProgress.currentIndex >= userProgress.order.length) {
+          showFinalResults();
+          return;
+        }
+
+        const qid = userProgress.order[userProgress.currentIndex];
+        const question = questions.find(q => q.id === qid);
+        if (!question) {
+          // Пропускаем отсутствующие вопросы
+          userProgress.currentIndex++;
+          updateProgress();
+          renderCurrentQuestion();
+          return;
+        }
+
+        const options = [...question.options]; // копируем массив вариантов
+        // Если включено перемешивание вариантов
+        if (eventData.settings?.shuffleOptions !== false) {
+          shuffle(options);
+        }
+
+        const timeLimit = question.timeLimit || eventData.settings?.defaultTimeLimit || QUESTION_TIME;
+
+        quizContent.innerHTML = `
+          <div class="quiz-header">
+            <span class="quiz-progress">Вопрос ${userProgress.currentIndex + 1} из ${userProgress.order.length}</span>
+            <span class="quiz-timer" id="question-timer">${timeLimit}с</span>
+          </div>
+          <div class="quiz-question">${question.text}</div>
+          <div class="quiz-options" id="options-container">
+            ${options.map((opt, idx) => `
+              <button class="quiz-option" data-option="${idx}" data-text="${opt.replace(/"/g, '&quot;')}">${opt}</button>
+            `).join('')}
+          </div>
+          <div class="quiz-feedback" id="quiz-feedback"></div>
+          <div class="quiz-next" id="quiz-next" style="display:none;">
+            <button class="btn" id="next-question-btn">Далее</button>
+          </div>
+        `;
+
+        // Таймер
+        let remaining = timeLimit;
+        const timerEl = document.getElementById('question-timer');
+        timerInterval = setInterval(() => {
+          remaining--;
+          timerEl.textContent = remaining + 'с';
+          if (remaining <= 5) timerEl.style.color = '#e74c3c';
+          if (remaining <= 0) {
+            clearInterval(timerInterval);
+            handleTimeout();
+          }
+        }, 1000);
+
+        // Обработка выбора варианта
+        document.querySelectorAll('.quiz-option').forEach(btn => {
+          btn.addEventListener('click', () => {
+            if (userProgress.answers[qid]) return; // уже отвечено
+            clearInterval(timerInterval);
+            const selectedIdx = parseInt(btn.dataset.option);
+            const selectedText = btn.dataset.text;
+            handleAnswer(qid, selectedIdx, selectedText, question);
+          });
+        });
+
+        document.getElementById('next-question-btn').addEventListener('click', () => {
+          userProgress.currentIndex++;
+          updateProgress();
+          renderCurrentQuestion();
+        });
+      }
+
+      function handleTimeout() {
+        const qid = userProgress.order[userProgress.currentIndex];
+        const question = questions.find(q => q.id === qid);
+        if (question) {
+          const correctIdx = question.correct;
+          highlightCorrectAnswer(correctIdx);
+          document.getElementById('quiz-feedback').innerHTML = '<span style="color:#e74c3c;">⏰ Время вышло!</span>';
+          document.querySelectorAll('.quiz-option').forEach(b => b.disabled = true);
+          document.getElementById('quiz-next').style.display = 'block';
+        }
+      }
+
+      async function handleAnswer(qid, selectedIdx, selectedText, question) {
+        const correctIdx = question.correct;
+        const isCorrect = selectedIdx === correctIdx;
+        const timeTaken = (question.timeLimit || QUESTION_TIME) - parseInt(document.getElementById('question-timer').textContent);
+
+        // Сохраняем ответ
+        userProgress.answers[qid] = {
+          answer: selectedIdx,
+          correct: isCorrect,
+          time: timeTaken
+        };
+
+        // Начисляем баллы (базово 10 за правильный, + бонус за скорость)
+        if (isCorrect) {
+          const speedBonus = Math.max(0, Math.floor((question.timeLimit || QUESTION_TIME) - timeTaken) / 2);
+          const earnedPoints = 10 + speedBonus;
+          userProgress.score = (userProgress.score || 0) + earnedPoints;
+          if (typeof addPointsToCurrentUser === 'function') {
+            await addPointsToCurrentUser(earnedPoints, 'event_quiz');
+          }
+        }
+
+        // Визуальная обратная связь
+        highlightCorrectAnswer(correctIdx);
+        if (!isCorrect) {
+          document.querySelector(`.quiz-option[data-option="${selectedIdx}"]`).classList.add('wrong');
+        }
+        document.getElementById('quiz-feedback').innerHTML = isCorrect
+          ? '<span style="color:#27ae60;">✅ Правильно!</span>'
+          : '<span style="color:#e74c3c;">❌ Неправильно</span>';
+        document.querySelectorAll('.quiz-option').forEach(b => b.disabled = true);
+        document.getElementById('quiz-next').style.display = 'block';
+
+        updateProgress();
+      }
+
+      function highlightCorrectAnswer(correctIdx) {
+        const correctBtn = document.querySelector(`.quiz-option[data-option="${correctIdx}"]`);
+        if (correctBtn) correctBtn.classList.add('correct');
+      }
+
+      async function updateProgress() {
+        const participants = eventData.participants || {};
+        participants[auth.currentUser.uid] = userProgress;
+        await db.collection('events').doc(eventId).update({ participants });
+      }
+
+      function showFinalResults() {
+        quizContent.innerHTML = `
+          <div class="quiz-results">
+            <h3>🎉 Квиз завершён!</h3>
+            <p>Ваш результат: <strong>${userProgress.score || 0} баллов</strong></p>
+            <p>Правильных ответов: ${Object.values(userProgress.answers).filter(a => a.correct).length} из ${userProgress.order.length}</p>
+            <a href="../index.html" class="quiz-back">← На главную</a>
+          </div>
+        `;
+      }
+    });
+  </script>
+</body>
+</html>

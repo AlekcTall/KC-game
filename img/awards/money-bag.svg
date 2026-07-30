@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <!-- Мешок -->
+  <path d="M16 28 L16 52 C16 56 20 60 24 60 L40 60 C44 60 48 56 48 52 L48 28" fill="#FBBF24" stroke="#F59E0B" stroke-width="2"/>
+  <!-- Завязка -->
+  <path d="M22 28 L32 22 L42 28" fill="#FBBF24" stroke="#F59E0B" stroke-width="2"/>
+  <path d="M22 28 L32 22 L42 28" fill="url(#shine)" opacity="0.4"/>
+  <!-- Блик -->
+  <defs>
+    <linearGradient id="shine" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="white"/>
+      <stop offset="100%" stop-color="white" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+</svg>

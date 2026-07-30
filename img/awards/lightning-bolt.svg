@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <!-- Основная молния -->
+  <polygon points="36,4 22,36 32,36 26,60 46,26 34,26 42,4" fill="#FBBF24" stroke="#F59E0B" stroke-width="2" stroke-linejoin="round"/>
+  <!-- Блик -->
+  <polygon points="36,4 22,36 32,36 26,60 46,26 34,26 42,4" fill="url(#shine)" opacity="0.4"/>
+  <defs>
+    <linearGradient id="shine" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="white"/>
+      <stop offset="100%" stop-color="white" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+</svg>

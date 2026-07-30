@@ -1,0 +1,590 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Пользователи – Админ-панель – Геймификация КЦ</title>
+  <link rel="stylesheet" href="css/style.css">
+  <style>
+    .admin-page { max-width: 1100px; margin: 0 auto; padding: 1.5rem; }
+    .admin-tabs { display: flex; gap: 0.5rem; margin-bottom: 1.5rem; border-bottom: 2px solid #eee; padding-bottom: 0.5rem; }
+    .admin-tab { background: none; border: none; padding: 0.5rem 1rem; font-size: 1rem; cursor: pointer; border-radius: 4px 4px 0 0; }
+    .admin-tab.active { background: var(--color-primary); color: white; }
+    .admin-users-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+    .admin-users-table th, .admin-users-table td { padding: 0.5rem; border-bottom: 1px solid #eee; text-align: left; }
+    .admin-users-table th { background: #f9f9f9; font-weight: 600; }
+    .btn-small { padding: 0.25rem 0.5rem; font-size: 0.8rem; margin: 0 0.1rem; }
+    .btn-gift { background: #9b59b6; color: white; border: none; padding: 0.3rem 0.7rem; border-radius: 4px; cursor: pointer; font-size: 0.85rem; margin-left: 0.3rem; }
+    .btn-gift:hover { background: #8e44ad; }
+    .editable select, .editable input { width: 100%; padding: 0.25rem; border: 1px solid #ccc; border-radius: 4px; }
+    .award-icon-preview { width: 32px; height: 32px; vertical-align: middle; margin-right: 0.5rem; }
+    .skeleton-row td { padding: 0.5rem; }
+    .skeleton-cell { height: 1rem; background: #e0e0e0; border-radius: 4px; animation: shimmer 1.5s infinite; }
+    @keyframes shimmer { 0% { opacity: 0.6; } 50% { opacity: 1; } 100% { opacity: 0.6; } }
+    .requests-table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
+    .requests-table th, .requests-table td { padding: 0.5rem; border-bottom: 1px solid #eee; text-align: left; }
+    .requests-table th { background: #f9f9f9; font-weight: 600; }
+    .back-link { display: inline-block; margin-bottom: 1rem; color: var(--color-primary); text-decoration: none; }
+    @media (max-width: 768px) {
+      .admin-users-table { font-size: 0.8rem; }
+      .admin-tabs { flex-wrap: wrap; }
+    }
+    .modal textarea { width: 100%; padding: 0.5rem; border: 1px solid #ccc; border-radius: 6px; margin-top: 0.5rem; }
+  </style>
+</head>
+<body>
+  <header class="header">
+    <div class="container header__inner">
+      <a href="index.html" class="logo">КЦ-Игры</a>
+      <button class="burger" id="burger-btn" aria-label="Меню">☰</button>
+      <nav class="nav" id="main-nav">
+        <ul class="nav__list">
+          <li><a href="index.html" class="nav__link">Главная</a></li>
+          <li><a href="games.html" class="nav__link">Игры</a></li>
+          <li><a href="leaderboard.html" class="nav__link">Рейтинг</a></li>
+          <li><a href="shop.html" class="nav__link">Магазин</a></li>
+          <li><a href="profile.html" class="nav__link">Профиль</a></li>
+          <li><a href="admin.html" class="nav__link active">Админ</a></li>
+        </ul>
+      </nav>
+      <div id="auth-status" class="auth-status"></div>
+    </div>
+  </header>
+
+  <main class="main">
+    <div class="container admin-page" id="admin-container">
+      <p>Загрузка...</p>
+    </div>
+  </main>
+
+  <!-- Модальные окна (локоины, подарок, награда) -->
+  <div class="modal-overlay" id="lokoin-modal" style="display:none;">
+    <div class="modal"><span class="modal-close" id="lokoin-modal-close">&times;</span><h3>Изменить баланс локоинов</h3><div class="form-group"><label for="lokoin-amount">Количество</label><input type="number" id="lokoin-amount" step="1"></div><div class="form-group"><label for="lokoin-comment">Комментарий</label><input type="text" id="lokoin-comment"></div><button class="btn" id="lokoin-submit">Применить</button><p id="lokoin-message" class="auth-message"></p></div>
+  </div>
+
+  <div class="modal-overlay" id="gift-modal" style="display:none;">
+    <div class="modal"><span class="modal-close" id="gift-modal-close">&times;</span><h3>Подарить товар</h3><p id="gift-user-name"></p><div class="form-group"><label for="gift-item-select">Товар</label><select id="gift-item-select"></select></div><button class="btn" id="gift-submit">Подарить</button><p id="gift-message" class="auth-message"></p></div>
+  </div>
+
+  <div class="modal-overlay" id="award-user-modal" style="display:none;">
+    <div class="modal" style="max-width:450px;"><span class="modal-close" id="award-user-modal-close">&times;</span><h3>Выдать награду</h3><p id="award-user-name"></p><div class="form-group"><label for="award-select">Награда</label><select id="award-select"></select></div><div class="form-group"><label for="award-comment">Комментарий</label><textarea id="award-comment" rows="2"></textarea></div><button class="btn" id="award-user-submit">Выдать</button><p id="award-user-message" class="auth-message"></p></div>
+  </div>
+
+  <!-- Модальное окно для комментария к заявке -->
+  <div class="modal-overlay" id="request-done-modal" style="display:none;">
+    <div class="modal" style="max-width:450px;">
+      <span class="modal-close" id="request-done-modal-close">&times;</span>
+      <h3>Заявка выполнена</h3>
+      <p id="request-done-info"></p>
+      <div class="form-group">
+        <label for="request-done-comment">Комментарий (необязательно)</label>
+        <textarea id="request-done-comment" rows="3" placeholder="Например: подойдите в 312 кабинет за призом"></textarea>
+      </div>
+      <button class="btn" id="request-done-submit">Отправить уведомление</button>
+      <p id="request-done-message" class="auth-message"></p>
+    </div>
+  </div>
+
+  <footer class="footer"><div class="container"><p>© 2026 ваши амбассадоры</p></div></footer>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore-compat.js"></script>
+  <script src="js/firebase-config.js"></script>
+  <script src="js/firebase-auth.js"></script>
+  <script src="js/storage.js"></script>
+  <script src="js/achievements.js"></script>
+  <script src="js/easter-eggs.js"></script>
+  <script src="js/notifications.js"></script>
+  <script src="js/main.js"></script>
+  <script src="js/feedback.js"></script>
+
+  <script>
+    (function() {
+      const CACHE_USERS_KEY = 'krugames_admin_users';
+      const CACHE_TTL = 2 * 60 * 1000;
+      let departmentsCache = [];
+      let allUsers = [];
+
+      async function loadDepartments() {
+        try {
+          const s = await db.collection('departments').orderBy('name').get();
+          departmentsCache = [];
+          s.forEach(d => departmentsCache.push({ id: d.id, name: d.data().name }));
+          if (!departmentsCache.length) {
+            const def = ['РБ','МСБ','ТМ','Депозиты','ОКК','ООБП','Боссы','Заблудшие души'];
+            for (const n of def) await db.collection('departments').add({ name: n });
+            return loadDepartments();
+          }
+        } catch (e) {
+          departmentsCache = def.map((n,i)=>({id:'fb'+i, name:n}));
+        }
+      }
+
+      function getCachedUsers() {
+        const cached = sessionStorage.getItem(CACHE_USERS_KEY);
+        if (cached) {
+          try {
+            const parsed = JSON.parse(cached);
+            if (Date.now() - parsed.timestamp < CACHE_TTL) return parsed.data;
+          } catch (e) {}
+        }
+        return null;
+      }
+
+      function setCachedUsers(users) {
+        sessionStorage.setItem(CACHE_USERS_KEY, JSON.stringify({ timestamp: Date.now(), data: users }));
+      }
+
+      document.addEventListener('DOMContentLoaded', async () => {
+        const container = document.getElementById('admin-container');
+        auth.onAuthStateChanged(async fbUser => {
+          if (!fbUser) { container.innerHTML = '<p>Вы не авторизованы.</p>'; return; }
+          try {
+            const d = await db.collection('users').doc(fbUser.uid).get();
+            if (!d.exists || d.data().role !== 'admin') {
+              container.innerHTML = '<p>Доступ запрещён.</p>';
+              return;
+            }
+            await loadDepartments();
+            renderPage();
+          } catch (err) { container.innerHTML = `<p>Ошибка: ${err.message}</p>`; }
+        });
+
+        function renderPage() {
+          container.innerHTML = `
+            <a href="admin.html" class="back-link">← В админку</a>
+            <h2>👥 Управление пользователями</h2>
+            <div class="admin-tabs">
+              <button class="admin-tab active" data-tab="users">Пользователи</button>
+              <button class="admin-tab" data-tab="requests">Заявки на реализацию</button>
+            </div>
+            <div id="admin-tab-content"></div>
+          `;
+          document.querySelectorAll('.admin-tab').forEach(t => t.addEventListener('click', function() {
+            document.querySelectorAll('.admin-tab').forEach(b => b.classList.remove('active'));
+            this.classList.add('active');
+            loadTab(this.dataset.tab);
+          }));
+          loadTab('users');
+
+          function loadTab(tab) {
+            if (tab === 'users') renderUsersTab();
+            else if (tab === 'requests') renderRequestsTab();
+          }
+        }
+
+        // ----- Пользователи -----
+        async function renderUsersTab() {
+          const content = document.getElementById('admin-tab-content');
+          content.innerHTML = '<p>Загрузка...</p>';
+
+          // Скелетоны
+          content.innerHTML = `
+            <table class="admin-users-table">
+              <thead><tr><th>Игрок</th><th>Email</th><th>Отдел</th><th>Баллы</th><th>Локоины</th><th>Роль</th><th>Статус</th><th>🏆</th><th>Действия</th></tr></thead>
+              <tbody id="users-tbody">${Array.from({ length: 8 }, () => `<tr class="skeleton-row"><td><div class="skeleton-cell" style="width:120px;"></div></td><td><div class="skeleton-cell" style="width:150px;"></div></td><td><div class="skeleton-cell" style="width:80px;"></div></td><td><div class="skeleton-cell" style="width:50px;"></div></td><td><div class="skeleton-cell" style="width:50px;"></div></td><td><div class="skeleton-cell" style="width:60px;"></div></td><td><div class="skeleton-cell" style="width:60px;"></div></td><td><div class="skeleton-cell" style="width:30px;"></div></td><td><div class="skeleton-cell" style="width:100px;"></div></td></tr>`).join('')}</tbody>
+            </table>
+          `;
+
+          // Пробуем загрузить из кеша
+          const cached = getCachedUsers();
+          if (cached) {
+            allUsers = cached;
+            renderUsersTable(allUsers);
+          }
+
+          // Свежие данные из Firestore
+          try {
+            const snap = await db.collection('users').get();
+            allUsers = [];
+            snap.forEach(doc => {
+              const x = doc.data();
+              allUsers.push({
+                uid: doc.id,
+                username: x.username || 'Без имени',
+                email: x.email || '',
+                department: x.department || '',
+                points: x.points || 0,
+                lokoin_balance: x.lokoin_balance || 0,
+                role: x.role || 'user',
+                achievements: x.achievements || [],
+                disabled: x.disabled || false
+              });
+            });
+            allUsers.sort((a, b) => b.points - a.points);
+            setCachedUsers(allUsers);
+            renderUsersTable(allUsers);
+          } catch (e) {
+            console.error(e);
+            if (!allUsers.length) content.innerHTML = '<p>Ошибка загрузки.</p>';
+          }
+        }
+
+        function renderUsersTable(users) {
+          const tbody = document.getElementById('users-tbody');
+          if (!tbody) return;
+
+          let html = '';
+          users.forEach(user => {
+            const av = typeof renderAvatarDiv === 'function'
+              ? renderAvatarDiv(user)
+              : `<div class="avatar-circle" style="background-color:${getColorFromUid(user.uid)}">${getInitials(user.username)}</div>`;
+            html += `<tr data-user-id="${user.uid}">
+              <td class="player-cell">${av}<span class="editable" data-field="username">${user.username}</span></td>
+              <td>${user.email}</td>
+              <td class="editable" data-field="department">${user.department || '—'}</td>
+              <td class="editable" data-field="points">${user.points}</td>
+              <td><span class="lokoin-display">${user.lokoin_balance}</span></td>
+              <td class="editable" data-field="role">${user.role}</td>
+              <td>${user.disabled ? '🔒' : '✅'}</td>
+              <td>${user.achievements.length}</td>
+              <td>
+                <button class="btn btn-small edit-user-btn">✏️</button>
+                <button class="btn btn-small save-user-btn" style="display:none;">💾</button>
+                <button class="btn btn-small cancel-user-btn" style="display:none;">❌</button>
+                <button class="btn btn-small adjust-lokoin-btn">💰</button>
+                <button class="btn btn-small btn-gift gift-item-btn">🎁</button>
+                <button class="btn btn-small toggle-block-btn">🔓</button>
+                <button class="btn btn-small award-user-btn">🎖️</button>
+              </td>
+            </tr>`;
+          });
+          tbody.innerHTML = html;
+
+          attachUserEditHandlers(users);
+          attachLokoinHandlers(users);
+          attachGiftHandlers(users);
+          attachBlockHandlers(users);
+          attachAwardUserHandlers(users);
+        }
+
+        function attachUserEditHandlers(users) {
+          document.querySelectorAll('#users-tbody tr').forEach((row, i) => {
+            const user = users[i];
+            const edit = row.querySelector('.edit-user-btn'),
+                  save = row.querySelector('.save-user-btn'),
+                  cancel = row.querySelector('.cancel-user-btn'),
+                  cells = row.querySelectorAll('.editable');
+
+            cells.forEach(c => c.dataset.original = c.innerText);
+
+            edit.addEventListener('click', () => {
+              cells.forEach(c => {
+                const f = c.dataset.field,
+                      v = c.innerText;
+                if (f === 'username') c.innerHTML = `<input type="text" class="edit-username" value="${v}" style="width:150px;">`;
+                else if (f === 'role') c.innerHTML = `<select class="edit-role"><option value="user" ${v === 'user' ? 'selected' : ''}>user</option><option value="admin" ${v === 'admin' ? 'selected' : ''}>admin</option></select>`;
+                else if (f === 'department') c.innerHTML = `<select class="edit-department">${departmentsCache.map(d => `<option value="${d.name}" ${v === d.name ? 'selected' : ''}>${d.name}</option>`).join('')}</select>`;
+                else if (f === 'points') c.innerHTML = `<input type="number" class="edit-points" value="${v}" min="0">`;
+              });
+              edit.style.display = 'none';
+              save.style.display = 'inline-block';
+              cancel.style.display = 'inline-block';
+            });
+
+            save.addEventListener('click', async () => {
+              const nd = {};
+              cells.forEach(c => {
+                const f = c.dataset.field;
+                if (f === 'username') nd.username = c.querySelector('input').value.trim();
+                else if (f === 'role') nd.role = c.querySelector('select').value;
+                else if (f === 'department') nd.department = c.querySelector('select').value;
+                else if (f === 'points') nd.points = parseInt(c.querySelector('input').value, 10) || 0;
+              });
+              try {
+                await db.collection('users').doc(user.uid).update(nd);
+                showToast('Обновлено', 'success');
+                Object.assign(user, nd);
+                cells.forEach(c => {
+                  if (c.dataset.field === 'username') c.innerText = nd.username || user.username;
+                  else c.innerText = nd[c.dataset.field] !== undefined ? nd[c.dataset.field] : user[c.dataset.field];
+                  c.dataset.original = c.innerText;
+                });
+                const nameSpan = row.querySelector('.editable[data-field="username"]');
+                if (nameSpan) nameSpan.innerText = nd.username || user.username;
+                edit.style.display = 'inline-block';
+                save.style.display = 'none';
+                cancel.style.display = 'none';
+              } catch (err) {
+                showToast('Ошибка: ' + err.message, 'error');
+              }
+            });
+
+            cancel.addEventListener('click', () => {
+              cells.forEach(c => c.innerText = c.dataset.original);
+              edit.style.display = 'inline-block';
+              save.style.display = 'none';
+              cancel.style.display = 'none';
+            });
+          });
+        }
+
+        function attachLokoinHandlers(users) {
+          document.querySelectorAll('#users-tbody tr').forEach((row, i) => {
+            const u = users[i],
+                  btn = row.querySelector('.adjust-lokoin-btn'),
+                  d = row.querySelector('.lokoin-display');
+            if (btn) btn.addEventListener('click', () => openLokoinModal(u, d));
+          });
+        }
+
+        let curLokoinUser = null, curLokoinDisp = null;
+        function openLokoinModal(u, d) {
+          curLokoinUser = u;
+          curLokoinDisp = d;
+          document.getElementById('lokoin-amount').value = '';
+          document.getElementById('lokoin-comment').value = '';
+          document.getElementById('lokoin-message').textContent = '';
+          document.getElementById('lokoin-modal').style.display = 'flex';
+        }
+        document.getElementById('lokoin-modal-close').addEventListener('click', () => { document.getElementById('lokoin-modal').style.display = 'none'; });
+        document.getElementById('lokoin-submit').addEventListener('click', async () => {
+          const a = parseInt(document.getElementById('lokoin-amount').value.trim(), 10);
+          if (isNaN(a) || a === 0) {
+            document.getElementById('lokoin-message').textContent = 'Введите число.';
+            return;
+          }
+          try {
+            const ref = db.collection('users').doc(curLokoinUser.uid);
+            const doc = await ref.get();
+            const old = doc.data().lokoin_balance || 0;
+            const nb = old + a;
+            if (nb < 0) {
+              document.getElementById('lokoin-message').textContent = 'Недостаточно.';
+              return;
+            }
+            await ref.update({ lokoin_balance: nb });
+            curLokoinUser.lokoin_balance = nb;
+            curLokoinDisp.textContent = nb;
+            document.getElementById('lokoin-modal').style.display = 'none';
+            showToast('Обновлено', 'success');
+            if (typeof addLokoinNotification === 'function') addLokoinNotification(curLokoinUser.uid, a, document.getElementById('lokoin-comment').value.trim());
+          } catch (err) {
+            document.getElementById('lokoin-message').textContent = 'Ошибка: ' + err.message;
+          }
+        });
+
+        function attachGiftHandlers(users) {
+          document.querySelectorAll('#users-tbody tr').forEach((row, i) => {
+            const u = users[i],
+                  btn = row.querySelector('.gift-item-btn');
+            if (btn) btn.addEventListener('click', () => openGiftModal(u));
+          });
+        }
+        let curGiftUser = null;
+        async function openGiftModal(u) {
+          curGiftUser = u;
+          document.getElementById('gift-user-name').textContent = `Пользователь: ${u.username}`;
+          document.getElementById('gift-message').textContent = '';
+          const s = document.getElementById('gift-item-select');
+          s.innerHTML = '<option value="">Загрузка...</option>';
+          document.getElementById('gift-modal').style.display = 'flex';
+          try {
+            const snap = await db.collection('shopItems').get();
+            const items = [];
+            snap.forEach(d => items.push({ id: d.id, ...d.data() }));
+            s.innerHTML = items.length
+              ? items.map(i => `<option value="${i.id}">${i.icon || '🛒'} ${i.title} (${i.price} лок.)</option>`).join('')
+              : '<option>Нет товаров</option>';
+          } catch (e) { s.innerHTML = '<option>Ошибка</option>'; }
+        }
+        document.getElementById('gift-modal-close').addEventListener('click', () => { document.getElementById('gift-modal').style.display = 'none'; });
+        document.getElementById('gift-submit').addEventListener('click', async () => {
+          const s = document.getElementById('gift-item-select');
+          const id = s.value;
+          if (!id || !curGiftUser) return;
+          try {
+            await db.collection('users').doc(curGiftUser.uid).update({
+              purchasedItems: firebase.firestore.FieldValue.arrayUnion(id)
+            });
+            if (typeof addNotification === 'function') addNotification(curGiftUser.uid, `🎁 Вам подарен товар: ${s.options[s.selectedIndex].text}`, 'gift', 'shop.html');
+            showToast('Подарен!', 'success');
+            document.getElementById('gift-modal').style.display = 'none';
+          } catch (err) {
+            document.getElementById('gift-message').textContent = 'Ошибка: ' + err.message;
+          }
+        });
+
+        function attachBlockHandlers(users) {
+          document.querySelectorAll('#users-tbody tr').forEach((row, i) => {
+            const u = users[i],
+                  btn = row.querySelector('.toggle-block-btn');
+            if (!btn) return;
+            btn.textContent = u.disabled ? '🔓' : '🔒';
+            btn.addEventListener('click', async () => {
+              const nd = !u.disabled;
+              await db.collection('users').doc(u.uid).update({ disabled: nd });
+              u.disabled = nd;
+              btn.textContent = nd ? '🔓' : '🔒';
+              row.querySelector('td:nth-child(7)').textContent = nd ? '🔒 Заблокирован' : '✅ Активен';
+              showToast(nd ? 'Заблокирован' : 'Разблокирован', 'success');
+            });
+          });
+        }
+
+        function attachAwardUserHandlers(users) {
+          document.querySelectorAll('#users-tbody tr').forEach((row, i) => {
+            const u = users[i],
+                  btn = row.querySelector('.award-user-btn');
+            if (btn) btn.addEventListener('click', () => openAwardUserModal(u));
+          });
+        }
+        let curAwardUser = null;
+        async function openAwardUserModal(u) {
+          curAwardUser = u;
+          document.getElementById('award-user-name').textContent = `Пользователь: ${u.username}`;
+          document.getElementById('award-comment').value = '';
+          document.getElementById('award-user-message').textContent = '';
+          const s = document.getElementById('award-select');
+          s.innerHTML = '<option value="">Загрузка...</option>';
+          document.getElementById('award-user-modal').style.display = 'flex';
+          try {
+            const snap = await db.collection('awards').get();
+            const a = [];
+            snap.forEach(d => a.push({ id: d.id, ...d.data() }));
+            s.innerHTML = a.length
+              ? a.map(x => `<option value="${x.id}">${x.icon ? `<img src="img/awards/${x.icon}" class="award-icon-preview" onerror="this.style.display='none'">` : ''} ${x.name}</option>`).join('')
+              : '<option>Нет наград</option>';
+          } catch (e) { s.innerHTML = '<option>Ошибка</option>'; }
+        }
+        document.getElementById('award-user-modal-close').addEventListener('click', () => { document.getElementById('award-user-modal').style.display = 'none'; });
+        document.getElementById('award-user-submit').addEventListener('click', async () => {
+          const aid = document.getElementById('award-select').value,
+                comment = document.getElementById('award-comment').value.trim();
+          if (!aid || !curAwardUser) {
+            document.getElementById('award-user-message').textContent = 'Выберите награду.';
+            return;
+          }
+          try {
+            const adoc = await db.collection('awards').doc(aid).get();
+            if (!adoc.exists) throw new Error('Не найдена');
+            const a = adoc.data();
+            await db.collection('users').doc(curAwardUser.uid).collection('awarded').add({
+              awardId: aid,
+              awardedAt: firebase.firestore.FieldValue.serverTimestamp(),
+              awardedBy: auth.currentUser.uid,
+              comment
+            });
+            if (a.lokoinReward > 0) await db.collection('users').doc(curAwardUser.uid).update({
+              lokoin_balance: firebase.firestore.FieldValue.increment(a.lokoinReward)
+            });
+            let msg = `Вы получили награду «${a.name}»!`;
+            if (comment) msg += ` Комментарий: ${comment}`;
+            if (a.lokoinReward > 0) msg += ` (+${a.lokoinReward} лок.)`;
+            if (typeof addNotification === 'function') addNotification(curAwardUser.uid, msg, 'award', 'profile.html');
+            showToast('Награда выдана!', 'success');
+            document.getElementById('award-user-modal').style.display = 'none';
+          } catch (err) {
+            document.getElementById('award-user-message').textContent = 'Ошибка: ' + err.message;
+          }
+        });
+
+        // ----- Заявки -----
+        async function renderRequestsTab() {
+          const content = document.getElementById('admin-tab-content');
+          content.innerHTML = '<p>Загрузка...</p>';
+          try {
+            const snap = await db.collection('purchaseRequests').orderBy('createdAt', 'desc').get();
+            const requests = [];
+            snap.forEach(doc => requests.push({ id: doc.id, ...doc.data() }));
+
+            let html = `<h3>📋 Заявки на реализацию (${requests.length})</h3>`;
+            if (!requests.length) {
+              html += '<p>Нет заявок.</p>';
+            } else {
+              html += `<table class="requests-table">
+                <thead><tr><th>Пользователь</th><th>Отдел</th><th>Товар</th><th>Цена</th><th>Дата</th><th>Статус</th><th>Действия</th></tr></thead>
+                <tbody>`;
+              requests.forEach(r => {
+                const statusText = r.status === 'new' ? '🆕 Новое' : r.status === 'progress' ? '🔄 В работе' : '✅ Выполнено';
+                const date = r.createdAt ? new Date(r.createdAt.seconds * 1000).toLocaleString('ru-RU') : '';
+                html += `<tr>
+                  <td>${r.username}</td>
+                  <td>${r.department || '—'}</td>
+                  <td>${r.itemTitle}</td>
+                  <td>${r.itemPrice} лок.</td>
+                  <td>${date}</td>
+                  <td>${statusText}</td>
+                  <td>
+                    <select class="request-status" data-req-id="${r.id}" data-user-id="${r.userId || ''}" data-item="${r.itemTitle || ''}">
+                      <option value="new" ${r.status === 'new' ? 'selected' : ''}>Новое</option>
+                      <option value="progress" ${r.status === 'progress' ? 'selected' : ''}>В работе</option>
+                      <option value="done" ${r.status === 'done' ? 'selected' : ''}>Выполнено</option>
+                    </select>
+                  </td>
+                </tr>`;
+              });
+              html += '</tbody></table>';
+            }
+            content.innerHTML = html;
+
+            // Обработчик изменения статуса
+            document.querySelectorAll('.request-status').forEach(sel => {
+              sel.addEventListener('change', async function() {
+                const newStatus = this.value;
+                const reqId = this.dataset.reqId;
+                const userId = this.dataset.userId;
+                const itemTitle = this.dataset.item;
+
+                if (newStatus === 'done') {
+                  // Показать модальное окно для комментария
+                  openRequestDoneModal(reqId, userId, itemTitle);
+                } else {
+                  // Для других статусов просто обновляем
+                  await db.collection('purchaseRequests').doc(reqId).update({ status: newStatus });
+                  showToast('Статус обновлён', 'success');
+                }
+              });
+            });
+          } catch (e) {
+            content.innerHTML = '<p>Ошибка загрузки заявок.</p>';
+          }
+        }
+
+        // Модальное окно "Заявка выполнена"
+        function openRequestDoneModal(reqId, userId, itemTitle) {
+          document.getElementById('request-done-info').textContent = 
+            `Товар: ${itemTitle}. Пользователь получит уведомление.`;
+          document.getElementById('request-done-comment').value = '';
+          document.getElementById('request-done-message').textContent = '';
+          document.getElementById('request-done-modal').style.display = 'flex';
+
+          // Обработчик отправки
+          document.getElementById('request-done-submit').onclick = async () => {
+            const comment = document.getElementById('request-done-comment').value.trim();
+            try {
+              // Обновляем заявку
+              await db.collection('purchaseRequests').doc(reqId).update({
+                status: 'done',
+                doneAt: firebase.firestore.FieldValue.serverTimestamp(),
+                adminComment: comment || ''
+              });
+
+              // Отправляем уведомление пользователю, если userId известен
+              if (userId && typeof addNotification === 'function') {
+                let message = `Ваш запрос на "${itemTitle}" обработан.`;
+                if (comment) message += ` Комментарий: ${comment}`;
+                await addNotification(userId, message, 'purchase', 'profile.html');
+              }
+
+              showToast('Заявка выполнена, уведомление отправлено', 'success');
+              document.getElementById('request-done-modal').style.display = 'none';
+              // Обновляем список заявок
+              renderRequestsTab();
+            } catch (err) {
+              document.getElementById('request-done-message').textContent = 'Ошибка: ' + err.message;
+            }
+          };
+        }
+
+        // Закрытие модального окна
+        document.getElementById('request-done-modal-close').addEventListener('click', () => {
+          document.getElementById('request-done-modal').style.display = 'none';
+        });
+      });
+    })();
+  </script>
+</body>
+</html>

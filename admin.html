@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Админ-панель – Геймификация КЦ</title>
+  <link rel="stylesheet" href="css/style.css">
+  <style>
+    .admin-page { max-width: 1100px; margin: 0 auto; padding: 1.5rem; }
+    .dashboard-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 1rem; margin-top: 1.5rem; }
+    .dash-card { background: var(--color-white); border-radius: 12px; padding: 1.5rem; text-decoration: none; color: var(--color-header); text-align: center; box-shadow: 0 1px 3px rgba(0,0,0,0.05); transition: transform 0.2s, box-shadow 0.2s; }
+    .dash-card:hover { transform: translateY(-3px); box-shadow: 0 6px 16px rgba(0,0,0,0.1); }
+    .dash-card__icon { font-size: 2rem; margin-bottom: 0.5rem; }
+    .dash-card__title { font-weight: 600; }
+    .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; margin: 1.5rem 0; }
+    .stat-card { background: #f9f9fb; border-radius: 12px; padding: 1rem; text-align: center; }
+    .stat-card .stat-value { font-size: 2rem; font-weight: 700; }
+    .stat-card .stat-label { font-size: 0.8rem; color: #888; }
+    .games-section { margin-top: 2rem; }
+    .games-list { list-style: none; padding: 0; }
+    .games-list li { display: flex; justify-content: space-between; align-items: center; padding: 0.5rem; border-bottom: 1px solid #eee; }
+    .add-game-form { background: #f9fafb; border-radius: 12px; padding: 1.5rem; max-width: 500px; margin-top: 1rem; }
+    .add-game-form h4 { margin-bottom: 1rem; }
+    .form-group { margin-bottom: 1rem; }
+    .form-group label { display: block; font-weight: 600; font-size: 0.85rem; margin-bottom: 0.3rem; }
+    .form-group input, .form-group select, .form-group textarea { width: 100%; padding: 0.5rem; border: 1px solid #d1d5db; border-radius: 6px; }
+    .btn-small { padding: 0.25rem 0.5rem; font-size: 0.8rem; }
+    .btn-danger { background: #e74c3c; color: white; }
+    .skeleton-cell { height: 1rem; background: #e0e0e0; border-radius: 4px; animation: shimmer 1.5s infinite; }
+    @keyframes shimmer { 0% { opacity: 0.6; } 50% { opacity: 1; } 100% { opacity: 0.6; } }
+    .checkbox-group { display: flex; align-items: center; gap: 0.5rem; }
+    .maintenance-section { margin-top: 2rem; background: #fff9e6; border: 2px solid #f0c040; border-radius: 12px; padding: 1.5rem; }
+    .maintenance-section h3 { margin-bottom: 1rem; }
+  </style>
+</head>
+<body>
+  <header class="header">
+    <div class="container header__inner">
+      <a href="index.html" class="logo">КЦ-Игры</a>
+      <button class="burger" id="burger-btn" aria-label="Меню">☰</button>
+      <nav class="nav" id="main-nav">
+        <ul class="nav__list">
+          <li><a href="index.html" class="nav__link">Главная</a></li>
+          <li><a href="games.html" class="nav__link">Игры</a></li>
+          <li><a href="leaderboard.html" class="nav__link">Рейтинг</a></li>
+          <li><a href="shop.html" class="nav__link">Магазин</a></li>
+          <li><a href="profile.html" class="nav__link">Профиль</a></li>
+          <li><a href="admin.html" class="nav__link active">Админ</a></li>
+        </ul>
+      </nav>
+      <div id="auth-status" class="auth-status"></div>
+    </div>
+  </header>
+
+  <main class="main">
+    <div class="container admin-page" id="admin-container">
+      <p>Загрузка...</p>
+    </div>
+  </main>
+
+  <!-- Модальное окно редактирования игры -->
+  <div class="modal-overlay" id="edit-game-modal" style="display:none;">
+    <div class="modal" style="max-width:500px;">
+      <span class="modal-close" id="edit-game-modal-close">&times;</span>
+      <h3>Редактировать игру</h3>
+      <div class="form-group"><label>ID</label><input type="text" id="edit-game-id" disabled></div>
+      <div class="form-group"><label>Название</label><input type="text" id="edit-game-title" required></div>
+      <div class="form-group"><label>Описание</label><input type="text" id="edit-game-desc" required></div>
+      <div class="form-group"><label>Иконка</label><input type="text" id="edit-game-icon" value="🎮"></div>
+      <div class="form-group"><label>URL</label><input type="text" id="edit-game-url" required></div>
+      <div class="form-group checkbox-group"><label><input type="checkbox" id="edit-game-hidden"> Скрыть игру</label></div>
+      <button class="btn" id="edit-game-save">Сохранить</button>
+      <p id="edit-game-message" class="auth-message"></p>
+    </div>
+  </div>
+
+  <footer class="footer"><div class="container"><p>© 2026 ваши амбассадоры</p></div></footer>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore-compat.js"></script>
+  <script src="js/firebase-config.js"></script>
+  <script src="js/firebase-auth.js"></script>
+  <script src="js/storage.js"></script>
+  <script src="js/achievements.js"></script>
+  <script src="js/easter-eggs.js"></script>
+  <script src="js/notifications.js"></script>
+  <script src="js/main.js"></script>
+  <script src="js/feedback.js"></script>
+
+  <script>
+    (function() {
+      const CACHE_STATS_KEY = 'krugames_admin_stats';
+      const CACHE_GAMES_KEY = 'krugames_admin_games';
+      const CACHE_TTL = 2 * 60 * 1000;
+
+      function getCached(key) {
+        const cached = sessionStorage.getItem(key);
+        if (cached) {
+          try {
+            const parsed = JSON.parse(cached);
+            if (Date.now() - parsed.timestamp < CACHE_TTL) return parsed.data;
+          } catch (e) {}
+        }
+        return null;
+      }
+      function setCached(key, data) {
+        sessionStorage.setItem(key, JSON.stringify({ timestamp: Date.now(), data }));
+      }
+
+      let gamesList = [];
+
+      document.addEventListener('DOMContentLoaded', async () => {
+        const container = document.getElementById('admin-container');
+
+        auth.onAuthStateChanged(async fbUser => {
+          if (!fbUser) { container.innerHTML = '<p>Вы не авторизованы.</p>'; return; }
+          try {
+            const d = await db.collection('users').doc(fbUser.uid).get();
+            if (!d.exists || d.data().role !== 'admin') {
+              container.innerHTML = '<p>Доступ запрещён.</p>';
+              return;
+            }
+            renderDashboard();
+            loadStats();
+            loadGames();
+            loadMaintenanceSettings();
+          } catch (e) { container.innerHTML = `<p>Ошибка: ${e.message}</p>`; }
+        });
+
+        function renderDashboard() {
+          container.innerHTML = `
+            <h2>📊 Административная панель</h2>
+            <div id="stats-container"></div>
+
+            <div class="dashboard-grid">
+              <a href="admin-users.html" class="dash-card"><div class="dash-card__icon">👥</div><div class="dash-card__title">Пользователи</div></a>
+              <a href="admin-shop.html" class="dash-card"><div class="dash-card__icon">🛒</div><div class="dash-card__title">Магазин</div></a>
+              <a href="admin-content.html" class="dash-card"><div class="dash-card__icon">📝</div><div class="dash-card__title">Контент</div></a>
+              <a href="admin-feedback.html" class="dash-card"><div class="dash-card__icon">💬</div><div class="dash-card__title">Обращения</div></a>
+              <a href="admin-notifications.html" class="dash-card"><div class="dash-card__icon">📢</div><div class="dash-card__title">Рассылка</div></a>
+              <a href="events-admin.html" class="dash-card"><div class="dash-card__icon">🎪</div><div class="dash-card__title">Ивенты</div></a>
+              <a href="metrics.html" class="dash-card"><div class="dash-card__icon">📈</div><div class="dash-card__title">Метрики</div></a>
+              <button class="dash-card" id="export-csv-btn" style="border:none; cursor:pointer;"><div class="dash-card__icon">📥</div><div class="dash-card__title">Экспорт CSV</div></button>
+            </div>
+
+            <div class="games-section">
+              <h3>🎮 Управление играми</h3>
+              <div id="games-list-container"></div>
+              <div class="add-game-form">
+                <h4>Добавить игру</h4>
+                <form id="add-game-form">
+                  <div class="form-group"><label>ID</label><input type="text" id="game-id" required></div>
+                  <div class="form-group"><label>Название</label><input type="text" id="game-title" required></div>
+                  <div class="form-group"><label>Описание</label><input type="text" id="game-desc" required></div>
+                  <div class="form-group"><label>Иконка</label><input type="text" id="game-icon" value="🎮"></div>
+                  <div class="form-group"><label>URL</label><input type="text" id="game-url" required></div>
+                  <div class="form-group checkbox-group"><label><input type="checkbox" id="game-hidden"> Скрыть игру</label></div>
+                  <button type="submit" class="btn">Сохранить</button>
+                </form>
+              </div>
+            </div>
+
+            <div class="maintenance-section">
+              <h3>🔧 Режим обслуживания</h3>
+              <div class="form-group checkbox-group">
+                <label><input type="checkbox" id="maintenance-enabled"> Включить режим обслуживания</label>
+              </div>
+              <div class="form-group">
+                <label for="maintenance-message">Сообщение для пользователей</label>
+                <textarea id="maintenance-message" rows="3" placeholder="Сайт на техническом обслуживании..."></textarea>
+              </div>
+              <button class="btn" id="maintenance-save-btn">Сохранить</button>
+              <p id="maintenance-status" class="auth-message"></p>
+              <div style="margin-top:1.5rem; padding-top:1.5rem; border-top:1px solid #f0c040;">
+                <h4>🗑️ Сброс кеша всех пользователей</h4>
+                <p style="font-size:0.9rem; color:#666; margin-bottom:0.5rem;">Принудительно очистить кеш (sessionStorage, localStorage) у всех посетителей. Полезно после обновлений сайта.</p>
+                <button class="btn" id="reset-cache-btn">Сбросить кэш всем</button>
+                <p id="cache-reset-status" class="auth-message"></p>
+              </div>
+            </div>
+          `;
+
+          document.getElementById('add-game-form').addEventListener('submit', async e => {
+            e.preventDefault();
+            const id = document.getElementById('game-id').value.trim().toLowerCase(),
+                  title = document.getElementById('game-title').value.trim(),
+                  desc = document.getElementById('game-desc').value.trim(),
+                  icon = document.getElementById('game-icon').value.trim() || '🎮',
+                  url = document.getElementById('game-url').value.trim(),
+                  hidden = document.getElementById('game-hidden').checked;
+            if (!id || !title || !desc || !url) { showToast('Заполните все поля', 'error'); return; }
+            await db.collection('games').doc(id).set({ title, description: desc, icon, url, hidden: hidden || false });
+            showToast('Сохранена', 'success');
+            document.getElementById('add-game-form').reset();
+            loadGames();
+          });
+
+          // Экспорт CSV с пагинацией
+          document.getElementById('export-csv-btn').addEventListener('click', async () => {
+            if (!confirm('Экспорт всех пользователей может занять время и потратить квоту Firebase (до 50 000 чтений). Продолжить?')) return;
+            try {
+              const rows = [['UID','Имя','Email','Отдел','Баллы','Локоины','Роль','Заблокирован']];
+              let lastDoc = null;
+              let hasMore = true;
+              while (hasMore) {
+                let query = db.collection('users').orderBy('email').limit(500);
+                if (lastDoc) query = query.startAfter(lastDoc);
+                const snap = await query.get();
+                if (snap.empty) break;
+                snap.forEach(doc => {
+                  const u = doc.data();
+                  rows.push([doc.id, u.username||'', u.email||'', u.department||'', u.points||0, u.lokoin_balance||0, u.role||'user', u.disabled?'Да':'Нет']);
+                });
+                lastDoc = snap.docs[snap.docs.length-1];
+                if (snap.size < 500) hasMore = false;
+              }
+              let csv = '\uFEFF' + rows.map(r => r.map(v => `"${v}"`).join(',')).join('\n');
+              const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement('a');
+              a.href = url;
+              a.download = 'users.csv';
+              a.click();
+              URL.revokeObjectURL(url);
+              showToast('Экспорт готов', 'success');
+            } catch (err) { showToast('Ошибка', 'error'); }
+          });
+
+          // Закрытие модалки редактирования
+          document.getElementById('edit-game-modal-close').addEventListener('click', () => {
+            document.getElementById('edit-game-modal').style.display = 'none';
+          });
+          document.getElementById('edit-game-save').addEventListener('click', async () => {
+            const id = document.getElementById('edit-game-id').value;
+            const data = {
+              title: document.getElementById('edit-game-title').value.trim(),
+              description: document.getElementById('edit-game-desc').value.trim(),
+              icon: document.getElementById('edit-game-icon').value.trim() || '🎮',
+              url: document.getElementById('edit-game-url').value.trim(),
+              hidden: document.getElementById('edit-game-hidden').checked
+            };
+            try {
+              await db.collection('games').doc(id).update(data);
+              showToast('Игра обновлена', 'success');
+              document.getElementById('edit-game-modal').style.display = 'none';
+              loadGames();
+            } catch (err) {
+              document.getElementById('edit-game-message').textContent = 'Ошибка: ' + err.message;
+            }
+          });
+
+          // Сохранение настроек обслуживания
+          document.getElementById('maintenance-save-btn').addEventListener('click', async () => {
+            const enabled = document.getElementById('maintenance-enabled').checked;
+            const message = document.getElementById('maintenance-message').value.trim();
+            try {
+              await db.collection('settings').doc('maintenance').set({ enabled, message }, { merge: true });
+              document.getElementById('maintenance-status').textContent = 'Настройки сохранены.';
+              showToast('Режим обслуживания обновлён', 'success');
+            } catch (err) {
+              document.getElementById('maintenance-status').textContent = 'Ошибка: ' + err.message;
+            }
+          });
+
+          // Сброс кеша с подтверждением
+          document.getElementById('reset-cache-btn').addEventListener('click', async () => {
+            if (!confirm('Вы уверены, что хотите сбросить кэш у ВСЕХ пользователей? Их данные (профиль, рейтинг, игры) будут перезагружены при следующем заходе.')) return;
+            try {
+              await db.collection('settings').doc('cacheVersion').set({
+                version: Date.now()
+              }, { merge: true });
+              document.getElementById('cache-reset-status').textContent = '✅ Версия кеша обновлена. Кэш всех пользователей будет сброшен при следующем заходе.';
+              showToast('Кэш сброшен для всех пользователей', 'success');
+            } catch (err) {
+              document.getElementById('cache-reset-status').textContent = 'Ошибка: ' + err.message;
+            }
+          });
+        }
+
+        async function loadMaintenanceSettings() {
+          try {
+            const doc = await db.collection('settings').doc('maintenance').get();
+            if (doc.exists) {
+              const data = doc.data();
+              document.getElementById('maintenance-enabled').checked = data.enabled || false;
+              document.getElementById('maintenance-message').value = data.message || '';
+            }
+          } catch (e) { console.error(e); }
+        }
+
+        async function loadStats() {
+          const statsContainer = document.getElementById('stats-container');
+          if (!statsContainer) return;
+
+          const cached = getCached(CACHE_STATS_KEY);
+          if (cached) {
+            renderStats(cached);
+          } else {
+            statsContainer.innerHTML = '<div class="stats-grid"><div class="stat-card skeleton-cell" style="height:80px;"></div><div class="stat-card skeleton-cell" style="height:80px;"></div><div class="stat-card skeleton-cell" style="height:80px;"></div><div class="stat-card skeleton-cell" style="height:80px;"></div></div>';
+          }
+
+          try {
+            const now = new Date();
+            const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+            const snap = await db.collection('users').get();
+            let total = 0, activeToday = 0, totalPoints = 0;
+            const gameCounts = { clicker: 0, snake: 0, memory: 0, '2048': 0, minesweeper: 0 };
+
+            snap.forEach(doc => {
+              const d = doc.data();
+              total++;
+              totalPoints += d.points || 0;
+              const history = d.gameHistory || [];
+              let active = false;
+              history.forEach(h => {
+                if (h.game && gameCounts[h.game] !== undefined) gameCounts[h.game]++;
+                if (h.timestamp >= todayStart) active = true;
+              });
+              if (active) activeToday++;
+            });
+
+            const topGame = Object.entries(gameCounts).sort((a,b) => b[1]-a[1])[0];
+            const topGameName = topGame ? { clicker: 'Кликер', snake: 'Змейка', memory: 'Найди пару', '2048': '2048', minesweeper: 'Сапёр' }[topGame[0]] : '—';
+
+            const stats = { total, activeToday, totalPoints, topGameName };
+            setCached(CACHE_STATS_KEY, stats);
+            renderStats(stats);
+          } catch (e) {
+            console.error(e);
+            if (!cached) statsContainer.innerHTML = '<p>Не удалось загрузить статистику.</p>';
+          }
+        }
+
+        function renderStats(stats) {
+          const statsContainer = document.getElementById('stats-container');
+          if (!statsContainer) return;
+          statsContainer.innerHTML = `
+            <div class="stats-grid">
+              <div class="stat-card"><div class="stat-value">${stats.total}</div><div class="stat-label">Пользователей</div></div>
+              <div class="stat-card"><div class="stat-value">${stats.activeToday}</div><div class="stat-label">Активных сегодня</div></div>
+              <div class="stat-card"><div class="stat-value">${stats.totalPoints}</div><div class="stat-label">Всего баллов</div></div>
+              <div class="stat-card"><div class="stat-value">${stats.topGameName}</div><div class="stat-label">Топ игра</div></div>
+            </div>
+          `;
+        }
+
+        async function loadGames() {
+          const listContainer = document.getElementById('games-list-container');
+          if (!listContainer) return;
+
+          const cached = getCached(CACHE_GAMES_KEY);
+          if (cached) {
+            gamesList = cached;
+            renderGamesList();
+          } else {
+            listContainer.innerHTML = '<p>Загрузка...</p>';
+          }
+
+          try {
+            const snap = await db.collection('games').get();
+            gamesList = [];
+            snap.forEach(d => gamesList.push({ id: d.id, ...d.data() }));
+            setCached(CACHE_GAMES_KEY, gamesList);
+            renderGamesList();
+          } catch (e) {
+            console.error(e);
+            if (!gamesList.length) listContainer.innerHTML = '<p>Ошибка загрузки.</p>';
+          }
+        }
+
+        function renderGamesList() {
+          const listContainer = document.getElementById('games-list-container');
+          if (!listContainer) return;
+
+          if (!gamesList.length) {
+            listContainer.innerHTML = '<p>Нет игр.</p>';
+            return;
+          }
+
+          let html = '<ul class="games-list">';
+          gamesList.forEach(g => {
+            html += `<li style="display:flex;align-items:center;gap:1rem;">
+              <span>${g.icon||'🎮'} <strong>${g.title}</strong> (${g.id}) ${g.hidden ? '🙈' : ''}</span>
+              <div>
+                <button class="btn btn-small edit-game-btn" data-game-id="${g.id}">✏️</button>
+                <button class="btn btn-small btn-danger remove-game-btn" data-game-id="${g.id}">Удалить</button>
+              </div>
+            </li>`;
+          });
+          html += '</ul>';
+          listContainer.innerHTML = html;
+
+          document.querySelectorAll('.remove-game-btn').forEach(btn => {
+            btn.addEventListener('click', async e => {
+              if (confirm('Удалить игру?')) {
+                await db.collection('games').doc(e.target.dataset.gameId).delete();
+                showToast('Удалена', 'success');
+                loadGames();
+              }
+            });
+          });
+
+          document.querySelectorAll('.edit-game-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+              const game = gamesList.find(g => g.id === btn.dataset.gameId);
+              if (game) openEditGameModal(game);
+            });
+          });
+        }
+
+        function openEditGameModal(game) {
+          document.getElementById('edit-game-id').value = game.id;
+          document.getElementById('edit-game-title').value = game.title || '';
+          document.getElementById('edit-game-desc').value = game.description || '';
+          document.getElementById('edit-game-icon').value = game.icon || '🎮';
+          document.getElementById('edit-game-url').value = game.url || '';
+          document.getElementById('edit-game-hidden').checked = game.hidden || false;
+          document.getElementById('edit-game-message').textContent = '';
+          document.getElementById('edit-game-modal').style.display = 'flex';
+        }
+      });
+    })();
+  </script>
+</body>
+</html>

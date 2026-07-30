@@ -1,0 +1,764 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Управление ивентами – Геймификация КЦ</title>
+  <link rel="stylesheet" href="css/style.css">
+  <style>
+    .events-admin { max-width: 1100px; margin: 0 auto; padding: 1.5rem; }
+    .events-tabs { display: flex; gap: 0.5rem; margin-bottom: 1.5rem; border-bottom: 2px solid #eee; padding-bottom: 0.5rem; }
+    .events-tab { background: none; border: none; padding: 0.5rem 1rem; font-size: 1rem; cursor: pointer; border-radius: 4px 4px 0 0; }
+    .events-tab.active { background: var(--color-primary); color: white; }
+    .events-list { list-style: none; padding: 0; }
+    .events-list li { padding: 0.8rem; border-bottom: 1px solid #eee; }
+    .events-list li .event-info { margin-bottom: 0.3rem; }
+    .events-list li .event-actions { display: flex; gap: 0.3rem; margin-top: 0.5rem; }
+    .event-form { background: #f9fafb; border-radius: 12px; padding: 1.5rem; max-width: 700px; margin-top: 1rem; }
+    .event-form label { font-size: 0.85rem; font-weight: 600; display: block; margin-bottom: 0.3rem; }
+    .event-form input, .event-form select, .event-form textarea { width: 100%; padding: 0.5rem; margin-bottom: 1rem; border: 1px solid #ddd; border-radius: 6px; }
+    .event-form .row { display: flex; gap: 1rem; }
+    .event-form .row > div { flex: 1; }
+    .btn-success { background: #27ae60; color: white; }
+    .btn-warning { background: #f39c12; color: white; }
+    .btn-danger { background: #e74c3c; color: white; }
+    .btn-restart { background: #3498db; color: white; }
+    .monitor-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-top: 1rem; }
+    .monitor-card { background: #f9fafb; border-radius: 12px; padding: 1.2rem; text-align: center; }
+    .monitor-card .value { font-size: 2rem; font-weight: 700; }
+    .monitor-card .label { font-size: 0.8rem; color: #888; }
+    .admin-event-item { background: #fffbe6; border: 1px solid #f0c040; border-radius: 8px; padding: 0.8rem; margin-bottom: 0.5rem; display: flex; justify-content: space-between; align-items: center; }
+    .admin-event-item .event-icon { font-size: 1.5rem; margin-right: 0.5rem; }
+    .final-stats { background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 0.8rem; margin-top: 0.5rem; font-size: 0.9rem; }
+    .final-stats table { width: 100%; border-collapse: collapse; margin-top: 0.5rem; }
+    .final-stats th, .final-stats td { padding: 0.3rem 0.5rem; border-bottom: 1px solid #ddd; text-align: left; }
+    .final-stats th { background: #e6f7e6; }
+    .final-stats img { max-width: 200px; border-radius: 6px; margin: 0.5rem 0; }
+    .questions-list { list-style: none; padding: 0; margin-bottom: 1rem; }
+    .questions-list li { display: flex; justify-content: space-between; align-items: center; padding: 0.5rem; background: #fff; border: 1px solid #eee; border-radius: 6px; margin-bottom: 0.3rem; }
+    .question-edit-form { background: #fff; border: 1px solid #ddd; border-radius: 8px; padding: 1rem; margin-bottom: 1rem; }
+  </style>
+</head>
+<body>
+  <header class="header">
+    <div class="container header__inner">
+      <a href="index.html" class="logo">КЦ-Игры</a>
+      <button class="burger" id="burger-btn" aria-label="Меню">☰</button>
+      <nav class="nav" id="main-nav">
+        <ul class="nav__list">
+          <li><a href="index.html" class="nav__link">Главная</a></li>
+          <li><a href="games.html" class="nav__link">Игры</a></li>
+          <li><a href="leaderboard.html" class="nav__link">Рейтинг</a></li>
+          <li><a href="shop.html" class="nav__link">Магазин</a></li>
+          <li><a href="profile.html" class="nav__link">Профиль</a></li>
+          <li><a href="admin.html" class="nav__link">Админ</a></li>
+        </ul>
+      </nav>
+      <div id="auth-status" class="auth-status"></div>
+    </div>
+  </header>
+
+  <main class="main">
+    <div class="container events-admin" id="events-admin-container">
+      <p>Загрузка...</p>
+    </div>
+  </main>
+
+  <footer class="footer"><div class="container"><p>© 2026 ваши амбассадоры</p></div></footer>
+
+  <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore-compat.js"></script>
+  <script src="js/firebase-config.js"></script>
+  <script src="js/firebase-auth.js"></script>
+  <script src="js/storage.js"></script>
+  <script src="js/achievements.js"></script>
+  <script src="js/notifications.js"></script>
+  <script src="js/easter-eggs.js"></script>
+  <script src="js/feedback.js"></script>
+  <script src="js/main.js"></script>
+
+  <script>
+    const ADMIN_EVENT_TYPES = [
+      { id: 'frost', icon: '🥶', name: 'Заморозки', healthChange: -15, duration: 0, description: 'Разовое снижение здоровья' },
+      { id: 'locusts', icon: '🦗', name: 'Нашествие саранчи', healthChange: -10, duration: 2, description: 'Снижение здоровья + блок жуков на 2ч' },
+      { id: 'birds', icon: '🐦', name: 'Стая птиц', healthChange: -8, duration: 0, description: 'Снижение здоровья + больше птиц' },
+      { id: 'hurricane', icon: '🌪️', name: 'Ураган', healthChange: -25, duration: 0, description: 'Мощное разовое снижение' },
+      { id: 'drought', icon: '🔥', name: 'Засуха', healthChange: -5, duration: 3, description: 'Постепенное снижение 3 часа' },
+      { id: 'salt', icon: '🧂', name: 'Засоление почвы', healthChange: 0, duration: 24, description: 'Блок удобрения на 24ч' },
+      { id: 'rainbow', icon: '🌈', name: 'Радуга', healthChange: 20, duration: 0, description: 'Разовое восстановление здоровья' },
+      { id: 'ladybug', icon: '🐞', name: 'Божьи коровки', healthChange: 5, duration: 0, description: 'Авто-снятие жуков' }
+    ];
+
+    const EVENT_TYPES = {
+      tree: {
+        label: 'Живое дерево',
+        icon: '🌳',
+        defaultSettings: {
+          maxHealth: 1000,
+          decayPerHour: 5,
+          minHealth: 50,
+          adaptiveMode: true,
+          dailyActionLimits: { water: 5, bugs: 3, birds: 3, fertilize: 2, tie: 10, sing: 10 },
+          lokoinActionCost: 5,
+          lokoinActionBoost: 20
+        },
+        monitor: async (event) => {
+          const participants = event.participants || {};
+          const unique = Object.keys(participants).filter(k => k !== '_lastDecay').length;
+          const actions = Object.values(participants).reduce((s, p) => s + (p.actions ? Object.values(p.actions).reduce((a, b) => a + b, 0) : 0), 0);
+          return `<div class="monitor-card"><div class="value">${unique}</div><div class="label">Участников</div></div>
+                  <div class="monitor-card"><div class="value">${actions}</div><div class="label">Действий</div></div>
+                  <div class="monitor-card"><div class="value">${Math.round(event.health || event.settings?.maxHealth || 1000)}</div><div class="label">Здоровье</div></div>`;
+        },
+        finish: async (event) => {
+          const participants = event.participants || {};
+          const ranked = [];
+          for (const [uid, data] of Object.entries(participants)) {
+            if (uid === '_lastDecay') continue;
+            const userDoc = await db.collection('users').doc(uid).get();
+            const u = userDoc.data() || {};
+            if (u.role === 'admin') continue;
+            ranked.push({ username: u.username || 'Аноним', department: u.department || '—', total: Object.values(data.actions || {}).reduce((a, b) => a + b, 0) });
+          }
+          ranked.sort((a, b) => b.total - a.total);
+          const topPlayer = ranked[0] || null;
+          const deptMap = {};
+          ranked.forEach(p => {
+            if (!deptMap[p.department]) deptMap[p.department] = { totalActions: 0, topPlayer: '', topActions: 0 };
+            deptMap[p.department].totalActions += p.total;
+            if (p.total > deptMap[p.department].topActions) { deptMap[p.department].topPlayer = p.username; deptMap[p.department].topActions = p.total; }
+          });
+          return {
+            uniqueParticipants: Object.keys(participants).filter(k => k !== '_lastDecay').length,
+            totalActions: event.statistics?.totalActions || 0,
+            topPlayer,
+            departments: Object.entries(deptMap).map(([name, d]) => ({ name, totalActions: d.totalActions, topPlayer: d.topPlayer })),
+            topParticipants: ranked.slice(0, 5)
+          };
+        }
+      },
+      pixel: {
+        label: 'Пиксельная доска',
+        icon: '🎨',
+        defaultSettings: {
+          width: 64,
+          height: 64,
+          cooldown: 30,
+          lokoinSkipCost: 2,
+          palette: ['#FFFFFF','#C0C0C0','#808080','#000000','#FF0000','#800000','#FFFF00','#808000','#00FF00','#008000','#00FFFF','#008080','#0000FF','#000080','#FF00FF','#800080','#FFA500','#A52A2A','#FFC0CB','#FFD700']
+        },
+        monitor: async (event) => {
+          const board = event.boardData || {};
+          const painters = event.painterStats || {};
+          return `<div class="monitor-card"><div class="value">${Object.keys(painters).length}</div><div class="label">Художников</div></div>
+                  <div class="monitor-card"><div class="value">${Object.keys(board).length}</div><div class="label">Пикселей</div></div>`;
+        },
+        finish: async (event) => {
+          const painters = event.painterStats || {};
+          const board = event.boardData || {};
+          const ranked = [];
+          for (const [uid, count] of Object.entries(painters)) {
+            const userDoc = await db.collection('users').doc(uid).get();
+            const u = userDoc.data() || {};
+            if (u.role === 'admin') continue;
+            ranked.push({ username: u.username || 'Аноним', department: u.department || '—', total: count });
+          }
+          ranked.sort((a, b) => b.total - a.total);
+          const settings = event.settings || {};
+          const w = settings.width || 64, h = settings.height || 64;
+          const tempCanvas = document.createElement('canvas');
+          tempCanvas.width = w; tempCanvas.height = h;
+          const ctx = tempCanvas.getContext('2d');
+          ctx.fillStyle = '#FFFFFF'; ctx.fillRect(0, 0, w, h);
+          for (const [key, cell] of Object.entries(board)) {
+            const [col, row] = key.split('_').map(Number);
+            ctx.fillStyle = cell.color; ctx.fillRect(col, row, 1, 1);
+          }
+          return {
+            totalPixels: Object.keys(board).length,
+            uniqueParticipants: Object.keys(painters).length,
+            imageData: tempCanvas.toDataURL('image/png'),
+            topParticipants: ranked.slice(0, 5)
+          };
+        }
+      },
+      quiz: {
+        label: 'Квиз',
+        icon: '🧠',
+        defaultSettings: {
+          randomOrder: true,
+          shuffleOptions: true,
+          defaultTimeLimit: 30
+        },
+        monitor: async (event) => {
+          const p = event.participants || {};
+          const users = Object.keys(p).filter(k => k !== '_lastDecay');
+          const questionsSnap = await db.collection('events').doc(event.id).collection('questions').get();
+          const totalQuestions = questionsSnap.size;
+          const completed = users.filter(u => p[u]?.currentIndex >= totalQuestions).length;
+          return `<div class="monitor-card"><div class="value">${users.length}</div><div class="label">Участников</div></div>
+                  <div class="monitor-card"><div class="value">${completed}</div><div class="label">Завершили</div></div>`;
+        },
+        finish: async (event) => {
+          const participants = event.participants || {};
+          const ranked = [];
+          for (const [uid, data] of Object.entries(participants)) {
+            if (uid === '_lastDecay') continue;
+            const userDoc = await db.collection('users').doc(uid).get();
+            const u = userDoc.data() || {};
+            if (u.role === 'admin') continue;
+            ranked.push({ username: u.username || 'Аноним', department: u.department || '—', score: data.score || 0 });
+          }
+          ranked.sort((a, b) => b.score - a.score);
+          return {
+            uniqueParticipants: ranked.length,
+            topPlayer: ranked[0] || null,
+            topParticipants: ranked.slice(0, 10)
+          };
+        }
+      }
+    };
+
+    document.addEventListener('DOMContentLoaded', async () => {
+      const container = document.getElementById('events-admin-container');
+
+      auth.onAuthStateChanged(async (user) => {
+        if (!user) { container.innerHTML = '<p>Вы не авторизованы.</p>'; return; }
+        const doc = await db.collection('users').doc(user.uid).get();
+        if (!doc.exists || doc.data().role !== 'admin') {
+          container.innerHTML = '<p>Доступ запрещён.</p>';
+          return;
+        }
+        renderEventsAdmin();
+      });
+
+      function renderEventsAdmin() {
+        container.innerHTML = `
+          <h2>🎪 Управление ивентами <a href="admin.html" class="btn btn-cancel" style="margin-left:1rem;">← В админку</a></h2>
+          <div class="events-tabs">
+            <button class="events-tab active" data-tab="list">Список ивентов</button>
+            <button class="events-tab" data-tab="create">Создать ивент</button>
+            <button class="events-tab" data-tab="monitor">Мониторинг</button>
+          </div>
+          <div id="events-tab-content"></div>
+        `;
+
+        const tabs = document.querySelectorAll('.events-tab');
+        const content = document.getElementById('events-tab-content');
+        tabs.forEach(t => t.addEventListener('click', () => {
+          tabs.forEach(b => b.classList.remove('active'));
+          t.classList.add('active');
+          loadEventsTab(t.dataset.tab);
+        }));
+        loadEventsTab('list');
+
+        function loadEventsTab(tab) {
+          switch (tab) {
+            case 'list': renderEventsList(); break;
+            case 'create': renderCreateForm(); break;
+            case 'monitor': renderMonitor(); break;
+          }
+        }
+      }
+
+      async function renderEventsList() {
+        const content = document.getElementById('events-tab-content');
+        content.innerHTML = '<p>Загрузка...</p>';
+        try {
+          const snap = await db.collection('events').orderBy('createdAt', 'desc').get();
+          const events = [];
+          snap.forEach(doc => events.push({ id: doc.id, ...doc.data() }));
+          
+          let html = '<h3>Все ивенты</h3>';
+          if (events.length === 0) {
+            html += '<p>Нет созданных ивентов.</p>';
+          } else {
+            html += '<ul class="events-list">';
+            events.forEach(ev => {
+              const typeCfg = EVENT_TYPES[ev.type] || { icon: '🎪', label: ev.type };
+              const statusBadge = ev.status === 'active' ? '🟢 Активен' : ev.status === 'draft' ? '📝 Черновик' : '🏁 Завершён';
+              html += `<li>
+                <div class="event-info">
+                  <strong>${typeCfg.icon} ${ev.title}</strong> (${ev.id}) — ${statusBadge} [${typeCfg.label}]
+                  <br><small>${ev.startTime ? new Date(ev.startTime.seconds*1000).toLocaleString('ru-RU') : '—'} → ${ev.endTime ? new Date(ev.endTime.seconds*1000).toLocaleString('ru-RU') : '—'}</small>
+                </div>`;
+
+              if (ev.status === 'finished' && ev.finalStats) {
+                const fs = ev.finalStats;
+                html += `<div class="final-stats">
+                  <strong>📊 Итоги:</strong>
+                  ${fs.imageData ? `<img src="${fs.imageData}" alt="Доска" style="max-width:200px; display:block; margin:0.5rem 0;">` : ''}
+                  <table>
+                    ${fs.uniqueParticipants !== undefined ? `<tr><td>Участников:</td><td><strong>${fs.uniqueParticipants}</strong></td></tr>` : ''}
+                    ${fs.totalActions !== undefined ? `<tr><td>Действий:</td><td><strong>${fs.totalActions}</strong></td></tr>` : ''}
+                    ${fs.totalPixels !== undefined ? `<tr><td>Пикселей:</td><td><strong>${fs.totalPixels}</strong></td></tr>` : ''}
+                    ${fs.totalPoints !== undefined ? `<tr><td>Баллов выдано:</td><td><strong>${fs.totalPoints}</strong></td></tr>` : ''}
+                    ${ev.health !== undefined ? `<tr><td>Финальное здоровье:</td><td><strong>${Math.round(ev.health)}</strong></td></tr>` : ''}
+                  </table>
+                  ${fs.topPlayer ? `<p style="margin-top:0.5rem;"><strong>👑 Лучший игрок:</strong> ${fs.topPlayer.username} (${fs.topPlayer.department || '—'}) — ${fs.topPlayer.totalActions || fs.topPlayer.totalPixels || fs.topPlayer.score || 0} очков</p>` : ''}
+                </div>`;
+              }
+
+              html += `<div class="event-actions">
+                  <button class="btn btn-small edit-event-btn" data-event-id="${ev.id}">✏️</button>
+                  ${ev.status === 'draft' ? `<button class="btn btn-small btn-success start-event-btn" data-event-id="${ev.id}">▶️ Запустить</button>` : ''}
+                  ${ev.status === 'active' ? `<button class="btn btn-small btn-warning stop-event-btn" data-event-id="${ev.id}">⏹️ Завершить</button>` : ''}
+                  ${ev.status === 'finished' ? `<button class="btn btn-small btn-restart restart-event-btn" data-event-id="${ev.id}">🔄 Перезапустить</button>` : ''}
+                  <button class="btn btn-small btn-danger delete-event-btn" data-event-id="${ev.id}">🗑️</button>
+                </div>
+              </li>`;
+            });
+            html += '</ul>';
+          }
+          content.innerHTML = html;
+
+          document.querySelectorAll('.edit-event-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+              const id = e.target.dataset.eventId;
+              const ev = events.find(e => e.id === id);
+              if (ev) renderCreateForm(ev);
+            });
+          });
+          document.querySelectorAll('.start-event-btn').forEach(btn => {
+            btn.addEventListener('click', async (e) => {
+              if (confirm('Запустить ивент?')) {
+                await db.collection('events').doc(e.target.dataset.eventId).update({ status: 'active', startTime: firebase.firestore.FieldValue.serverTimestamp() });
+                showToast('Ивент запущен', 'success');
+                renderEventsList();
+              }
+            });
+          });
+          document.querySelectorAll('.stop-event-btn').forEach(btn => {
+            btn.addEventListener('click', async (e) => {
+              if (confirm('Завершить ивент досрочно?')) {
+                const eventId = e.target.dataset.eventId;
+                const eventRef = db.collection('events').doc(eventId);
+                const doc = await eventRef.get();
+                const event = { id: doc.id, ...doc.data() };
+                const typeCfg = EVENT_TYPES[event.type];
+                let finalStats = {};
+                if (typeCfg && typeCfg.finish) finalStats = await typeCfg.finish(event);
+                await eventRef.update({ status: 'finished', finalStats });
+                showToast('Ивент завершён', 'success');
+                renderEventsList();
+              }
+            });
+          });
+          document.querySelectorAll('.restart-event-btn').forEach(btn => {
+            btn.addEventListener('click', async (e) => {
+              if (confirm('Перезапустить ивент?')) {
+                const eventId = e.target.dataset.eventId;
+                await db.collection('events').doc(eventId).update({ status: 'active', statistics: { totalActions: 0, uniqueParticipants: 0 }, finalStats: null, participants: {}, boardData: {}, painterStats: {} });
+                showToast('Ивент перезапущен', 'success');
+                renderEventsList();
+              }
+            });
+          });
+          document.querySelectorAll('.delete-event-btn').forEach(btn => {
+            btn.addEventListener('click', async (e) => { if (confirm('Удалить ивент?')) { await db.collection('events').doc(e.target.dataset.eventId).delete(); showToast('Ивент удалён', 'success'); renderEventsList(); } });
+          });
+        } catch (e) { console.error(e); content.innerHTML = '<p>Ошибка загрузки.</p>'; }
+      }
+
+      function renderCreateForm(existingEvent = null) {
+        const content = document.getElementById('events-tab-content');
+        const isEdit = !!existingEvent?.id;
+        const ev = existingEvent || {};
+        const settings = ev.settings || {};
+        const eventType = ev.type || 'tree';
+        const typeCfg = EVENT_TYPES[eventType] || {};
+        const defaultSettings = typeCfg.defaultSettings || {};
+        const mergedSettings = { ...defaultSettings, ...settings };
+
+        const typeOptions = Object.entries(EVENT_TYPES).map(([key, val]) => `<option value="${key}" ${eventType === key ? 'selected' : ''}>${val.icon} ${val.label}</option>`).join('');
+
+        let settingsFieldsHtml = '';
+        const fields = Object.keys(defaultSettings);
+        fields.forEach(field => {
+          const val = mergedSettings[field];
+          if (typeof val === 'boolean') {
+            settingsFieldsHtml += `<div class="form-group"><label><input type="checkbox" id="setting-${field}" ${val ? 'checked' : ''}> ${field}</label></div>`;
+          } else if (typeof val === 'object') {
+            settingsFieldsHtml += `<div class="form-group"><label for="setting-${field}">${field} (JSON)</label><textarea id="setting-${field}" rows="3">${JSON.stringify(val, null, 2)}</textarea></div>`;
+          } else {
+            settingsFieldsHtml += `<div class="form-group"><label for="setting-${field}">${field}</label><input type="number" id="setting-${field}" value="${val}" step="any"></div>`;
+          }
+        });
+
+        let questionsBlock = '';
+        if (eventType === 'quiz') {
+          questionsBlock = `
+            <div style="border:1px solid #ddd; border-radius:8px; padding:1rem; margin:1rem 0;">
+              <h4 style="margin-bottom:0.5rem;">📝 Вопросы</h4>
+              <div id="questions-list-container"><p>Загрузка вопросов...</p></div>
+              <div class="question-edit-form" id="add-question-form">
+                <div class="form-group">
+                  <label for="new-question-text">Текст вопроса</label>
+                  <input type="text" id="new-question-text" placeholder="Вопрос...">
+                </div>
+                <div class="row">
+                  <div class="form-group"><label for="new-option-1">Вариант 1</label><input type="text" id="new-option-1"></div>
+                  <div class="form-group"><label for="new-option-2">Вариант 2</label><input type="text" id="new-option-2"></div>
+                </div>
+                <div class="row">
+                  <div class="form-group"><label for="new-option-3">Вариант 3</label><input type="text" id="new-option-3"></div>
+                  <div class="form-group"><label for="new-option-4">Вариант 4</label><input type="text" id="new-option-4"></div>
+                </div>
+                <div class="row">
+                  <div class="form-group">
+                    <label for="new-correct">Правильный (1-4)</label>
+                    <input type="number" id="new-correct" min="1" max="4" value="1">
+                  </div>
+                  <div class="form-group">
+                    <label for="new-time-limit">Время (сек, 0=по умолч.)</label>
+                    <input type="number" id="new-time-limit" value="0" min="0">
+                  </div>
+                </div>
+                <button class="btn btn-small" id="add-question-btn">➕ Добавить вопрос</button>
+              </div>
+              <div style="margin-top:1rem; border-top:1px solid #eee; padding-top:1rem;">
+                <p><strong>📋 Импорт вопросов из CSV</strong></p>
+                <p style="font-size:0.8rem;color:#666;">Формат: question, option1, option2, option3, option4, correct(1-4), timeLimit(сек)</p>
+                <input type="file" id="csv-file-input" accept=".csv">
+                <button class="btn btn-small" id="import-csv-btn">Импортировать</button>
+                <div id="csv-import-status"></div>
+              </div>
+            </div>`;
+        }
+
+        // Стандартные награды только для тех типов, где они нужны (не для квиза)
+        const showStandardRewards = !['quiz'].includes(eventType);
+
+        content.innerHTML = `
+          <h3>${isEdit ? 'Редактировать' : 'Создать'} ивент</h3>
+          <div class="event-form">
+            <div class="row">
+              <div><label>ID ивента (латиница)</label><input type="text" id="event-id" value="${ev.id || ''}" ${isEdit ? 'disabled' : ''} required></div>
+              <div>
+                <label>Тип</label>
+                <select id="event-type">${typeOptions}</select>
+              </div>
+            </div>
+            <div class="row">
+              <div><label>Название</label><input type="text" id="event-title" value="${ev.title || ''}" required></div>
+              <div><label>Иконка (emoji)</label><input type="text" id="event-icon" value="${ev.icon || typeCfg.icon || '🎪'}"></div>
+            </div>
+            <label>Описание</label>
+            <textarea id="event-desc" rows="2">${ev.description || ''}</textarea>
+            <label>URL страницы ивента</label>
+            <input type="text" id="event-url" value="${ev.url || (eventType === 'pixel' ? 'events/pixel-board.html' : eventType === 'quiz' ? 'events/quiz.html' : 'events/tree.html')}">
+            <div class="row">
+              <div><label>Начало</label><input type="datetime-local" id="event-start" value="${ev.startTime ? toDatetimeLocal(ev.startTime.toDate()) : ''}"></div>
+              <div><label>Окончание</label><input type="datetime-local" id="event-end" value="${ev.endTime ? toDatetimeLocal(ev.endTime.toDate()) : ''}"></div>
+            </div>
+            <h4>Настройки (${typeCfg.label})</h4>
+            <div id="settings-fields">${settingsFieldsHtml}</div>
+            ${questionsBlock}
+            ${showStandardRewards ? `
+            <div id="rewards-block">
+              <h4>Награды</h4>
+              <div class="row">
+                <div><label>За участие (баллы)</label><input type="number" id="reward-participation" value="${(ev.rewards?.participation?.points) || 10}"></div>
+                <div><label>За участие (локоины)</label><input type="number" id="reward-participation-lokoin" value="${(ev.rewards?.participation?.lokoin) || 2}"></div>
+              </div>
+              <div class="row">
+                <div><label>За победу (баллы)</label><input type="number" id="reward-win" value="${(ev.rewards?.win?.points) || 50}"></div>
+                <div><label>За победу (локоины)</label><input type="number" id="reward-win-lokoin" value="${(ev.rewards?.win?.lokoin) || 10}"></div>
+              </div>
+            </div>
+            ` : ''}
+            <button class="btn" id="save-event-btn">Сохранить</button>
+            <p id="event-form-message" class="auth-message"></p>
+          </div>
+        `;
+
+        // Обработчик смены типа ивента
+        document.getElementById('event-type').addEventListener('change', function() {
+          const newType = this.value;
+          const currentId = document.getElementById('event-id').value.trim();
+          const currentTitle = document.getElementById('event-title').value.trim();
+          const currentDesc = document.getElementById('event-desc').value.trim();
+          const currentIcon = document.getElementById('event-icon').value.trim();
+          const currentUrl = document.getElementById('event-url').value.trim();
+          const currentStart = document.getElementById('event-start').value;
+          const currentEnd = document.getElementById('event-end').value;
+          const currentPartPoints = document.getElementById('reward-participation')?.value || 10;
+          const currentPartLokoin = document.getElementById('reward-participation-lokoin')?.value || 2;
+          const currentWinPoints = document.getElementById('reward-win')?.value || 50;
+          const currentWinLokoin = document.getElementById('reward-win-lokoin')?.value || 10;
+
+          const updated = {
+            id: isEdit ? ev.id : currentId,
+            type: newType,
+            title: currentTitle,
+            description: currentDesc,
+            icon: currentIcon || EVENT_TYPES[newType].icon,
+            url: currentUrl,
+            startTime: currentStart ? firebase.firestore.Timestamp.fromDate(new Date(currentStart)) : null,
+            endTime: currentEnd ? firebase.firestore.Timestamp.fromDate(new Date(currentEnd)) : null,
+            rewards: {
+              participation: { points: parseInt(currentPartPoints) || 0, lokoin: parseInt(currentPartLokoin) || 0 },
+              win: { points: parseInt(currentWinPoints) || 0, lokoin: parseInt(currentWinLokoin) || 0 }
+            }
+          };
+
+          if (!isEdit) {
+            delete updated.id;
+            renderCreateForm(updated);
+          } else {
+            renderCreateForm({ ...ev, ...updated, id: ev.id });
+          }
+        });
+
+        // Квиз
+        if (eventType === 'quiz') {
+          const tasksListContainer = document.getElementById('questions-list-container');
+          const currentEventId = isEdit ? ev.id : document.getElementById('event-id').value.trim();
+
+          async function renderQuizQuestions() {
+            const eid = currentEventId || document.getElementById('event-id').value.trim();
+            if (!eid) {
+              tasksListContainer.innerHTML = '<p style="color:#888;">Сохраните ивент, чтобы добавлять вопросы.</p>';
+              return;
+            }
+            try {
+              const snap = await db.collection('events').doc(eid).collection('questions').get();
+              if (snap.empty) {
+                tasksListContainer.innerHTML = '<p style="color:#888;">Нет вопросов. Добавьте вопросы вручную или импортируйте CSV.</p>';
+                return;
+              }
+              let html = '<ul class="questions-list">';
+              snap.forEach(doc => {
+                const q = doc.data();
+                html += `<li>
+                  <span><strong>${q.text}</strong> (прав: ${q.correct + 1})</span>
+                  <button class="btn btn-small btn-danger delete-question-btn" data-qid="${doc.id}">🗑️</button>
+                </li>`;
+              });
+              html += '</ul>';
+              tasksListContainer.innerHTML = html;
+
+              document.querySelectorAll('.delete-question-btn').forEach(btn => {
+                btn.addEventListener('click', async () => {
+                  if (confirm('Удалить вопрос?')) {
+                    await db.collection('events').doc(eid).collection('questions').doc(btn.dataset.qid).delete();
+                    renderQuizQuestions();
+                  }
+                });
+              });
+            } catch (e) {
+              tasksListContainer.innerHTML = '<p style="color:red;">Ошибка загрузки вопросов.</p>';
+            }
+          }
+
+          renderQuizQuestions();
+
+          document.getElementById('add-question-btn').addEventListener('click', async () => {
+            const eid = document.getElementById('event-id').value.trim();
+            if (!eid) {
+              showToast('Сначала сохраните ивент или укажите ID.', 'error');
+              return;
+            }
+            const text = document.getElementById('new-question-text').value.trim();
+            const opts = [
+              document.getElementById('new-option-1').value.trim(),
+              document.getElementById('new-option-2').value.trim(),
+              document.getElementById('new-option-3').value.trim(),
+              document.getElementById('new-option-4').value.trim()
+            ];
+            const correct = parseInt(document.getElementById('new-correct').value) - 1;
+            const timeLimit = parseInt(document.getElementById('new-time-limit').value) || 0;
+
+            if (!text || opts.some(o => !o)) {
+              showToast('Заполните вопрос и все 4 варианта', 'error');
+              return;
+            }
+            if (isNaN(correct) || correct < 0 || correct > 3) {
+              showToast('Правильный ответ должен быть от 1 до 4', 'error');
+              return;
+            }
+
+            try {
+              await db.collection('events').doc(eid).collection('questions').add({
+                text, options: opts, correct, timeLimit: timeLimit || null
+              });
+              document.getElementById('new-question-text').value = '';
+              document.getElementById('new-option-1').value = '';
+              document.getElementById('new-option-2').value = '';
+              document.getElementById('new-option-3').value = '';
+              document.getElementById('new-option-4').value = '';
+              document.getElementById('new-correct').value = '1';
+              document.getElementById('new-time-limit').value = '0';
+              showToast('Вопрос добавлен', 'success');
+              renderQuizQuestions();
+            } catch (err) {
+              showToast('Ошибка: ' + err.message, 'error');
+            }
+          });
+
+          document.getElementById('import-csv-btn').addEventListener('click', async () => {
+            const eid = document.getElementById('event-id').value.trim();
+            if (!eid) {
+              document.getElementById('csv-import-status').innerHTML = '<span style="color:red;">Сначала укажите ID ивента.</span>';
+              return;
+            }
+            const fileInput = document.getElementById('csv-file-input');
+            const statusEl = document.getElementById('csv-import-status');
+            if (!fileInput.files.length) {
+              statusEl.innerHTML = '<span style="color:red;">Выберите CSV-файл.</span>';
+              return;
+            }
+            const file = fileInput.files[0];
+            const reader = new FileReader();
+            reader.onload = async (e) => {
+              const text = e.target.result;
+              const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+              if (lines.length < 2) {
+                statusEl.innerHTML = '<span style="color:red;">Файл пуст или недостаточно строк.</span>';
+                return;
+              }
+
+              const headerLine = lines[0];
+              const delimiter = headerLine.includes(';') ? ';' : ',';
+              const dataLines = lines.slice(1);
+
+              const batch = db.batch();
+              const questionsRef = db.collection('events').doc(eid).collection('questions');
+              let imported = 0;
+              for (const line of dataLines) {
+                const cols = [];
+                let current = '';
+                let insideQuotes = false;
+                for (const ch of line) {
+                  if (ch === '"') insideQuotes = !insideQuotes;
+                  else if (ch === delimiter && !insideQuotes) { cols.push(current.trim()); current = ''; }
+                  else current += ch;
+                }
+                cols.push(current.trim());
+                const cleanCols = cols.map(c => c.replace(/^"|"$/g, ''));
+                if (cleanCols.length < 6) continue;
+                const question = cleanCols[0];
+                const options = [cleanCols[1], cleanCols[2], cleanCols[3], cleanCols[4]];
+                const correct = parseInt(cleanCols[5]) - 1;
+                const timeLimit = cleanCols[6] ? parseInt(cleanCols[6]) : (mergedSettings.defaultTimeLimit || 30);
+                if (isNaN(correct) || correct < 0 || correct > 3) continue;
+                batch.set(questionsRef.doc(), { text: question, options, correct, timeLimit });
+                imported++;
+              }
+              if (imported > 0) {
+                await batch.commit();
+                statusEl.innerHTML = `<span style="color:green;">✅ Импортировано ${imported} вопросов.</span>`;
+                renderQuizQuestions();
+              } else {
+                statusEl.innerHTML = '<span style="color:red;">Не найдено корректных строк.</span>';
+              }
+            };
+            reader.readAsText(file, 'UTF-8');
+          });
+        }
+
+        // Сохранение ивента
+        document.getElementById('save-event-btn').addEventListener('click', async () => {
+          const id = document.getElementById('event-id').value.trim();
+          if (!id) { document.getElementById('event-form-message').textContent = 'Введите ID'; return; }
+
+          const type = document.getElementById('event-type').value;
+          const cfg = EVENT_TYPES[type];
+          const settings = {};
+          const fields = Object.keys(cfg.defaultSettings);
+          fields.forEach(field => {
+            const el = document.getElementById(`setting-${field}`);
+            if (!el) return;
+            if (el.type === 'checkbox') settings[field] = el.checked;
+            else if (el.tagName === 'TEXTAREA') {
+              try { settings[field] = JSON.parse(el.value); } catch (e) { settings[field] = cfg.defaultSettings[field]; }
+            } else {
+              settings[field] = parseFloat(el.value);
+            }
+          });
+
+          const data = {
+            type: type,
+            title: document.getElementById('event-title').value.trim(),
+            description: document.getElementById('event-desc').value.trim(),
+            icon: document.getElementById('event-icon').value.trim() || cfg.icon,
+            url: document.getElementById('event-url').value.trim(),
+            startTime: firebase.firestore.Timestamp.fromDate(new Date(document.getElementById('event-start').value)),
+            endTime: firebase.firestore.Timestamp.fromDate(new Date(document.getElementById('event-end').value)),
+            settings,
+            status: isEdit ? ev.status : 'draft',
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+          };
+
+          // Стандартные награды только если они видны
+          if (!['quiz'].includes(type)) {
+            data.rewards = {
+              participation: { points: parseInt(document.getElementById('reward-participation').value) || 0, lokoin: parseInt(document.getElementById('reward-participation-lokoin').value) || 0 },
+              win: { points: parseInt(document.getElementById('reward-win').value) || 0, lokoin: parseInt(document.getElementById('reward-win-lokoin').value) || 0 }
+            };
+          }
+
+          try {
+            if (!isEdit) {
+              data.createdAt = firebase.firestore.FieldValue.serverTimestamp();
+              data.createdBy = auth.currentUser.uid;
+              data.statistics = { totalActions: 0, uniqueParticipants: 0 };
+              data.participants = {};
+              data.boardData = {};
+              data.painterStats = {};
+            }
+            await db.collection('events').doc(id).set(data, { merge: true });
+            showToast('Ивент сохранён', 'success');
+            renderEventsList();
+          } catch (err) { document.getElementById('event-form-message').textContent = 'Ошибка: ' + err.message; }
+        });
+      }
+
+      async function renderMonitor() {
+        const content = document.getElementById('events-tab-content');
+        content.innerHTML = '<p>Загрузка...</p>';
+        try {
+          const activeSnap = await db.collection('events').where('status', '==', 'active').limit(1).get();
+          if (activeSnap.empty) { content.innerHTML = '<p>Нет активных ивентов.</p>'; return; }
+          const eventDoc = activeSnap.docs[0]; const event = { id: eventDoc.id, ...eventDoc.data() };
+          const typeCfg = EVENT_TYPES[event.type];
+          const isTree = event.type === 'tree';
+
+          let html = `<h3>Мониторинг: ${typeCfg.icon} ${event.title} (${typeCfg.label})</h3><div class="monitor-grid">`;
+
+          if (typeCfg && typeCfg.monitor) html += await typeCfg.monitor(event);
+          else html += `<div class="monitor-card"><div class="value">—</div><div class="label">Нет данных</div></div>`;
+
+          html += `<div class="monitor-card"><div class="value">${event.status}</div><div class="label">Статус</div></div></div>`;
+
+          if (isTree) {
+            html += '<h4 style="margin-top:1.5rem;">⚡ Ручные события</h4><div style="display:flex; gap:0.5rem; flex-wrap:wrap; margin-bottom:1rem;">';
+            ADMIN_EVENT_TYPES.forEach(ae => { html += `<button class="btn btn-small trigger-admin-event-btn" data-event-type="${ae.id}" title="${ae.description}">${ae.icon} ${ae.name}</button>`; });
+            html += '</div><div id="admin-events-history"><p>Загрузка...</p></div>';
+          }
+
+          content.innerHTML = html;
+
+          if (isTree) {
+            const historySnap = await db.collection('events').doc(event.id).collection('events').orderBy('timestamp', 'desc').limit(20).get();
+            const historyEl = document.getElementById('admin-events-history');
+            historyEl.innerHTML = historySnap.empty ? '<p>Нет ручных событий.</p>' : historySnap.docs.map(doc => `<div class="admin-event-item"><span><span class="event-icon">${doc.data().icon || '⚡'}</span> ${doc.data().name}</span><small>${doc.data().timestamp ? new Date(doc.data().timestamp.seconds*1000).toLocaleString('ru-RU') : ''}</small></div>`).join('');
+
+            document.querySelectorAll('.trigger-admin-event-btn').forEach(btn => {
+              btn.addEventListener('click', async () => {
+                const ae = ADMIN_EVENT_TYPES.find(t => t.id === btn.dataset.eventType);
+                if (!ae || !confirm(`Применить «${ae.name}»?`)) return;
+                await db.collection('events').doc(event.id).collection('events').add({ type: ae.id, name: ae.name, icon: ae.icon, healthChange: ae.healthChange, duration: ae.duration, description: ae.description, timestamp: firebase.firestore.FieldValue.serverTimestamp(), appliedBy: auth.currentUser.uid });
+                showToast(`${ae.name} применено`, 'success'); renderMonitor();
+              });
+            });
+          }
+        } catch (e) { console.error(e); content.innerHTML = '<p>Ошибка.</p>'; }
+      }
+
+      function toDatetimeLocal(date) { return date.toISOString().slice(0, 16); }
+    });
+  </script>
+</body>
+</html>

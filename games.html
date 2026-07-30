@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Игры – Геймификация КЦ</title>
+  <link rel="stylesheet" href="css/style.css">
+  <style>
+    .skeleton-card { background: var(--color-white); border-radius: var(--border-radius); padding: 1.5rem; box-shadow: 0 2px 10px rgba(0,0,0,0.05); text-align: center; animation: shimmer 1.5s infinite; }
+    .skeleton-icon { width: 3rem; height: 3rem; border-radius: 50%; background: #e0e0e0; margin: 0 auto 0.5rem; }
+    .skeleton-title { height: 1.2rem; width: 60%; background: #e0e0e0; margin: 0 auto 0.5rem; border-radius: 4px; }
+    .skeleton-text { height: 0.9rem; width: 80%; background: #e0e0e0; margin: 0 auto 0.5rem; border-radius: 4px; }
+    .skeleton-btn { height: 2rem; width: 40%; background: #e0e0e0; margin: 0.5rem auto 0; border-radius: 4px; }
+    @keyframes shimmer { 0% { opacity: 0.6; } 50% { opacity: 1; } 100% { opacity: 0.6; } }
+    .games-error { text-align: center; padding: 2rem; color: #e74c3c; }
+    .games-filters { display: flex; gap: 1rem; margin-bottom: 1.5rem; align-items: flex-end; flex-wrap: wrap; }
+    .games-filters .filter-group { min-width: 200px; }
+    .no-results { text-align: center; color: #888; padding: 2rem; }
+  </style>
+</head>
+<body>
+  <header class="header"><div class="container header__inner"><a href="index.html" class="logo">КЦ-Игры</a><button class="burger" id="burger-btn" aria-label="Меню">☰</button><nav class="nav" id="main-nav"><ul class="nav__list"><li><a href="index.html" class="nav__link">Главная</a></li><li><a href="games.html" class="nav__link active">Игры</a></li><li><a href="leaderboard.html" class="nav__link">Рейтинг</a></li><li><a href="shop.html" class="nav__link">Магазин</a></li><li><a href="profile.html" class="nav__link">Профиль</a></li><li><a href="admin.html" class="nav__link">Админ</a></li></ul></nav><div id="auth-status" class="auth-status"></div></div></header>
+  <main class="main"><div class="container"><h2>Доступные игры</h2><div id="games-filters-container"></div><div id="games-grid" class="games-grid"></div></div></main>
+  <footer class="footer"><div class="container"><p>© 2026 ваши амбассадоры</p></div></footer>
+
+  <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore-compat.js"></script>
+  <script src="js/firebase-config.js"></script>
+  <script src="js/firebase-auth.js"></script>
+  <script src="js/storage.js"></script>
+  <script src="js/achievements.js"></script>
+  <script src="js/notifications.js"></script>
+  <script src="js/easter-eggs.js"></script>
+  <script src="js/feedback.js"></script>
+  <script src="js/main.js"></script>
+
+  <script>
+    (function() {
+      const grid = document.getElementById('games-grid');
+      const filtersContainer = document.getElementById('games-filters-container');
+      const CACHE_KEY = 'krugames_games_cache';
+      const SEARCH_KEY = 'krugames_games_search';
+      const CACHE_TTL = 10 * 60 * 1000; // 10 минут
+
+      let allGames = [];
+      let searchInput;
+
+      // Рендер скелетонов
+      function renderSkeletons() {
+        grid.innerHTML = Array.from({ length: 4 }, () => `
+          <div class="skeleton-card">
+            <div class="skeleton-icon"></div>
+            <div class="skeleton-title"></div>
+            <div class="skeleton-text"></div>
+            <div class="skeleton-btn"></div>
+          </div>
+        `).join('');
+      }
+
+      // Отрисовка игр с учётом поиска
+      function renderGames() {
+        const query = searchInput.value.trim().toLowerCase();
+        let filtered = allGames.filter(g => !g.hidden);
+        if (query) {
+          filtered = filtered.filter(g => 
+            g.title.toLowerCase().includes(query) ||
+            (g.description && g.description.toLowerCase().includes(query))
+          );
+        }
+
+        if (!filtered.length) {
+          grid.innerHTML = '<p class="no-results">Ничего не найдено. Попробуйте изменить запрос.</p>';
+          return;
+        }
+
+        let html = '';
+        filtered.forEach(game => {
+          html += `
+            <div class="game-card">
+              <div class="game-card__icon">${game.icon || '🎮'}</div>
+              <h3 class="game-card__title">${game.title}</h3>
+              <p class="game-card__desc">${game.description || ''}</p>
+              <button class="btn game-card__btn" data-game-id="${game.id}">Играть</button>
+            </div>
+          `;
+        });
+        grid.innerHTML = html;
+
+        document.querySelectorAll('.game-card__btn').forEach(btn => {
+          btn.addEventListener('click', (e) => {
+            const gameId = e.target.dataset.gameId;
+            const game = allGames.find(g => g.id === gameId);
+            if (game && game.url) {
+              window.location.href = game.url;
+            } else {
+              showToast('Игра недоступна.', 'info');
+            }
+          });
+        });
+      }
+
+      // Загрузка игр из Firestore с кешированием
+      async function loadGames() {
+        const cachedData = sessionStorage.getItem(CACHE_KEY);
+        if (cachedData) {
+          try {
+            const parsed = JSON.parse(cachedData);
+            if (Date.now() - parsed.timestamp < CACHE_TTL) {
+              allGames = parsed.games;
+              renderGames();
+            } else {
+              // Кеш устарел – удаляем и показываем скелетоны
+              sessionStorage.removeItem(CACHE_KEY);
+              renderSkeletons();
+            }
+          } catch (e) {
+            sessionStorage.removeItem(CACHE_KEY);
+            renderSkeletons();
+          }
+        } else {
+          renderSkeletons();
+        }
+
+        try {
+          const snap = await db.collection('games').get();
+          allGames = [];
+          snap.forEach(doc => allGames.push({ id: doc.id, ...doc.data() }));
+          sessionStorage.setItem(CACHE_KEY, JSON.stringify({ timestamp: Date.now(), games: allGames }));
+          renderGames();
+        } catch (e) {
+          console.error('Ошибка загрузки игр:', e);
+          if (!allGames.length) {
+            grid.innerHTML = '<p class="games-error">Не удалось загрузить игры.</p>';
+          }
+        }
+      }
+
+      // Сохранение поискового запроса
+      function saveSearch() {
+        sessionStorage.setItem(SEARCH_KEY, searchInput.value);
+      }
+
+      // Восстановление поискового запроса
+      function restoreSearch() {
+        const saved = sessionStorage.getItem(SEARCH_KEY);
+        if (saved) {
+          searchInput.value = saved;
+        }
+      }
+
+      // Инициализация
+      document.addEventListener('DOMContentLoaded', () => {
+        // Вставляем фильтры
+        filtersContainer.innerHTML = `
+          <div class="games-filters">
+            <div class="filter-group">
+              <label>🔍 Поиск</label>
+              <input type="text" id="games-search" placeholder="Название или описание...">
+            </div>
+            <button class="btn btn-cancel" id="games-search-clear">Сбросить</button>
+          </div>
+        `;
+
+        searchInput = document.getElementById('games-search');
+        restoreSearch();
+
+        // Обработчики
+        searchInput.addEventListener('input', () => {
+          saveSearch();
+          renderGames();
+        });
+
+        document.getElementById('games-search-clear').addEventListener('click', () => {
+          searchInput.value = '';
+          saveSearch();
+          renderGames();
+        });
+
+        // Загружаем игры
+        loadGames();
+      });
+    })();
+  </script>
+</body>
+</html>

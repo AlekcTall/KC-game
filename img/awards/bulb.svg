@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <!-- Лампочка -->
+  <path d="M24 36 L24 46 C24 48 28 50 32 50 C36 50 40 48 40 46 L40 36" fill="#FBBF24" stroke="#F59E0B" stroke-width="2"/>
+  <circle cx="32" cy="22" r="14" fill="#FBBF24" stroke="#F59E0B" stroke-width="2"/>
+  <!-- Цоколь -->
+  <rect x="28" y="50" width="8" height="4" rx="1" fill="#9CA3AF" stroke="#6B7280" stroke-width="1"/>
+  <rect x="26" y="54" width="12" height="3" rx="1" fill="#9CA3AF" stroke="#6B7280" stroke-width="1"/>
+  <!-- Лучи -->
+  <path d="M32 4 L32 8" stroke="#F59E0B" stroke-width="2" stroke-linecap="round"/>
+  <path d="M20 10 L22 14" stroke="#F59E0B" stroke-width="2" stroke-linecap="round"/>
+  <path d="M14 20 L18 20" stroke="#F59E0B" stroke-width="2" stroke-linecap="round"/>
+  <path d="M20 30 L16 32" stroke="#F59E0B" stroke-width="2" stroke-linecap="round"/>
+  <path d="M44 10 L42 14" stroke="#F59E0B" stroke-width="2" stroke-linecap="round"/>
+  <path d="M50 20 L46 20" stroke="#F59E0B" stroke-width="2" stroke-linecap="round"/>
+  <path d="M44 30 L48 32" stroke="#F59E0B" stroke-width="2" stroke-linecap="round"/>
+  <!-- Блик -->
+  <circle cx="28" cy="18" r="3" fill="white" opacity="0.3"/>
+</svg>

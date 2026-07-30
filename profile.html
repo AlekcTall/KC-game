@@ -1,0 +1,605 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Профиль – Геймификация КЦ</title>
+  <link rel="stylesheet" href="css/style.css">
+  <style>
+    .section-title { margin-top:2rem; border-bottom:2px solid #f0f0f0; padding-bottom:0.5rem; }
+    .history-table { width:100%; border-collapse:collapse; margin-top:1rem; }
+    .history-table th,.history-table td { padding:0.5rem; border-bottom:1px solid #eee; text-align:left; }
+    .history-table th { font-size:0.85rem; color:#666; }
+    .no-data { color:#999; font-style:italic; }
+    .btn-more { margin-top:1rem; padding:0.5rem 1.5rem; background:#f0f0f0; border:1px solid #ddd; border-radius:6px; cursor:pointer; }
+    .btn-more:hover { background:#e0e0e0; }
+    .stats-grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(180px,1fr)); gap:1rem; margin-top:1rem; }
+    .stat-card { background:#f9f9fb; border-radius:12px; padding:1rem; display:flex; align-items:center; gap:1rem; box-shadow:0 1px 3px rgba(0,0,0,0.03); }
+    .stat-icon { font-size:2rem; }
+    .stat-detail { display:flex; flex-direction:column; }
+    .stat-value { font-size:1.1rem; font-weight:700; color:var(--color-header); }
+    .stat-label { font-size:0.8rem; color:#666; }
+    .accordion { margin-top:1.5rem; border:1px solid #e0e0e0; border-radius:8px; overflow:hidden; }
+    .accordion-header { width:100%; padding:0.9rem 1.2rem; background:#f5f6f8; border:none; text-align:left; font-size:1rem; font-weight:600; color:var(--color-header); cursor:pointer; display:flex; justify-content:space-between; align-items:center; transition:background 0.2s; }
+    .accordion-header:hover { background:#ebedf0; }
+    .accordion-arrow { font-size:0.8rem; transition:transform 0.3s; }
+    .accordion-content { max-height:0; overflow:hidden; transition:max-height 0.4s ease; background:white; }
+    .accordion-content > div { padding:1.2rem; }
+    .accordion.open .accordion-content { max-height:600px; }
+    .accordion.open .accordion-arrow { transform:rotate(180deg); }
+    .theme-btns { display:flex; gap:0.5rem; }
+    .theme-btn { padding:0.5rem 1.2rem; border:1px solid #ccc; border-radius:6px; background:white; cursor:pointer; }
+    .theme-btn.active { background:var(--color-primary); color:white; border-color:var(--color-primary); }
+    .verify-warning { background:#fff3cd; color:#856404; padding:0.5rem 1rem; border-radius:6px; margin-top:1rem; display:inline-block; }
+    .ach-modal-content { text-align: center; max-width: 350px; }
+    .ach-modal-icon { font-size: 3rem; margin-bottom: 0.5rem; }
+    .ach-modal-title { font-size: 1.3rem; font-weight: 700; margin-bottom: 0.3rem; }
+    .ach-modal-desc { font-size: 0.95rem; color: #555; margin-bottom: 0.5rem; }
+    .ach-modal-status { font-size: 0.9rem; font-weight: 500; }
+    .ach-unlocked-status { color: #27ae60; }
+    .ach-locked-status { color: #e67e22; }
+    .awards-section { margin-top: 1.5rem; }
+    .awards-grid { display: flex; flex-wrap: wrap; gap: 0.8rem; margin-top: 0.5rem; }
+    .award-card { background: linear-gradient(135deg, #fff9e6, #fff3cc); border: 2px solid #f0c040; border-radius: 12px; padding: 0.8rem 1rem; display: flex; align-items: center; gap: 0.8rem; cursor: pointer; transition: transform 0.2s, box-shadow 0.2s; max-width: 300px; }
+    .award-card:hover { transform: translateY(-3px); box-shadow: 0 6px 16px rgba(240, 192, 64, 0.3); }
+    .award-card-icon { width: 40px; height: 40px; flex-shrink: 0; }
+    .award-card-icon img { width: 100%; height: 100%; object-fit: contain; }
+    .award-card-info { flex: 1; }
+    .award-card-name { font-weight: 700; color: #b8860b; font-size: 0.95rem; }
+    .award-card-comment { font-size: 0.8rem; color: #666; margin-top: 0.2rem; }
+    .award-modal-content { text-align: center; max-width: 400px; }
+    .award-modal-icon { width: 80px; height: 80px; margin: 0 auto 1rem; }
+    .award-modal-icon img { width: 100%; height: 100%; object-fit: contain; }
+    .award-modal-title { font-size: 1.4rem; font-weight: 700; color: #b8860b; margin-bottom: 0.3rem; }
+    .award-modal-desc { font-size: 0.95rem; color: #555; margin-bottom: 0.5rem; line-height: 1.5; }
+    .award-modal-comment { font-size: 0.9rem; color: #888; font-style: italic; margin-top: 0.5rem; }
+    .daily-calendar { margin-top: 1.5rem; }
+    .daily-calendar-grid { display: flex; gap: 0.5rem; margin-top: 0.8rem; flex-wrap: wrap; }
+    .daily-day { width: 48px; height: 64px; border-radius: 10px; display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 0.75rem; font-weight: 600; background: #f0f0f0; color: #999; border: 2px solid #e0e0e0; }
+    .daily-day.completed { background: #e6f7e6; border-color: #27ae60; color: #27ae60; }
+    .daily-day.today { background: #fff9e6; border-color: #f0c040; color: #b8860b; animation: pulse 2s infinite; }
+    .daily-day.missed { background: #fff0f0; border-color: #e74c3c; color: #e74c3c; }
+    .daily-day .day-num { font-size: 1rem; }
+    .daily-day .day-reward { font-size: 0.65rem; margin-top: 2px; }
+    .daily-streak-info { display: flex; gap: 1rem; margin-top: 0.5rem; font-size: 0.9rem; }
+    .daily-streak-info span { font-weight: 600; }
+    .daily-reward-modal { text-align: center; max-width: 380px; }
+    .daily-reward-icon { font-size: 4rem; margin-bottom: 0.5rem; animation: bounce 1s ease; }
+    .daily-reward-title { font-size: 1.3rem; font-weight: 700; color: var(--color-header); }
+    .daily-reward-streak { font-size: 1rem; color: #b8860b; font-weight: 600; }
+    .daily-reward-items { display: flex; gap: 1rem; justify-content: center; margin: 1rem 0; }
+    .daily-reward-item { background: #f9fafb; border-radius: 10px; padding: 0.8rem 1.2rem; text-align: center; }
+    .daily-reward-item .item-icon { font-size: 1.5rem; }
+    .daily-reward-item .item-value { font-size: 1.2rem; font-weight: 700; }
+    .daily-reward-item .item-label { font-size: 0.75rem; color: #888; }
+    .avatar-circle.gold-frame { box-shadow: 0 0 0 4px #FBBF24, 0 0 0 6px #F59E0B; }
+    .avatar-circle.animated-avatar { animation: avatarGlow 2s ease-in-out infinite alternate; }
+    .avatar-circle.gold-frame.animated-avatar { box-shadow: 0 0 0 4px #FBBF24, 0 0 0 6px #F59E0B; animation: avatarGlowGold 2s ease-in-out infinite alternate; }
+    @keyframes avatarGlow { from { box-shadow: 0 0 5px #FBBF24; } to { box-shadow: 0 0 15px #FBBF24; } }
+    @keyframes avatarGlowGold { from { box-shadow: 0 0 0 4px #FBBF24, 0 0 0 6px #F59E0B, 0 0 5px #FBBF24; } to { box-shadow: 0 0 0 4px #FBBF24, 0 0 0 6px #F59E0B, 0 0 20px #FBBF24; } }
+    .custom-status-text { font-size: 0.9rem; color: #888; font-style: italic; margin-top: 0.2rem; }
+    .effect-toggle { display: flex; align-items: center; gap: 0.5rem; margin-top: 0.5rem; }
+    /* Стили для меню выбора аватара */
+    .avatar-picker { display: flex; flex-wrap: wrap; gap: 0.8rem; align-items: center; margin-top: 0.5rem; }
+    .avatar-option { width: 64px; height: 64px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 2rem; cursor: pointer; border: 3px solid transparent; background: #f0f0f0; transition: all 0.2s; }
+    .avatar-option:hover { transform: scale(1.1); border-color: var(--color-primary); }
+    .avatar-option.selected { border-color: var(--color-primary); background: #e6f0ff; }
+    .avatar-option.default { background: #e0e0e0; }
+    /* Секция активных эффектов */
+    .active-effects { margin-top: 1.5rem; }
+    .active-effects .effect-item { display: flex; align-items: center; gap: 0.8rem; padding: 0.6rem 1rem; background: #f0f8ff; border-radius: 8px; margin-bottom: 0.5rem; font-size: 0.95rem; }
+    .active-effects .effect-icon { font-size: 1.5rem; }
+    .active-effects .effect-name { font-weight: 600; }
+    .active-effects .effect-timer { color: #e67e22; font-weight: 600; margin-left: auto; }
+    @keyframes bounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
+    @keyframes pulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(240,192,64,0.4); } 50% { box-shadow: 0 0 0 6px rgba(240,192,64,0); } }
+    .login-prompt { text-align: center; padding: 3rem 1rem; }
+    .login-prompt h3 { margin-bottom: 0.5rem; color: var(--color-header); }
+    .login-prompt p { margin-bottom: 1.5rem; color: #666; }
+    .skeleton-block { animation: shimmer 1.5s infinite; }
+    .skeleton-inline { display: inline-block; background: #e0e0e0; border-radius: 4px; height: 1rem; }
+    .skeleton-avatar { width: 80px; height: 80px; border-radius: 50%; background: #e0e0e0; }
+    .skeleton-name { width: 150px; height: 1.5rem; background: #e0e0e0; border-radius: 4px; margin-bottom: 0.5rem; }
+    .skeleton-badge { width: 60px; height: 1rem; background: #e0e0e0; border-radius: 4px; display: inline-block; }
+    .skeleton-text { height: 0.9rem; width: 100%; background: #e0e0e0; border-radius: 4px; margin-bottom: 0.5rem; }
+    .skeleton-stat { height: 60px; background: #e0e0e0; border-radius: 12px; }
+    .skeleton-achievement { display: inline-block; width: 80px; height: 30px; background: #e0e0e0; border-radius: 6px; margin: 0.2rem; }
+    .skeleton-calendar-day { width: 48px; height: 64px; background: #e0e0e0; border-radius: 10px; display: inline-block; }
+    @keyframes shimmer { 0% { opacity: 0.6; } 50% { opacity: 1; } 100% { opacity: 0.6; } }
+    .error-message { color: #e74c3c; font-style: italic; }
+    .loading-note { font-size: 0.8rem; color: #888; text-align: center; }
+  </style>
+</head>
+<body>
+  <header class="header"><div class="container header__inner"><a href="index.html" class="logo">КЦ-Игры</a><button class="burger" id="burger-btn" aria-label="Меню">☰</button><nav class="nav" id="main-nav"><ul class="nav__list"><li><a href="index.html" class="nav__link">Главная</a></li><li><a href="games.html" class="nav__link">Игры</a></li><li><a href="leaderboard.html" class="nav__link">Рейтинг</a></li><li><a href="shop.html" class="nav__link">Магазин</a></li><li><a href="profile.html" class="nav__link active">Профиль</a></li><li><a href="admin.html" class="nav__link">Админ</a></li></ul></nav><div id="auth-status" class="auth-status"></div></div></header>
+  <main class="main"><div class="container" id="profile-container"></div></main>
+
+  <div class="modal-overlay" id="ach-modal" style="display:none;"><div class="modal ach-modal-content"><span class="modal-close" id="ach-modal-close">&times;</span><div class="ach-modal-icon" id="ach-modal-icon"></div><div class="ach-modal-title" id="ach-modal-title"></div><div class="ach-modal-desc" id="ach-modal-desc"></div><div class="ach-modal-status" id="ach-modal-status"></div></div></div>
+  <div class="modal-overlay" id="award-detail-modal" style="display:none;"><div class="modal award-modal-content"><span class="modal-close" id="award-detail-close">&times;</span><div class="award-modal-icon" id="award-detail-icon"></div><div class="award-modal-title" id="award-detail-title"></div><div class="award-modal-desc" id="award-detail-desc"></div><div class="award-modal-comment" id="award-detail-comment"></div></div></div>
+  <div class="modal-overlay" id="daily-reward-modal" style="display:none;"><div class="modal daily-reward-modal"><span class="modal-close" id="daily-reward-close">&times;</span><div class="daily-reward-icon">🎁</div><div class="daily-reward-title">Ежедневная награда!</div><div class="daily-reward-streak" id="daily-reward-streak"></div><div class="daily-reward-items"><div class="daily-reward-item"><div class="item-icon">⭐</div><div class="item-value" id="daily-reward-points">0</div><div class="item-label">баллов</div></div><div class="daily-reward-item"><div class="item-icon">💰</div><div class="item-value" id="daily-reward-lokoin">0</div><div class="item-label">локоинов</div></div></div><button class="btn" id="daily-reward-claim-btn">Забрать</button></div></div>
+
+  <footer class="footer"><div class="container"><p>© 2026 ваши амбассадоры</p></div></footer>
+  <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore-compat.js"></script>
+  <script src="js/firebase-config.js"></script>
+  <script src="js/firebase-auth.js"></script>
+  <script src="js/storage.js"></script>
+  <script src="js/achievements.js"></script>
+  <script src="js/notifications.js"></script>
+  <script src="js/easter-eggs.js"></script>
+  <script src="js/feedback.js"></script>
+  <script src="js/main.js"></script>
+  <script src="js/effects-engine.js"></script>
+  <script>
+    (function() {
+      const CACHE_KEY = 'krugames_profile_cache';
+      const CACHE_TTL = 2 * 60 * 1000;
+      let departmentsList = [];
+
+      async function loadDepartments() {
+        try { const s = await db.collection('departments').orderBy('name').get(); departmentsList = []; s.forEach(d => departmentsList.push(d.data().name)); if (!departmentsList.length) departmentsList = ['РБ','МСБ','ТМ','Депозиты','ОКК','ООБП','Боссы','Заблудшие души']; }
+        catch (e) { departmentsList = ['Не удалось загрузить']; }
+      }
+
+      function getCachedProfile() {
+        const cached = sessionStorage.getItem(CACHE_KEY);
+        if (cached) {
+          try {
+            const parsed = JSON.parse(cached);
+            if (Date.now() - parsed.timestamp < CACHE_TTL) {
+              return parsed.data;
+            }
+          } catch (e) {}
+        }
+        return null;
+      }
+
+      function setCachedProfile(profileData) {
+        sessionStorage.setItem(CACHE_KEY, JSON.stringify({
+          timestamp: Date.now(),
+          data: profileData
+        }));
+      }
+
+      function buildStatsHTML(history) {
+        if (!history || history.length === 0) return '<p class="no-data">Нет данных для статистики.</p>';
+        const d = {}, g = {};
+        history.forEach(e => {
+          const dt = new Date(e.timestamp).toISOString().slice(0, 10);
+          d[dt] = (d[dt] || 0) + e.points;
+          const gn = e.game === 'clicker' ? '🖱️ Кликер' : e.game === 'memory' ? '🧠 Найди пару' : e.game === 'snake' ? '🐍 Змейка' : e.game;
+          g[gn] = (g[gn] || 0) + e.points;
+        });
+        const days = Object.values(d),
+              t = days.reduce((a, b) => a + b, 0),
+              bd = Math.max(...days),
+              bdd = Object.keys(d).find(x => d[x] === bd) || '—',
+              av = days.length ? Math.round(t / days.length) : 0,
+              bg = Object.entries(g).sort((a, b) => b[1] - a[1])[0];
+        return `<div class="stats-grid">
+          <div class="stat-card"><span class="stat-icon">⭐</span><div class="stat-detail"><div class="stat-value">${t}</div><div class="stat-label">Всего баллов</div></div></div>
+          <div class="stat-card"><span class="stat-icon">📅</span><div class="stat-detail"><div class="stat-value">${bdd !== '—' ? new Date(bdd).toLocaleDateString('ru-RU',{day:'numeric',month:'long',year:'numeric'}) : '—'}</div><div class="stat-label">Лучший день (${bd} балл.)</div></div></div>
+          <div class="stat-card"><span class="stat-icon">📊</span><div class="stat-detail"><div class="stat-value">${av}</div><div class="stat-label">Средний заработок</div></div></div>
+          <div class="stat-card"><span class="stat-icon">🎮</span><div class="stat-detail"><div class="stat-value">${bg ? bg[0] : '—'}</div><div class="stat-label">Самая результативная (${bg ? bg[1] : 0} балл.)</div></div></div>
+        </div>`;
+      }
+
+      function buildDailyCalendar(dailyLogin) {
+        const lh = dailyLogin?.loginHistory || [],
+              s = dailyLogin?.streak || 0,
+              lo = dailyLogin?.longestStreak || 0,
+              to = dailyLogin?.totalLogins || 0;
+        const days = [], n = new Date();
+        for (let i = 6; i >= 0; i--) {
+          const d = new Date(n.getTime() + 3*3600000);
+          d.setDate(d.getDate() - i);
+          const ds = d.toISOString().slice(0,10),
+                done = lh.includes(ds),
+                today = ds === getMoscowDate(),
+                rw = getDailyReward(s > 0 && done ? Math.min(s, 7) : 1);
+          days.push({ ds, done, today, dayNum: d.getDate(), reward: done ? rw : null });
+        }
+        let html = '<div class="daily-calendar"><h3 class="section-title">📅 Ежедневный вход</h3><div class="daily-streak-info"><span>🔥 Серия: '+s+' дн.</span><span>🏆 Рекорд: '+lo+' дн.</span><span>📊 Всего: '+to+' вх.</span></div><div class="daily-calendar-grid">';
+        const dn = ['Пн','Вт','Ср','Чт','Пт','Сб','Вс'];
+        days.forEach((day, idx) => {
+          const d = new Date(n.getTime() + 3*3600000);
+          d.setDate(d.getDate() - (6 - idx));
+          const dayName = dn[d.getDay() === 0 ? 6 : d.getDay() - 1];
+          let cls = '';
+          if (day.today && day.done) cls = 'completed today';
+          else if (day.today) cls = 'today';
+          else if (day.done) cls = 'completed';
+          else cls = 'missed';
+          html += `<div class="daily-day ${cls}" title="${day.ds}"><div>${dayName}</div><div class="day-num">${day.dayNum}</div>${day.reward ? `<div class="day-reward">+${day.reward.points}</div>` : ''}</div>`;
+        });
+        html += '</div></div>';
+        return html;
+      }
+
+      function getMoscowDate(){ return new Date(Date.now()+3*3600000).toISOString().slice(0,10); }
+      function getDailyReward(day){ const r={1:{points:2,lokoin:1},2:{points:3,lokoin:1},3:{points:5,lokoin:2},4:{points:5,lokoin:2},5:{points:8,lokoin:3},6:{points:8,lokoin:3},7:{points:12,lokoin:5}}; return day>7?r[7]:r[day]||r[1]; }
+
+      async function loadUserAwards(uid) {
+        try {
+          const s = await db.collection('users').doc(uid).collection('awarded').get();
+          if (s.empty) return [];
+          const a = [];
+          for (const doc of s.docs) {
+            const ad = doc.data();
+            const adoc = await db.collection('awards').doc(ad.awardId).get();
+            if (adoc.exists) a.push({ ...adoc.data(), id: adoc.id, comment: ad.comment, awardedAt: ad.awardedAt });
+          }
+          a.sort((x, y) => (y.awardedAt?.seconds || 0) - (x.awardedAt?.seconds || 0));
+          return a;
+        } catch (e) { return []; }
+      }
+
+      function renderFullSkeleton(container) {
+        container.innerHTML = `<div class="profile-box skeleton-block">
+          <div class="profile-header" style="display:flex; align-items:center; gap:1rem;">
+            <div class="skeleton-avatar"></div>
+            <div><div class="skeleton-name"></div><div class="skeleton-badge"></div></div>
+          </div>
+          <div style="margin-top:1rem;"><div class="skeleton-text" style="width:60%;"></div><div class="skeleton-text" style="width:40%;"></div></div>
+          <h3 class="section-title">Календарь</h3>
+          <div class="skeleton-calendar-day"></div> <div class="skeleton-calendar-day"></div> <div class="skeleton-calendar-day"></div> <div class="skeleton-calendar-day"></div> <div class="skeleton-calendar-day"></div> <div class="skeleton-calendar-day"></div> <div class="skeleton-calendar-day"></div>
+          <h3 class="section-title">Награды</h3>
+          <div class="skeleton-text" style="width:50%;"></div>
+          <h3 class="section-title">Достижения</h3>
+          <div>${Array.from({length:5}, () => '<span class="skeleton-achievement"></span>').join('')}</div>
+          <h3 class="section-title">История игр</h3>
+          <div><div class="skeleton-text" style="width:100%;"></div><div class="skeleton-text" style="width:90%;"></div><div class="skeleton-text" style="width:80%;"></div></div>
+          <h3 class="section-title">Статистика</h3>
+          <div class="stats-grid" style="grid-template-columns: repeat(2,1fr);">
+            <div class="skeleton-stat"></div><div class="skeleton-stat"></div><div class="skeleton-stat"></div><div class="skeleton-stat"></div>
+          </div>
+          <p class="loading-note">Загрузка профиля...</p>
+        </div>`;
+      }
+
+      async function switchAvatarEmoji(emoji, user) {
+        try {
+          const updateData = emoji ? { avatarEmoji: emoji } : { avatarEmoji: firebase.firestore.FieldValue.delete() };
+          await firebaseUpdateProfile(user.uid, updateData);
+          user.avatarEmoji = emoji || null;
+          setCurrentUser(user);
+          const avatarDiv = document.querySelector('.avatar-circle');
+          if (avatarDiv) {
+            if (emoji) {
+              avatarDiv.textContent = emoji;
+              avatarDiv.style.fontSize = '2.5rem';
+              avatarDiv.style.backgroundColor = '';
+              avatarDiv.classList.add('avatar-emoji');
+            } else {
+              avatarDiv.textContent = getInitials(user.username);
+              avatarDiv.style.fontSize = '';
+              avatarDiv.style.backgroundColor = getColorFromUid(user.uid);
+              avatarDiv.classList.remove('avatar-emoji');
+            }
+          }
+          document.querySelectorAll('.avatar-option').forEach(opt => {
+            opt.classList.toggle('selected', opt.dataset.emoji === (emoji || ''));
+          });
+          showToast(emoji ? `Аватар изменён на ${emoji}` : 'Аватар сброшен на инициалы', 'success');
+        } catch (e) {
+          showToast('Ошибка смены аватара', 'error');
+        }
+      }
+
+      async function renderProfile(user, awards, isCached = false) {
+        const container = document.getElementById('profile-container');
+        if (!container) return;
+
+        const achCfg = getAchievementsConfig();
+        const purchased = user.purchasedItems || [];
+        const hasTheme = purchased.includes('dark_theme');
+        const emailVerified = auth.currentUser ? auth.currentUser.emailVerified : false;
+        const dailyLogin = user.dailyLogin || {};
+        const gameHistory = user.gameHistory || [];
+        const achievements = user.achievements || [];
+        const hasGoldFrame = purchased.includes('gold_frame');
+        const hasAnimatedAvatar = purchased.includes('animated_avatar');
+        const hasCustomStatus = purchased.includes('custom_status');
+        const showGoldFrame = user.showGoldFrame !== false;
+        const showAnimatedAvatar = user.showAnimatedAvatar !== false;
+        let avatarClass = '';
+        if (hasGoldFrame && hasAnimatedAvatar && showGoldFrame && showAnimatedAvatar) avatarClass = 'gold-frame animated-avatar';
+        else if (hasGoldFrame && showGoldFrame) avatarClass = 'gold-frame';
+        else if (hasAnimatedAvatar && showAnimatedAvatar) avatarClass = 'animated-avatar';
+        const customStatus = user.customStatus || '';
+        const ownedAvatars = user.ownedAvatars || [];
+        const avatarHtml = typeof renderAvatarDiv === 'function' ? renderAvatarDiv(user, avatarClass) : `<div class="avatar-circle ${avatarClass}" style="background-color:${getColorFromUid(user.uid)}">${getInitials(user.username)}</div>`;
+
+        // Активные временные эффекты
+        const activeEffects = typeof getActiveEffectsInfo === 'function' ? getActiveEffectsInfo(user) : [];
+        let effectsHtml = '';
+        if (activeEffects.length > 0) {
+          effectsHtml = `<div class="active-effects">
+            <h3 class="section-title">✨ Активные эффекты</h3>
+            ${activeEffects.map(e => `<div class="effect-item">
+              <span class="effect-icon">${e.name.split(' ')[0] || '✨'}</span>
+              <span class="effect-name">${e.name}</span>
+              <span class="effect-timer">🕒 ${e.remainingText}</span>
+            </div>`).join('')}
+          </div>`;
+        }
+
+        let html = `<div class="profile-box">
+          <div class="profile-header">${avatarHtml}<div><h2>${user.username}</h2><span class="badge badge-${user.role}">${user.role}</span>${hasCustomStatus && customStatus ? `<div class="custom-status-text">«${customStatus}»</div>` : ''}${user.department ? `<p class="profile-department"><strong>Отдел:</strong> ${user.department}</p>` : ''}<p><small>${user.email}</small></p></div></div>
+          ${!emailVerified ? '<div class="verify-warning">⚠️ Email не подтверждён. <button class="btn" id="resend-verify-btn">Отправить письмо</button></div>' : ''}
+          <div class="profile-details"><p><strong>Баллы:</strong> ${user.points || 0}</p><p><strong>Локоины:</strong> ${user.lokoin_balance || 0}</p><p><strong>О себе:</strong> ${user.description || '—'}</p></div>
+          ${effectsHtml}
+          ${buildDailyCalendar(dailyLogin)}
+          <div class="awards-section" id="awards-container">
+            ${awards ? `<h3 class="section-title">🎖️ Награды</h3>
+              <div class="awards-grid">${awards.map(a => `<div class="award-card" data-award-id="${a.id}"><div class="award-card-icon"><img src="img/awards/${a.icon}" alt="${a.name}" onerror="this.parentElement.innerHTML='🎖️'"></div><div class="award-card-info"><div class="award-card-name">${a.name}</div>${a.comment ? `<div class="award-card-comment">${a.comment}</div>` : ''}</div></div>`).join('')}</div>` :
+              (awards === undefined ? '<p class="loading-note">Загрузка наград...</p>' : '<p class="no-data">Нет наград.</p>')}
+          </div>
+          <h3 class="section-title">Достижения (${achievements.length}/${achCfg.length})</h3>
+          <div class="achievements-grid">${achCfg.map(ach => {
+            const unl = achievements.includes(ach.id);
+            const hid = ach.hidden && !unl;
+            return `<div class="achievement-item ${unl ? 'unlocked' : 'locked'}" data-ach-id="${ach.id}"><span class="ach-icon">${hid ? '❓' : ach.icon}</span><span class="ach-name">${hid ? '???' : ach.name}</span></div>`;
+          }).join('')}</div>
+          <h3 class="section-title">История игр</h3><div id="history-container">${gameHistory.length === 0 ? '<p class="no-data">Пока не сыграно ни одной игры.</p>' : `<table class="history-table"><thead><tr><th>Игра</th><th>Баллы</th><th>Дата</th></tr></thead><tbody id="history-body"></tbody></table><div id="more-container" style="text-align:center;"></div>`}</div>
+          <h3 class="section-title">Статистика</h3><div id="stats-container">${buildStatsHTML(gameHistory)}</div>
+          ${hasTheme ? `<div class="accordion"><button class="accordion-header"><span>🎨 Тема</span><span class="accordion-arrow">▼</span></button><div class="accordion-content"><div><div class="theme-btns"><button class="theme-btn ${user.activeTheme !== 'dark' ? 'active' : ''}" data-theme="light">☀️ Светлая</button><button class="theme-btn ${user.activeTheme === 'dark' ? 'active' : ''}" data-theme="dark">🌙 Тёмная</button></div></div></div></div>` : ''}
+          ${hasGoldFrame || hasAnimatedAvatar ? `<div class="accordion"><button class="accordion-header"><span>✨ Эффекты профиля</span><span class="accordion-arrow">▼</span></button><div class="accordion-content"><div>${hasGoldFrame ? `<div class="effect-toggle"><label><input type="checkbox" id="toggle-gold-frame" ${showGoldFrame ? 'checked' : ''}> 🖼️ Золотая рамка</label></div>` : ''}${hasAnimatedAvatar ? `<div class="effect-toggle"><label><input type="checkbox" id="toggle-animated-avatar" ${showAnimatedAvatar ? 'checked' : ''}> ✨ Анимация аватара</label></div>` : ''}</div></div></div>` : ''}
+          <div class="accordion"><button class="accordion-header"><span>✏️ Редактировать профиль</span><span class="accordion-arrow">▼</span></button><div class="accordion-content"><div class="profile-edit">
+            <div class="form-group"><label for="desc">О себе</label><textarea id="desc" rows="3">${user.description || ''}</textarea></div>
+            ${hasCustomStatus ? `<div class="form-group"><label for="custom-status">Кастомный статус</label><input type="text" id="custom-status" value="${customStatus}"></div>` : ''}
+            ${ownedAvatars.length > 0 ? `<div class="form-group"><label>Аватар</label><div class="avatar-picker" id="avatar-picker">
+              <div class="avatar-option default ${!user.avatarEmoji ? 'selected' : ''}" data-emoji="" title="По умолчанию (инициалы)">${getInitials(user.username)}</div>
+              ${ownedAvatars.map(e => `<div class="avatar-option ${user.avatarEmoji === e ? 'selected' : ''}" data-emoji="${e}" title="${e}">${e}</div>`).join('')}
+            </div></div>` : ''}
+            <button class="btn" id="save-profile-btn">Сохранить</button>
+          </div></div></div>
+          <div class="accordion"><button class="accordion-header"><span>🔒 Сменить пароль</span><span class="accordion-arrow">▼</span></button><div class="accordion-content"><div class="profile-password-change"><div class="form-group"><label for="old-password">Старый пароль</label><input type="password" id="old-password"></div><div class="form-group"><label for="new-password">Новый пароль</label><input type="password" id="new-password"></div><button class="btn" id="change-password-btn">Сменить</button></div></div></div>
+          <button class="btn btn-logout" id="logout-btn">Выйти</button>
+        </div>`;
+
+        container.innerHTML = html;
+
+        document.querySelectorAll('.avatar-option').forEach(option => {
+          option.addEventListener('click', () => {
+            const emoji = option.dataset.emoji || null;
+            switchAvatarEmoji(emoji, user);
+          });
+        });
+
+        if (awards && awards.length) {
+          document.querySelectorAll('.award-card').forEach(c => {
+            c.addEventListener('click', () => {
+              const a = awards.find(x => x.id === c.dataset.awardId);
+              if (a) showAwardDetailModal(a);
+            });
+          });
+        }
+
+        document.querySelectorAll('.achievement-item').forEach(i => i.addEventListener('click', async () => {
+          const ach = achCfg.find(x => x.id === i.dataset.achId);
+          if (ach) {
+            const unl = achievements.includes(ach.id);
+            await showAchievementModal(ach, unl);
+          }
+        }));
+
+        document.querySelectorAll('.accordion-header').forEach(h => h.addEventListener('click', () => {
+          h.parentElement.classList.toggle('open');
+        }));
+
+        if (gameHistory.length > 0) {
+          const sorted = [...gameHistory].reverse();
+          const tbody = document.getElementById('history-body'),
+                moreCont = document.getElementById('more-container');
+          let disp = 5;
+          const step = 10;
+          function renderRows() {
+            const slice = sorted.slice(0, disp);
+            tbody.innerHTML = slice.map(e => {
+              const dt = new Date(e.timestamp).toLocaleString('ru-RU', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+              const gn = e.game === 'clicker' ? '🖱️ Кликер' : e.game === 'memory' ? '🧠 Найди пару' : e.game === 'snake' ? '🐍 Змейка' : e.game;
+              return `<tr><td>${gn}</td><td>+${e.points}</td><td>${dt}</td></tr>`;
+            }).join('');
+            if (disp < sorted.length) {
+              moreCont.innerHTML = `<button class="btn-more" id="load-more-btn">Загрузить ещё</button>`;
+              document.getElementById('load-more-btn').addEventListener('click', () => {
+                disp = Math.min(disp + step, sorted.length);
+                renderRows();
+              });
+            } else {
+              moreCont.innerHTML = '';
+            }
+          }
+          renderRows();
+        }
+
+        if (hasTheme) {
+          document.querySelectorAll('.theme-btn').forEach(b => b.addEventListener('click', async () => {
+            const t = b.dataset.theme;
+            await firebaseUpdateProfile(user.uid, { activeTheme: t });
+            document.body.classList.toggle('dark-theme', t === 'dark');
+            document.querySelectorAll('.theme-btn').forEach(x => x.classList.remove('active'));
+            b.classList.add('active');
+            showToast('Тема изменена', 'info');
+          }));
+        }
+
+        const resendBtn = document.getElementById('resend-verify-btn');
+        if (resendBtn) resendBtn.addEventListener('click', async () => {
+          try { await auth.currentUser.sendEmailVerification(); showToast('Письмо отправлено!', 'success'); } catch (e) { showToast('Ошибка: ' + e.message, 'error'); }
+        });
+
+        document.getElementById('save-profile-btn').addEventListener('click', async () => {
+          const desc = document.getElementById('desc').value.trim();
+          const data = { description: desc };
+          if (hasCustomStatus) data.customStatus = document.getElementById('custom-status').value.trim();
+          try {
+            await firebaseUpdateProfile(user.uid, data);
+            showToast('Сохранено', 'success');
+          } catch (e) { showToast('Ошибка сохранения', 'error'); }
+        });
+
+        document.getElementById('change-password-btn').addEventListener('click', async () => {
+          const old = document.getElementById('old-password').value,
+                nw = document.getElementById('new-password').value.trim();
+          if (!old || !nw) return;
+          try {
+            const cred = firebase.auth.EmailAuthProvider.credential(user.email, old);
+            await auth.currentUser.reauthenticateWithCredential(cred);
+            await auth.currentUser.updatePassword(nw);
+            showToast('Пароль изменён', 'success');
+          } catch (e) { showToast('Ошибка: ' + e.message, 'error'); }
+        });
+
+        document.getElementById('logout-btn').addEventListener('click', () => { firebaseLogout(); });
+
+        if (hasGoldFrame) {
+          document.getElementById('toggle-gold-frame').addEventListener('change', async function() {
+            await firebaseUpdateProfile(user.uid, { showGoldFrame: this.checked });
+            location.reload();
+          });
+        }
+        if (hasAnimatedAvatar) {
+          document.getElementById('toggle-animated-avatar').addEventListener('change', async function() {
+            await firebaseUpdateProfile(user.uid, { showAnimatedAvatar: this.checked });
+            location.reload();
+          });
+        }
+      }
+
+      const achModal = document.getElementById('ach-modal'),
+            achModalClose = document.getElementById('ach-modal-close'),
+            achModalIcon = document.getElementById('ach-modal-icon'),
+            achModalTitle = document.getElementById('ach-modal-title'),
+            achModalDesc = document.getElementById('ach-modal-desc'),
+            achModalStatus = document.getElementById('ach-modal-status');
+
+      async function showAchievementModal(ach, unlocked) {
+        achModalIcon.textContent = ach.hidden && !unlocked ? '❓' : ach.icon;
+        achModalTitle.textContent = ach.hidden && !unlocked ? '???' : ach.name;
+        achModalDesc.textContent = ach.hidden && !unlocked ? 'Откройте, чтобы узнать' : ach.description;
+        let st = '';
+        if (!ach.hidden || unlocked) {
+          const p = typeof getAchievementStats === 'function' ? await getAchievementStats(ach.id) : 0;
+          st = `<br><small style="color:#888;">Получили ${p}% пользователей</small>`;
+        }
+        achModalStatus.innerHTML = unlocked ? '<span class="ach-unlocked-status">✅ Получено</span>' + st : '<span class="ach-locked-status">🔒 Ещё не получено</span>' + st;
+        achModal.style.display = 'flex';
+      }
+      achModalClose.addEventListener('click', () => { achModal.style.display = 'none'; });
+      window.addEventListener('click', e => { if (e.target === achModal) achModal.style.display = 'none'; });
+
+      const awardDetailModal = document.getElementById('award-detail-modal');
+      document.getElementById('award-detail-close').addEventListener('click', () => { awardDetailModal.style.display = 'none'; });
+      window.addEventListener('click', e => { if (e.target === awardDetailModal) awardDetailModal.style.display = 'none'; });
+
+      function showAwardDetailModal(award) {
+        document.getElementById('award-detail-icon').innerHTML = `<img src="img/awards/${award.icon}" alt="${award.name}" onerror="this.parentElement.innerHTML='🎖️'">`;
+        document.getElementById('award-detail-title').textContent = award.name;
+        document.getElementById('award-detail-desc').textContent = award.description || '';
+        document.getElementById('award-detail-comment').textContent = award.comment ? `«${award.comment}»` : '';
+        awardDetailModal.style.display = 'flex';
+      }
+
+      const dailyRewardModal = document.getElementById('daily-reward-modal');
+      document.getElementById('daily-reward-close').addEventListener('click', () => { dailyRewardModal.style.display = 'none'; });
+      document.getElementById('daily-reward-claim-btn').addEventListener('click', () => { dailyRewardModal.style.display = 'none'; });
+      window.addEventListener('click', e => { if (e.target === dailyRewardModal) dailyRewardModal.style.display = 'none'; });
+
+      function showDailyRewardModal(rd) {
+        document.getElementById('daily-reward-streak').textContent = `День ${rd.streak} подряд`;
+        document.getElementById('daily-reward-points').textContent = `+${rd.points}`;
+        document.getElementById('daily-reward-lokoin').textContent = `+${rd.lokoin}`;
+        dailyRewardModal.style.display = 'flex';
+      }
+
+      document.addEventListener('DOMContentLoaded', async () => {
+        await loadDepartments();
+        const container = document.getElementById('profile-container');
+
+        auth.onAuthStateChanged(async (firebaseUser) => {
+          if (!firebaseUser) {
+            container.innerHTML = `<div class="login-prompt"><h3>🔒 Вы не авторизованы</h3><p>Войдите в профиль, чтобы отслеживать баллы, достижения и участвовать в ивентах.</p><a href="login.html?redirect=profile.html" class="btn">Войти</a></div>`;
+            return;
+          }
+
+          const cached = getCachedProfile();
+          if (cached) {
+            renderProfile(cached.user, cached.awards, true);
+            loadFreshProfile(firebaseUser, container, true);
+          } else {
+            renderFullSkeleton(container);
+            loadFreshProfile(firebaseUser, container, false);
+          }
+        });
+
+        async function loadFreshProfile(firebaseUser, container, isCached) {
+          try {
+            const loginResult = await processDailyLogin(firebaseUser.uid);
+            const doc = await db.collection('users').doc(firebaseUser.uid).get();
+            if (!doc.exists) {
+              auth.signOut();
+              container.innerHTML = '<p class="error-message">Профиль не найден. Пожалуйста, перезайдите.</p>';
+              return;
+            }
+
+            const u = doc.data();
+            const user = { uid: firebaseUser.uid, email: firebaseUser.email, ...u };
+            syncUserToLocal(user);
+
+            if (user.activeTheme === 'dark') document.body.classList.add('dark-theme');
+            else document.body.classList.remove('dark-theme');
+
+            let awards = undefined;
+            loadUserAwards(user.uid).then(a => {
+              const awardsContainer = document.getElementById('awards-container');
+              if (awardsContainer) {
+                if (a.length) {
+                  awardsContainer.innerHTML = `<h3 class="section-title">🎖️ Награды</h3><div class="awards-grid">${a.map(award => `<div class="award-card" data-award-id="${award.id}"><div class="award-card-icon"><img src="img/awards/${award.icon}" alt="${award.name}" onerror="this.parentElement.innerHTML='🎖️'"></div><div class="award-card-info"><div class="award-card-name">${award.name}</div>${award.comment ? `<div class="award-card-comment">${award.comment}</div>` : ''}</div></div>`).join('')}</div>`;
+                  document.querySelectorAll('.award-card').forEach(c => {
+                    c.addEventListener('click', () => {
+                      const aw = a.find(x => x.id === c.dataset.awardId);
+                      if (aw) showAwardDetailModal(aw);
+                    });
+                  });
+                } else {
+                  awardsContainer.innerHTML = '<p class="no-data">Нет наград.</p>';
+                }
+              }
+              awards = a;
+            }).catch(() => {
+              if (document.getElementById('awards-container')) {
+                document.getElementById('awards-container').innerHTML = '<p class="error-message">Не удалось загрузить награды.</p>';
+              }
+              awards = null;
+            });
+
+            renderProfile(user, awards, false);
+
+            if (loginResult) {
+              setTimeout(() => showDailyRewardModal(loginResult), 500);
+            }
+
+            if (!isCached) {
+              setTimeout(async () => {
+                const freshAwards = await loadUserAwards(user.uid);
+                setCachedProfile({ user, awards: freshAwards });
+              }, 1500);
+            } else {
+              const freshAwards = await loadUserAwards(user.uid);
+              setCachedProfile({ user, awards: freshAwards });
+            }
+          } catch (e) {
+            console.error('Ошибка загрузки профиля:', e);
+            if (!isCached) {
+              container.innerHTML = '<p class="error-message">Не удалось загрузить профиль. Пожалуйста, обновите страницу.</p>';
+            }
+          }
+        }
+      });
+    })();
+  </script>
+</body>
+</html>

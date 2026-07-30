@@ -1,0 +1,613 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Сапёр – КЦ Игры</title>
+    <link rel="stylesheet" href="../css/style.css">
+    <style>
+        .minesweeper-game { max-width: 480px; margin: 2rem auto; text-align: center; background: white; padding: 2rem; border-radius: var(--border-radius); box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05); }
+        .ms-stats { display: flex; justify-content: space-around; align-items: center; margin-bottom: 1rem; font-weight: 600; background: #f7f7f7; border-radius: 8px; padding: 0.5rem 1rem; gap: 0.5rem; }
+        .ms-stats span { font-size: 1.1rem; }
+        #minesCount { color: #e74c3c; }
+        #timerDisplay { font-family: monospace; font-size: 1.2rem; background: #fff; padding: 0.2rem 0.8rem; border-radius: 6px; border: 1px solid #ccc; }
+        #smileyBtn {
+            font-size: 2rem; cursor: pointer; background: none; border: none; line-height: 1; padding: 0 0.5rem;
+            transition: transform 0.2s ease; display: inline-block;
+        }
+        #smileyBtn:active { transform: scale(1.3); }
+        .canvas-wrapper { position: relative; display: inline-block; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1); }
+        canvas { display: block; touch-action: manipulation; }
+        .ms-controls { margin-bottom: 1rem; color: #666; font-size: 0.9rem; }
+        .ms-message { font-weight: bold; min-height: 1.5rem; margin: 0.5rem 0; color: #2c3e50; }
+        .ms-back { display: inline-block; margin-top: 0.5rem; color: var(--color-primary); text-decoration: none; }
+        .modal-overlay {
+            position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 1000;
+            backdrop-filter: blur(4px);
+        }
+        .modal {
+            background: white; padding: 2rem; border-radius: 12px; max-width: 360px; text-align: center;
+            box-shadow: 0 8px 30px rgba(0,0,0,0.2);
+        }
+        .modal h3 { margin-bottom: 1rem; font-size: 1.5rem; }
+        .modal p { margin-bottom: 1rem; font-size: 0.95rem; line-height: 1.6; }
+        .modal button { margin: 0.3rem; padding: 0.6rem 1.4rem; border: none; border-radius: 6px; cursor: pointer; font-size: 1rem; transition: background 0.2s; }
+        .btn-play { background: #27ae60; color: white; } .btn-play:hover { background: #219a52; }
+        .btn-back { background: #ccc; } .btn-back:hover { background: #b3b3b3; }
+        .leaderboard-ms { margin-top: 1.5rem; text-align: left; } .leaderboard-ms h3 { text-align: center; margin-bottom: 0.5rem; font-size: 1.1rem; }
+        .leaderboard-ms table { width: 100%; border-collapse: collapse; font-size: 0.9rem; } .leaderboard-ms th, .leaderboard-ms td { padding: 0.4rem 0.5rem; border-bottom: 1px solid #eee; } .leaderboard-ms th { background: #f5f5f5; font-weight: 600; } .leaderboard-ms .me { background: #e6f7ff; font-weight: 600; }
+        @media (max-width: 600px) { .ms-controls { font-size: 0.8rem; } }
+        .mobile-warning { display: none; padding: 2rem; text-align: center; color: #e67e22; font-weight: 600; font-size: 1.1rem; line-height: 1.6; }
+        .game-over-overlay {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.6); backdrop-filter: blur(3px); display: flex; flex-direction: column;
+            align-items: center; justify-content: center; border-radius: 8px;
+            animation: fadeIn 0.4s ease; z-index: 10;
+        }
+        .game-over-overlay .game-over-text { color: white; font-size: 2rem; font-weight: bold; margin-bottom: 0.5rem; text-shadow: 2px 2px 4px rgba(0,0,0,0.5); }
+        .game-over-overlay .game-over-reason { color: #ddd; font-size: 1rem; margin-bottom: 1rem; }
+        .game-over-overlay .game-over-score { color: #f1c40f; font-size: 1.2rem; margin-bottom: 1.5rem; }
+        .game-over-overlay .btn {
+            background: white; color: #333; font-weight: 600; padding: 0.6rem 2rem;
+            border-radius: 20px; cursor: pointer; border: none;
+        }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+    </style>
+</head>
+<body>
+    <div id="startModal" class="modal-overlay">
+        <div class="modal">
+            <h3>💣 Сапёр</h3>
+            <p>Открывайте ячейки, избегая мин.<br>
+            <strong>Левая кнопка мыши</strong> — открыть клетку.<br>
+            <strong>Правая кнопка мыши</strong> — поставить/снять флаг 🚩.<br>
+            <strong>Клик по цифре</strong> (когда вокруг достаточно флагов) — автоматически открыть соседей.</p>
+            <p><small>Поле 9×9, 10 мин</small></p>
+            <button class="btn-play" id="btnPlay">Играть</button>
+            <button class="btn-back" id="btnBack">Назад</button>
+            <p style="margin-top:0.8rem;color:#888;">или нажмите <strong>Enter</strong></p>
+        </div>
+    </div>
+
+    <div class="minesweeper-game" id="gameContainer">
+        <h2>💣 Сапёр</h2>
+        <div class="mobile-warning" id="mobileWarning">
+            ⚠️ Игра не адаптирована для мобильных устройств.<br>
+            Пожалуйста, воспользуйтесь ПК или сыграйте в другую игру.
+        </div>
+        <div id="gameContent">
+            <div class="ms-stats">
+                <span>💣 <span id="minesCount">10</span></span>
+                <button id="smileyBtn" title="Новая игра">😊</button>
+                <span>⏱️ <span id="timerDisplay">00:00</span></span>
+            </div>
+            <div class="canvas-wrapper" id="canvas-wrapper">
+                <canvas id="gameCanvas" width="360" height="360"></canvas>
+            </div>
+            <div class="ms-controls">ЛКМ — открыть | ПКМ — флаг 🚩 | Клик по цифре — автооткрытие</div>
+            <p class="ms-message" id="message"></p>
+        </div>
+        <div class="leaderboard-ms" id="ms-leaderboard">
+            <h3>🏆 Лучшие сапёры (время)</h3>
+            <table id="top-table"><thead><tr><th>#</th><th>Игрок</th><th>Время</th></tr></thead><tbody></tbody></table>
+            <p id="auth-warning" style="text-align:center; display:none;">Войдите, чтобы увидеть рейтинг.</p>
+        </div>
+        <a href="../games.html" class="ms-back">← Вернуться к играм</a>
+    </div>
+
+    <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore-compat.js"></script>
+    <script src="../js/firebase-config.js"></script>
+    <script src="../js/firebase-auth.js"></script>
+    <script src="../js/storage.js"></script>
+    <script src="../js/achievements.js"></script>
+    <script src="../js/notifications.js"></script>
+    <script src="../js/easter-eggs.js"></script>
+    <script src="../js/main.js"></script>
+    <script>
+        (function() {
+            if (typeof auth === 'undefined' || typeof db === 'undefined') {
+                document.body.innerHTML = '<p style="text-align:center; padding:3rem;">Ошибка загрузки компонентов. Пожалуйста, обновите страницу.</p>';
+                return;
+            }
+
+            const isMobile = /Android|iPhone|iPad|iPod|webOS/i.test(navigator.userAgent) || 
+                             ('ontouchstart' in window && navigator.maxTouchPoints > 0);
+            
+            if (isMobile) {
+                document.getElementById('mobileWarning').style.display = 'block';
+                document.getElementById('gameContent').style.display = 'none';
+                if (typeof showToast === 'function') {
+                    showToast('Игра не адаптирована для мобильных устройств. Используйте ПК.', 'info');
+                }
+                return;
+            }
+
+            const startModal = document.getElementById('startModal'),
+                  btnPlay = document.getElementById('btnPlay'),
+                  btnBack = document.getElementById('btnBack');
+            const canvas = document.getElementById('gameCanvas'),
+                  ctx = canvas.getContext('2d');
+            const minesCountSpan = document.getElementById('minesCount'),
+                  timerDisplay = document.getElementById('timerDisplay'),
+                  messageEl = document.getElementById('message'),
+                  smileyBtn = document.getElementById('smileyBtn');
+            const COLS = 9, ROWS = 9, MINES_TOTAL = 10;
+            const DPR = window.devicePixelRatio || 1;
+            const LOGICAL_WIDTH = 360, LOGICAL_HEIGHT = 360;
+            const CELL_SIZE = LOGICAL_WIDTH / COLS;
+            const SAFE_CELLS = COLS * ROWS - MINES_TOTAL;
+
+            // Установка физических размеров canvas с учётом DPR
+            canvas.width = LOGICAL_WIDTH * DPR;
+            canvas.height = LOGICAL_HEIGHT * DPR;
+            canvas.style.width = LOGICAL_WIDTH + 'px';
+            canvas.style.height = LOGICAL_HEIGHT + 'px';
+            ctx.scale(DPR, DPR);
+
+            let board = [], minesPlanted = false, gameActive = false, gameWin = false, gameOver = false;
+            let flagsPlaced = 0, safeRevealed = 0;
+            let timerStart = null, timerInterval = null, elapsedSeconds = 0;
+            let bestTime = Infinity, currentUid = null;
+            let bgCanvas = null;
+
+            class Cell {
+                constructor(row, col) {
+                    this.row = row; this.col = col; this.mine = false; this.revealed = false; this.flagged = false; this.neighborMines = 0;
+                }
+            }
+
+            function createEmptyBoard() {
+                const b = [];
+                for (let r = 0; r < ROWS; r++) {
+                    const row = [];
+                    for (let c = 0; c < COLS; c++) row.push(new Cell(r, c));
+                    b.push(row);
+                }
+                return b;
+            }
+
+            function createBackground() {
+                if (!bgCanvas) {
+                    bgCanvas = document.createElement('canvas');
+                    bgCanvas.width = LOGICAL_WIDTH;
+                    bgCanvas.height = LOGICAL_HEIGHT;
+                }
+                const bgCtx = bgCanvas.getContext('2d');
+                bgCtx.fillStyle = '#f5f5f5';
+                bgCtx.fillRect(0, 0, LOGICAL_WIDTH, LOGICAL_HEIGHT);
+                bgCtx.strokeStyle = '#e0e0e0';
+                bgCtx.lineWidth = 0.5;
+                for (let i = 0; i <= COLS; i++) {
+                    bgCtx.beginPath();
+                    bgCtx.moveTo(i * CELL_SIZE, 0);
+                    bgCtx.lineTo(i * CELL_SIZE, LOGICAL_HEIGHT);
+                    bgCtx.stroke();
+                }
+                for (let j = 0; j <= ROWS; j++) {
+                    bgCtx.beginPath();
+                    bgCtx.moveTo(0, j * CELL_SIZE);
+                    bgCtx.lineTo(LOGICAL_WIDTH, j * CELL_SIZE);
+                    bgCtx.stroke();
+                }
+            }
+
+            function startTimer() {
+                stopTimer();
+                timerStart = Date.now();
+                elapsedSeconds = 0;
+                timerDisplay.textContent = '00:00';
+                timerInterval = setInterval(() => {
+                    const totalSec = Math.floor((Date.now() - timerStart) / 1000);
+                    elapsedSeconds = totalSec;
+                    const mins = String(Math.floor(totalSec / 60)).padStart(2, '0');
+                    const secs = String(totalSec % 60).padStart(2, '0');
+                    timerDisplay.textContent = `${mins}:${secs}`;
+                }, 200);
+            }
+
+            function stopTimer() {
+                if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
+            }
+
+            function formatTime(totalSec) {
+                const m = String(Math.floor(totalSec / 60)).padStart(2, '0');
+                const s = String(totalSec % 60).padStart(2, '0');
+                return `${m}:${s}`;
+            }
+
+            function countAdjacentMines(row, col) {
+                let count = 0;
+                for (let dr = -1; dr <= 1; dr++) {
+                    for (let dc = -1; dc <= 1; dc++) {
+                        const nr = row + dr, nc = col + dc;
+                        if (nr >= 0 && nr < ROWS && nc >= 0 && nc < COLS && board[nr][nc].mine) count++;
+                    }
+                }
+                return count;
+            }
+
+            function plantMines(excludeRow, excludeCol) {
+                const forbidden = new Set();
+                for (let dr = -1; dr <= 1; dr++) {
+                    for (let dc = -1; dc <= 1; dc++) {
+                        const nr = excludeRow + dr, nc = excludeCol + dc;
+                        if (nr >= 0 && nr < ROWS && nc >= 0 && nc < COLS) forbidden.add(nr * COLS + nc);
+                    }
+                }
+                const candidates = [];
+                for (let r = 0; r < ROWS; r++) {
+                    for (let c = 0; c < COLS; c++) {
+                        if (!forbidden.has(r * COLS + c)) candidates.push({ r, c });
+                    }
+                }
+                if (candidates.length < MINES_TOTAL) {
+                    // fallback: оставляем как есть, но не должно случаться
+                    console.warn('Мало места для мин, уменьшаем количество');
+                }
+                for (let i = candidates.length - 1; i > 0; i--) {
+                    const j = Math.floor(Math.random() * (i + 1));
+                    [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
+                }
+                const minesToPlace = Math.min(MINES_TOTAL, candidates.length);
+                for (let i = 0; i < minesToPlace; i++) {
+                    const { r, c } = candidates[i];
+                    board[r][c].mine = true;
+                }
+                for (let r = 0; r < ROWS; r++) {
+                    for (let c = 0; c < COLS; c++) {
+                        if (!board[r][c].mine) board[r][c].neighborMines = countAdjacentMines(r, c);
+                    }
+                }
+                minesPlanted = true;
+                gameActive = true;
+                startTimer();
+            }
+
+            function revealCell(row, col) {
+                const cell = board[row][col];
+                if (!cell || cell.revealed || cell.flagged || !gameActive) return;
+                cell.revealed = true;
+                if (cell.mine) {
+                    gameActive = false; gameOver = true; gameWin = false;
+                    stopTimer();
+                    revealAllMines();
+                    drawBoard();
+                    handleGameEnd();
+                    return;
+                }
+                safeRevealed++;
+                if (cell.neighborMines === 0) {
+                    for (let dr = -1; dr <= 1; dr++) {
+                        for (let dc = -1; dc <= 1; dc++) {
+                            if (dr === 0 && dc === 0) continue;
+                            const nr = row + dr, nc = col + dc;
+                            if (nr >= 0 && nr < ROWS && nc >= 0 && nc < COLS) revealCell(nr, nc);
+                        }
+                    }
+                }
+                if (safeRevealed === SAFE_CELLS && gameActive) {
+                    gameActive = false; gameWin = true; gameOver = true;
+                    stopTimer();
+                    for (let r = 0; r < ROWS; r++) {
+                        for (let c = 0; c < COLS; c++) {
+                            if (board[r][c].mine && !board[r][c].flagged) {
+                                board[r][c].flagged = true; flagsPlaced++;
+                            }
+                        }
+                    }
+                    minesCountSpan.textContent = MINES_TOTAL - flagsPlaced;
+                    drawBoard();
+                    handleGameEnd();
+                }
+            }
+
+            function revealAllMines() {
+                for (let r = 0; r < ROWS; r++) {
+                    for (let c = 0; c < COLS; c++) {
+                        if (board[r][c].mine) board[r][c].revealed = true;
+                    }
+                }
+            }
+
+            function toggleFlag(row, col) {
+                if (!gameActive) return;
+                const cell = board[row][col];
+                if (cell.revealed) return;
+                cell.flagged = !cell.flagged;
+                flagsPlaced += cell.flagged ? 1 : -1;
+                minesCountSpan.textContent = MINES_TOTAL - flagsPlaced;
+                drawBoard();
+            }
+
+            function chordCell(row, col) {
+                const cell = board[row][col];
+                if (!cell.revealed || cell.neighborMines === 0) return;
+                let flags = 0;
+                for (let dr = -1; dr <= 1; dr++) {
+                    for (let dc = -1; dc <= 1; dc++) {
+                        if (dr === 0 && dc === 0) continue;
+                        const nr = row + dr, nc = col + dc;
+                        if (nr >= 0 && nr < ROWS && nc >= 0 && nc < COLS && board[nr][nc].flagged) flags++;
+                    }
+                }
+                if (flags === cell.neighborMines) {
+                    for (let dr = -1; dr <= 1; dr++) {
+                        for (let dc = -1; dc <= 1; dc++) {
+                            if (dr === 0 && dc === 0) continue;
+                            const nr = row + dr, nc = col + dc;
+                            if (nr >= 0 && nr < ROWS && nc >= 0 && nc < COLS) {
+                                const nCell = board[nr][nc];
+                                if (!nCell.revealed && !nCell.flagged) revealCell(nr, nc);
+                            }
+                        }
+                    }
+                }
+            }
+
+            async function handleGameEnd() {
+                if (gameWin) {
+                    messageEl.textContent = `🎉 Победа! Время: ${formatTime(elapsedSeconds)}.`;
+                    smileyBtn.textContent = '😎';
+                    await syncWin();
+                } else {
+                    messageEl.textContent = '💥 Вы подорвались на мине!';
+                    smileyBtn.textContent = '💀';
+                    await syncLoss();
+                }
+                updateTop();
+                showGameOverOverlay();
+            }
+
+            async function syncWin() {
+                if (typeof auth === 'undefined' || !auth.currentUser) return;
+                try {
+                    sessionStorage.removeItem('minesweeper_losses');
+                    const result = typeof addPointsToCurrentUser === 'function' ? await addPointsToCurrentUser(3, 'minesweeper') : null;
+                    if (result && result.success) {
+                        const earned = result.points;
+                        const hasDouble = earned > 3;
+                        showToast(`+${earned} балла${hasDouble ? ' (x2 бонус)' : ''}!`, 'success');
+                    }
+                    if (typeof syncGameStats === 'function') await syncGameStats('minesweeper', { bestTime: elapsedSeconds, completed: true });
+                    if (typeof checkAndAwardAchievements === 'function') await checkAndAwardAchievements();
+                } catch (e) { console.error(e); }
+            }
+
+            async function syncLoss() {
+                if (typeof auth === 'undefined' || !auth.currentUser) return;
+                try {
+                    if (typeof syncGameStats === 'function') await syncGameStats('minesweeper', { loss: true });
+                    if (typeof checkMeteorism === 'function') await checkMeteorism();
+                    if (typeof checkAndAwardAchievements === 'function') await checkAndAwardAchievements();
+                } catch (e) { console.error(e); }
+            }
+
+            function showGameOverOverlay() {
+                const wrapper = document.getElementById('canvas-wrapper');
+                if (!wrapper) return;
+                const old = wrapper.querySelector('.game-over-overlay');
+                if (old) old.remove();
+                const overlay = document.createElement('div');
+                overlay.className = 'game-over-overlay';
+                overlay.innerHTML = `
+                    <div class="game-over-text">${gameWin ? 'Победа!' : 'Игра окончена'}</div>
+                    <div class="game-over-reason">${gameWin ? 'Вы обезвредили все мины!' : 'Вы подорвались на мине'}</div>
+                    <div class="game-over-score">Время: ${formatTime(elapsedSeconds)}</div>
+                    <button class="btn" id="restartFromOverlay">Играть снова</button>
+                `;
+                wrapper.appendChild(overlay);
+                document.getElementById('restartFromOverlay').addEventListener('click', () => {
+                    overlay.remove();
+                    restartGame();
+                });
+            }
+
+            function restartGame() {
+                // удаляем оверлей, если остался
+                const overlay = document.querySelector('.game-over-overlay');
+                if (overlay) overlay.remove();
+
+                stopTimer();
+                gameActive = false; gameOver = false; gameWin = false;
+                minesPlanted = false; flagsPlaced = 0; safeRevealed = 0;
+                elapsedSeconds = 0;
+                board = createEmptyBoard();
+                minesCountSpan.textContent = MINES_TOTAL;
+                timerDisplay.textContent = '00:00';
+                messageEl.textContent = bestTime < Infinity ? `Личный рекорд: ${formatTime(bestTime)}` : '';
+                smileyBtn.textContent = '😊';
+                drawBoard();
+            }
+
+            // Отрисовка с объёмом
+            function drawClosedCell(x, y) {
+                const w = CELL_SIZE - 2, h = CELL_SIZE - 2;
+                const sx = x + 1, sy = y + 1;
+                const gradient = ctx.createLinearGradient(sx, sy, sx + w, sy + h);
+                gradient.addColorStop(0, '#f0f0f0');
+                gradient.addColorStop(0.3, '#d0d0d0');
+                gradient.addColorStop(0.7, '#b0b0b0');
+                gradient.addColorStop(1, '#909090');
+                ctx.fillStyle = gradient;
+                ctx.fillRect(sx, sy, w, h);
+                ctx.fillStyle = 'rgba(255,255,255,0.5)';
+                ctx.fillRect(sx, sy, w, 3);
+                ctx.fillRect(sx, sy, 3, h);
+                ctx.strokeStyle = '#777';
+                ctx.lineWidth = 1;
+                ctx.strokeRect(x + 0.5, y + 0.5, CELL_SIZE - 1, CELL_SIZE - 1);
+            }
+
+            function drawOpenedCell(x, y) {
+                ctx.fillStyle = '#dcdcdc';
+                ctx.fillRect(x + 1, y + 1, CELL_SIZE - 2, CELL_SIZE - 2);
+                ctx.fillStyle = 'rgba(0,0,0,0.06)';
+                ctx.fillRect(x + 1, y + 1, CELL_SIZE - 3, 2);
+                ctx.fillRect(x + 1, y + 1, 2, CELL_SIZE - 3);
+                ctx.strokeStyle = '#bbb';
+                ctx.lineWidth = 0.5;
+                ctx.strokeRect(x + 0.5, y + 0.5, CELL_SIZE - 1, CELL_SIZE - 1);
+            }
+
+            function drawBoard() {
+                ctx.clearRect(0, 0, LOGICAL_WIDTH, LOGICAL_HEIGHT);
+                if (bgCanvas) ctx.drawImage(bgCanvas, 0, 0);
+
+                for (let r = 0; r < ROWS; r++) {
+                    for (let c = 0; c < COLS; c++) {
+                        const cell = board[r][c];
+                        const x = c * CELL_SIZE, y = r * CELL_SIZE;
+                        const cx = x + CELL_SIZE / 2, cy = y + CELL_SIZE / 2;
+
+                        if (cell.revealed) {
+                            drawOpenedCell(x, y);
+                            if (cell.mine) {
+                                ctx.font = 'bold 18px serif';
+                                ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+                                ctx.fillStyle = '#333';
+                                ctx.fillText('💣', cx, cy);
+                            } else if (cell.neighborMines > 0) {
+                                const colors = ['', '#1a6fc4', '#2e7d32', '#d84315', '#6a1b9a', '#b8860b', '#c62828', '#444', '#333'];
+                                ctx.font = 'bold 20px "Segoe UI", sans-serif';
+                                ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+                                ctx.fillStyle = colors[cell.neighborMines] || '#000';
+                                ctx.shadowColor = 'rgba(0,0,0,0.15)'; ctx.shadowBlur = 1;
+                                ctx.fillText(cell.neighborMines, cx, cy);
+                                ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0;
+                            }
+                        } else {
+                            drawClosedCell(x, y);
+                            if (cell.flagged) {
+                                ctx.font = '20px serif';
+                                ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+                                ctx.fillStyle = '#c0392b';
+                                ctx.shadowColor = 'rgba(0,0,0,0.25)'; ctx.shadowBlur = 1;
+                                ctx.fillText('🚩', cx, cy);
+                                ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0;
+                            }
+                        }
+                    }
+                }
+            }
+
+            function getCellFromEvent(e) {
+                const rect = canvas.getBoundingClientRect();
+                const scaleX = LOGICAL_WIDTH / rect.width;
+                const scaleY = LOGICAL_HEIGHT / rect.height;
+                const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+                const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+                const col = Math.floor((clientX - rect.left) * scaleX / CELL_SIZE);
+                const row = Math.floor((clientY - rect.top) * scaleY / CELL_SIZE);
+                if (row >= 0 && row < ROWS && col >= 0 && col < COLS) return { row, col };
+                return null;
+            }
+
+            canvas.addEventListener('mousedown', (e) => {
+                e.preventDefault();
+                if (gameOver) return;
+                const pos = getCellFromEvent(e);
+                if (!pos) return;
+                if (e.button === 0) {
+                    if (!minesPlanted) {
+                        plantMines(pos.row, pos.col);
+                        revealCell(pos.row, pos.col);
+                    } else if (gameActive) {
+                        const cell = board[pos.row][pos.col];
+                        if (cell.revealed && cell.neighborMines > 0) {
+                            chordCell(pos.row, pos.col);
+                        } else if (!cell.revealed) {
+                            revealCell(pos.row, pos.col);
+                        }
+                    }
+                    drawBoard();
+                } else if (e.button === 2) {
+                    if (gameActive) toggleFlag(pos.row, pos.col);
+                }
+            });
+
+            canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+
+            smileyBtn.addEventListener('click', restartGame);
+
+            document.addEventListener('keydown', (e) => {
+                if (e.code === 'Space') {
+                    e.preventDefault();
+                    if (gameOver || !gameActive) {
+                        restartGame();
+                    }
+                }
+            });
+
+            btnPlay.addEventListener('click', () => { startModal.style.display = 'none'; restartGame(); });
+            btnBack.addEventListener('click', () => window.location.href = '../games.html');
+            document.addEventListener('keydown', function enterHandler(e) {
+                if (e.key === 'Enter' && startModal.style.display !== 'none') {
+                    e.preventDefault();
+                    startModal.style.display = 'none';
+                    restartGame();
+                }
+            });
+
+            // Загрузка рекордов
+            if (typeof auth !== 'undefined') {
+                auth.onAuthStateChanged(user => {
+                    if (user) loadBestAndTop();
+                    else updateTopVisibility();
+                });
+            }
+
+            async function loadBestAndTop() {
+                if (typeof auth === 'undefined' || !auth.currentUser) return;
+                currentUid = auth.currentUser.uid;
+                try {
+                    if (typeof db !== 'undefined' && db) {
+                        const doc = await db.collection('users').doc(currentUid).get();
+                        if (doc.exists) {
+                            const stats = doc.data().gameStats?.minesweeper;
+                            if (stats?.bestTime) bestTime = stats.bestTime;
+                        }
+                    }
+                } catch (e) {}
+                updateTopVisibility();
+                updateTop();
+                messageEl.textContent = bestTime < Infinity ? `Личный рекорд: ${formatTime(bestTime)}` : '';
+            }
+
+            function updateTopVisibility() {
+                document.getElementById('auth-warning').style.display = auth.currentUser ? 'none' : 'block';
+                document.getElementById('top-table').style.display = auth.currentUser ? '' : 'none';
+            }
+
+            async function updateTop() {
+                if (typeof auth === 'undefined' || !auth.currentUser || typeof db === 'undefined' || !db) return;
+                const tbody = document.querySelector('#top-table tbody');
+                if (!tbody) return;
+                try {
+                    const snap = await db.collection('users').get();
+                    const players = [];
+                    snap.forEach(doc => {
+                        const d = doc.data();
+                        if (d.role === 'admin') return;
+                        const t = d.gameStats?.minesweeper?.bestTime;
+                        if (t && t > 0) players.push({ uid: doc.id, username: d.username || 'Аноним', time: t });
+                    });
+                    players.sort((a, b) => a.time - b.time);
+                    const top10 = players.slice(0, 10);
+                    tbody.innerHTML = top10.map((p, i) => {
+                        const me = p.uid === currentUid ? ' class="me"' : '';
+                        return `<tr${me}><td>${i+1}</td><td>${p.username}</td><td>${formatTime(p.time)}</td></tr>`;
+                    }).join('');
+                    if (!top10.length) tbody.innerHTML = '<tr><td colspan="3">Пока нет рекордов</td></tr>';
+                } catch (e) {}
+            }
+
+            board = createEmptyBoard();
+            createBackground();
+            drawBoard();
+        })();
+    </script>
+</body>
+</html>

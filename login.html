@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Вход – Геймификация КЦ</title>
+  <link rel="stylesheet" href="css/style.css">
+  <style>
+    .login-page { max-width: 480px; margin: 3rem auto; background: white; padding: 2rem; border-radius: var(--border-radius); box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
+    .auth-tabs { display: flex; gap: 0.5rem; margin-bottom: 1.5rem; border-bottom: 2px solid #eee; padding-bottom: 0.5rem; }
+    .auth-tab { flex: 1; padding: 0.6rem; border: none; background: transparent; cursor: pointer; font-weight: 600; color: #888; border-radius: 6px 6px 0 0; transition: all 0.2s; }
+    .auth-tab.active { color: var(--color-primary); border-bottom: 2px solid var(--color-primary); background: rgba(52, 152, 219, 0.05); }
+    .auth-form { display: none; }
+    .auth-form.active { display: block; }
+    .form-group { margin-bottom: 1rem; }
+    .form-group label { display: block; margin-bottom: 0.3rem; font-weight: 500; }
+    .form-group input, .form-group select { width: 100%; padding: 0.7rem; border: 1px solid #ccc; border-radius: 6px; font-size: 1rem; }
+    .login-btn { width: 100%; padding: 0.8rem; background: var(--color-primary); color: white; border: none; border-radius: 6px; font-size: 1.1rem; font-weight: 600; cursor: pointer; transition: background 0.2s; }
+    .login-btn:hover { background: #2980b9; }
+    .auth-message { margin-top: 1rem; font-size: 0.9rem; text-align: center; }
+    .auth-message.success { color: #27ae60; }
+    .auth-message.error { color: #e74c3c; }
+    .back-link { display: block; text-align: center; margin-top: 1rem; color: var(--color-primary); text-decoration: none; }
+    .back-link:hover { text-decoration: underline; }
+    .forgot-link { display: block; text-align: right; font-size: 0.9rem; margin-top: -0.5rem; margin-bottom: 1rem; color: var(--color-primary); cursor: pointer; }
+    .forgot-link:hover { text-decoration: underline; }
+    .divider { text-align: center; margin: 1rem 0; color: #aaa; position: relative; }
+    .divider::before, .divider::after { content: ''; position: absolute; top: 50%; width: 40%; height: 1px; background: #ddd; }
+    .divider::before { left: 0; } .divider::after { right: 0; }
+    .faq-section { margin-top: 2rem; border-top: 1px solid #eee; padding-top: 1.5rem; }
+    .faq-section h3 { text-align: center; margin-bottom: 1rem; }
+    .faq-item { margin-bottom: 0.8rem; }
+    .faq-item__question { font-weight: 600; color: var(--color-header); cursor: pointer; display: flex; justify-content: space-between; align-items: center; }
+    .faq-item__answer { max-height: 0; overflow: hidden; transition: max-height 0.3s ease; color: #555; font-size: 0.9rem; padding-left: 0.5rem; }
+    .faq-item.open .faq-item__answer { max-height: 100px; margin-top: 0.3rem; }
+    @media (max-width: 480px) { .login-page { margin: 1rem; padding: 1.5rem; } }
+  </style>
+</head>
+<body>
+  <header class="header">
+    <div class="container header__inner">
+      <a href="index.html" class="logo">КЦ-Игры</a>
+      <div id="auth-status" class="auth-status"></div>
+    </div>
+  </header>
+
+  <main class="main">
+    <div class="login-page">
+      <h2 style="text-align:center; margin-bottom:1.5rem;">Вход в профиль</h2>
+      
+      <div class="auth-tabs">
+        <button class="auth-tab active" data-tab="login">Вход</button>
+        <button class="auth-tab" data-tab="register">Регистрация</button>
+      </div>
+
+      <!-- Форма входа -->
+      <div id="login-form" class="auth-form active">
+        <div class="form-group">
+          <label for="login-email">Email</label>
+          <input type="email" id="login-email" placeholder="example@mail.ru" autocomplete="email">
+        </div>
+        <div class="form-group">
+          <label for="login-password">Пароль</label>
+          <input type="password" id="login-password" placeholder="••••••••" autocomplete="current-password">
+        </div>
+        <div class="forgot-link" id="forgot-password-link">Забыли пароль?</div>
+        <button class="login-btn" id="login-btn">Войти</button>
+        <p class="auth-message" id="login-message"></p>
+      </div>
+
+      <!-- Форма регистрации -->
+      <div id="register-form" class="auth-form">
+        <div class="form-group">
+          <label for="reg-email">Email</label>
+          <input type="email" id="reg-email" placeholder="example@mail.ru" autocomplete="email">
+        </div>
+        <div class="form-group">
+          <label for="reg-password">Пароль</label>
+          <input type="password" id="reg-password" placeholder="Минимум 6 символов" autocomplete="new-password">
+        </div>
+        <div class="form-group">
+          <label for="reg-username">Имя</label>
+          <input type="text" id="reg-username" placeholder="Как вас зовут" autocomplete="name">
+        </div>
+        <div class="form-group">
+          <label for="reg-department">Отдел</label>
+          <select id="reg-department"></select>
+        </div>
+        <button class="login-btn" id="register-btn">Зарегистрироваться</button>
+        <p class="auth-message" id="register-message"></p>
+      </div>
+
+      <!-- Блок FAQ -->
+      <div class="faq-section">
+        <h3>❓ Частые вопросы</h3>
+        <div class="faq-item">
+          <div class="faq-item__question">Не приходит письмо подтверждения <span>▼</span></div>
+          <div class="faq-item__answer">Проверьте папку «Спам». Если письма нет, нажмите «Забыли пароль?» — придёт новое письмо. Убедитесь, что email введён без ошибок.</div>
+        </div>
+        <div class="faq-item">
+          <div class="faq-item__question">Как сменить пароль? <span>▼</span></div>
+          <div class="faq-item__answer">Нажмите «Забыли пароль?» на вкладке «Вход». На ваш email придёт ссылка для сброса пароля.</div>
+        </div>
+        <div class="faq-item">
+          <div class="faq-item__question">Зачем подтверждать email? <span>▼</span></div>
+          <div class="faq-item__answer">Это необходимо для безопасности аккаунта и возможности восстановить пароль. Без подтверждения некоторые функции могут быть ограничены.</div>
+        </div>
+      </div>
+
+      <a href="index.html" class="back-link">← На главную</a>
+    </div>
+  </main>
+
+  <!-- Модальное окно восстановления пароля -->
+  <div class="modal-overlay" id="reset-modal" style="display:none;">
+    <div class="modal" style="max-width:400px; text-align:center;">
+      <span class="modal-close" id="reset-modal-close">&times;</span>
+      <h3>Восстановление пароля</h3>
+      <p>Введите email, и мы отправим ссылку для сброса пароля.</p>
+      <div class="form-group">
+        <input type="email" id="reset-email" placeholder="example@mail.ru">
+      </div>
+      <button class="btn" id="reset-submit">Отправить</button>
+      <p id="reset-message" class="auth-message"></p>
+    </div>
+  </div>
+
+  <footer class="footer"><div class="container"><p>© 2026 ваши амбассадоры</p></div></footer>
+
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore-compat.js"></script>
+  <script src="js/firebase-config.js"></script>
+  <script src="js/firebase-auth.js"></script>
+  <script src="js/storage.js"></script>
+  <script src="js/notifications.js"></script>
+  <script src="js/easter-eggs.js"></script>
+  <script src="js/main.js"></script>
+
+  <script>
+    // Загрузка отделов
+    async function loadDepartments() {
+      const select = document.getElementById('reg-department');
+      try {
+        const snap = await db.collection('departments').orderBy('name').get();
+        if (!snap.empty) {
+          snap.forEach(doc => {
+            const option = document.createElement('option');
+            option.value = doc.data().name;
+            option.textContent = doc.data().name;
+            select.appendChild(option);
+          });
+          return;
+        }
+      } catch (e) { console.error(e); }
+      const defaults = ['РБ','МСБ','ТМ','Депозиты','ОКК','ООБП','Боссы','Заблудшие души'];
+      defaults.forEach(d => {
+        const option = document.createElement('option');
+        option.value = d;
+        option.textContent = d;
+        select.appendChild(option);
+      });
+    }
+
+    function getRedirectUrl() {
+      const params = new URLSearchParams(window.location.search);
+      return params.get('redirect') || 'index.html';
+    }
+
+    // Флаг, блокирующий автоматический редирект во время регистрации
+    let isRegistering = false;
+
+    document.addEventListener('DOMContentLoaded', async () => {
+      await loadDepartments();
+
+      // Слушатель авторизации
+      auth.onAuthStateChanged(user => {
+        if (user && !isRegistering) {
+          // Если пользователь уже вошёл и мы не в процессе регистрации – редирект
+          window.location.href = getRedirectUrl();
+        }
+      });
+
+      // Переключение вкладок
+      const tabs = document.querySelectorAll('.auth-tab');
+      const forms = document.querySelectorAll('.auth-form');
+      tabs.forEach(tab => {
+        tab.addEventListener('click', () => {
+          tabs.forEach(t => t.classList.remove('active'));
+          tab.classList.add('active');
+          forms.forEach(f => f.classList.remove('active'));
+          document.getElementById(tab.dataset.tab + '-form').classList.add('active');
+          document.getElementById('login-message').textContent = '';
+          document.getElementById('register-message').textContent = '';
+        });
+      });
+
+      // Вход
+      document.getElementById('login-btn').addEventListener('click', async () => {
+        const email = document.getElementById('login-email').value.trim();
+        const password = document.getElementById('login-password').value;
+        const msgEl = document.getElementById('login-message');
+        msgEl.textContent = '';
+        msgEl.className = 'auth-message';
+
+        if (!email || !password) {
+          msgEl.textContent = 'Заполните все поля.';
+          msgEl.className = 'auth-message error';
+          return;
+        }
+
+        try {
+          const userData = await firebaseLogin(email, password);
+          if (userData) {
+            if (typeof updateLastActive === 'function') {
+              await updateLastActive(auth.currentUser.uid);
+            }
+            if (!auth.currentUser.emailVerified) {
+              msgEl.textContent = 'Пожалуйста, подтвердите email. Письмо отправлено повторно.';
+              msgEl.className = 'auth-message error';
+              return;
+            }
+            msgEl.textContent = 'Успешный вход!';
+            msgEl.className = 'auth-message success';
+            setTimeout(() => {
+              window.location.href = getRedirectUrl();
+            }, 800);
+          }
+        } catch (error) {
+          console.error(error);
+          msgEl.textContent = error.message || 'Ошибка входа.';
+          msgEl.className = 'auth-message error';
+        }
+      });
+
+      // Регистрация
+      document.getElementById('register-btn').addEventListener('click', async () => {
+        const email = document.getElementById('reg-email').value.trim();
+        const password = document.getElementById('reg-password').value;
+        const username = document.getElementById('reg-username').value.trim();
+        const department = document.getElementById('reg-department').value;
+        const msgEl = document.getElementById('register-message');
+        msgEl.textContent = '';
+        msgEl.className = 'auth-message';
+
+        if (!email || !password || !username || !department) {
+          msgEl.textContent = 'Заполните все поля.';
+          msgEl.className = 'auth-message error';
+          return;
+        }
+        if (password.length < 6) {
+          msgEl.textContent = 'Пароль должен содержать минимум 6 символов.';
+          msgEl.className = 'auth-message error';
+          return;
+        }
+
+        // Устанавливаем флаг, чтобы onAuthStateChanged не делал редирект
+        isRegistering = true;
+
+        try {
+          const userData = await firebaseRegister(email, password, username, department);
+          if (auth.currentUser) {
+            const checkDoc = await db.collection('users').doc(auth.currentUser.uid).get();
+            if (!checkDoc.exists) {
+              msgEl.textContent = 'Ошибка создания профиля. Попробуйте позже или обратитесь к администратору.';
+              msgEl.className = 'auth-message error';
+              await auth.signOut();
+              isRegistering = false;
+              return;
+            }
+          }
+          if (userData) {
+            msgEl.textContent = 'Регистрация успешна! Проверьте почту для подтверждения email.';
+            msgEl.className = 'auth-message success';
+            // Сбрасываем флаг перед редиректом (можно и не сбрасывать, страница уйдёт)
+            isRegistering = false;
+            setTimeout(() => {
+              window.location.href = getRedirectUrl();
+            }, 2500);
+          }
+        } catch (error) {
+          console.error(error);
+          msgEl.textContent = error.message || 'Ошибка регистрации.';
+          msgEl.className = 'auth-message error';
+          isRegistering = false;  // разрешаем редирект при следующем изменении, если нужно
+        }
+      });
+
+      // Восстановление пароля
+      document.getElementById('forgot-password-link').addEventListener('click', () => {
+        document.getElementById('reset-modal').style.display = 'flex';
+        document.getElementById('reset-email').value = document.getElementById('login-email').value;
+        document.getElementById('reset-message').textContent = '';
+      });
+
+      document.getElementById('reset-modal-close').addEventListener('click', () => {
+        document.getElementById('reset-modal').style.display = 'none';
+      });
+
+      document.getElementById('reset-submit').addEventListener('click', async () => {
+        const email = document.getElementById('reset-email').value.trim();
+        const msgEl = document.getElementById('reset-message');
+        if (!email) {
+          msgEl.textContent = 'Введите email.';
+          msgEl.className = 'auth-message error';
+          return;
+        }
+        try {
+          await auth.sendPasswordResetEmail(email, { url: window.location.origin + '/login.html' });
+          msgEl.textContent = 'Письмо для сброса пароля отправлено! Проверьте почту.';
+          msgEl.className = 'auth-message success';
+          setTimeout(() => {
+            document.getElementById('reset-modal').style.display = 'none';
+          }, 3000);
+        } catch (error) {
+          console.error(error);
+          msgEl.textContent = error.message || 'Ошибка отправки.';
+          msgEl.className = 'auth-message error';
+        }
+      });
+
+      // FAQ аккордеон
+      document.querySelectorAll('.faq-item__question').forEach(q => {
+        q.addEventListener('click', () => {
+          const item = q.parentElement;
+          item.classList.toggle('open');
+        });
+      });
+
+      // Enter для отправки
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          const activeForm = document.querySelector('.auth-form.active');
+          if (activeForm.id === 'login-form') {
+            document.getElementById('login-btn').click();
+          } else if (activeForm.id === 'register-form') {
+            document.getElementById('register-btn').click();
+          }
+        }
+      });
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <!-- Руки -->
+  <path d="M20 24 L26 18 C30 14 34 14 38 18 L44 24" fill="none" stroke="#F59E0B" stroke-width="3" stroke-linecap="round"/>
+  <!-- Левая рука -->
+  <path d="M18 28 C10 34 10 46 18 50 C22 52 24 48 22 44 C20 40 16 38 16 34" fill="#FBBF24" stroke="#F59E0B" stroke-width="2"/>
+  <!-- Правая рука -->
+  <path d="M46 28 C54 34 54 46 46 50 C42 52 40 48 42 44 C44 40 48 38 48 34" fill="#FBBF24" stroke="#F59E0B" stroke-width="2"/>
+  <!-- Рукопожатие -->
+  <circle cx="32" cy="38" r="5" fill="#FEF3C7" stroke="#F59E0B" stroke-width="2"/>
+  <path d="M28 36 L36 40" stroke="#F59E0B" stroke-width="1.5"/>
+  <path d="M30 40 L34 36" stroke="#F59E0B" stroke-width="1.5"/>
+</svg>
