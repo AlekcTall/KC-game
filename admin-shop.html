@@ -1,157 +1,386 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-    <meta charset="UTF-8">
-    <title>Админка: Магазин</title>
-    <link rel="stylesheet" href="styles/main.css">
-    <link rel="stylesheet" href="styles/admin.css">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Магазин – Админ-панель – Геймификация КЦ</title>
+  <link rel="stylesheet" href="css/style.css">
+  <style>
+    .admin-page { max-width: 1100px; margin: 0 auto; padding: 1.5rem; }
+    .back-link { display: inline-block; margin-bottom: 1rem; color: var(--color-primary); text-decoration: none; }
+    .admin-shop-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; margin-top: 1rem; }
+    .admin-shop-table th, .admin-shop-table td { padding: 0.5rem; border-bottom: 1px solid #eee; text-align: left; }
+    .admin-shop-table th { background: #f9f9f9; font-weight: 600; }
+    .btn-small { padding: 0.25rem 0.5rem; font-size: 0.8rem; margin: 0 0.1rem; }
+    .btn-danger { background: #e74c3c; color: white; }
+    .add-form { background: #f9fafb; border-radius: 12px; padding: 1.5rem; max-width: 600px; margin-top: 2rem; }
+    .add-form h4 { margin-bottom: 1rem; }
+    .form-group { margin-bottom: 1rem; }
+    .form-group label { display: block; font-weight: 600; font-size: 0.85rem; margin-bottom: 0.3rem; }
+    .form-group input, .form-group select, .form-group textarea { width: 100%; padding: 0.5rem; border: 1px solid #d1d5db; border-radius: 6px; }
+    .skeleton-cell { height: 1rem; background: #e0e0e0; border-radius: 4px; animation: shimmer 1.5s infinite; }
+    @keyframes shimmer { 0% { opacity: 0.6; } 50% { opacity: 1; } 100% { opacity: 0.6; } }
+    .modal { max-width: 550px; }
+    .checkbox-group { display: flex; align-items: center; gap: 0.5rem; }
+  </style>
 </head>
-<body class="dark-theme">
-    <nav class="navbar">
-        <div class="container">
-            <a href="index.html" class="logo">KC Admin</a>
-            <div class="nav-links">
-                <a href="admin-users.html">Пользователи</a>
-                <a href="admin-shop.html" class="active">Магазин</a>
-                <a href="admin-content.html">Контент</a>
-                <a href="index.html">На сайт</a>
-            </div>
-        </div>
-    </nav>
+<body>
+  <header class="header"><div class="container header__inner"><a href="index.html" class="logo">КЦ-Игры</a><button class="burger" id="burger-btn" aria-label="Меню">☰</button><nav class="nav" id="main-nav"><ul class="nav__list"><li><a href="index.html" class="nav__link">Главная</a></li><li><a href="games.html" class="nav__link">Игры</a></li><li><a href="leaderboard.html" class="nav__link">Рейтинг</a></li><li><a href="shop.html" class="nav__link">Магазин</a></li><li><a href="profile.html" class="nav__link">Профиль</a></li><li><a href="admin.html" class="nav__link active">Админ</a></li></ul></nav><div id="auth-status" class="auth-status"></div></div></header>
+  <main class="main"><div class="container admin-page" id="admin-container"><p>Загрузка...</p></div></main>
 
-    <main class="container admin-container">
-        <h1>🛒 Управление магазином</h1>
-        
-        <button class="btn-primary" onclick="openAddModal()">+ Добавить товар</button>
-        
-        <div class="table-wrapper">
-            <table class="admin-table">
-                <thead>
-                    <tr>
-                        <th>ID</th>
-                        <th>Название</th>
-                        <th>Цена</th>
-                        <th>Категория</th>
-                        <th>Тип эффекта</th>
-                        <th>Действия</th>
-                    </tr>
-                </thead>
-                <tbody id="shop-table-body">
-                    <tr><td colspan="6" class="loading">Загрузка...</td></tr>
-                </tbody>
-            </table>
-        </div>
-    </main>
-
-    <!-- Модалка добавления/редактирования -->
-    <div id="item-modal" class="modal">
-        <div class="modal-content">
-            <span class="close-modal">&times;</span>
-            <h2 id="modal-title">Товар</h2>
-            <input type="hidden" id="item-id">
-            <input type="text" id="item-name" placeholder="Название" class="form-input">
-            <input type="number" id="item-price" placeholder="Цена" class="form-input">
-            <select id="item-category" class="form-input">
-                <option value="effect">Эффект</option>
-                <option value="avatar">Аватар</option>
-                <option value="currency">Валюта</option>
-                <option value="background">Фон</option>
-                <option value="service">Услуга</option>
-            </select>
-            <input type="text" id="item-effect-type" placeholder="Тип эффекта (например double_xp)" class="form-input">
-            <input type="text" id="item-icon" placeholder="Иконка (эмодзи)" class="form-input">
-            <textarea id="item-desc" placeholder="Описание" class="form-input"></textarea>
-            <button id="save-item-btn" class="btn-success">Сохранить</button>
-        </div>
+  <!-- Модальное окно редактирования товара -->
+  <div class="modal-overlay" id="shop-item-modal" style="display:none;">
+    <div class="modal">
+      <span class="modal-close" id="shop-item-modal-close">&times;</span>
+      <h3>Редактировать товар</h3>
+      <div id="shop-item-id-display"></div>
+      <div class="form-group"><label>Название *</label><input type="text" id="shop-item-title" required></div>
+      <div class="form-group"><label>Описание</label><textarea id="shop-item-desc" rows="2"></textarea></div>
+      <div class="form-group"><label>Категория</label><select id="shop-item-category">
+        <option value="Кастомизация">Кастомизация</option><option value="Реакции">Реакции</option>
+        <option value="Игровые бонусы">Игровые бонусы</option><option value="Рабочие плюшки">Рабочие плюшки</option>
+        <option value="Особые товары">Особые товары</option>
+      </select></div>
+      <div class="form-group"><label>Цена *</label><input type="number" id="shop-item-price" min="1" required></div>
+      <div class="form-group"><label>Иконка</label><input type="text" id="shop-item-icon" value="🛒"></div>
+      <div class="form-group">
+        <label>Тип эффекта</label>
+        <select id="shop-item-effect-type">
+          <option value="">Нет эффекта</option>
+        </select>
+      </div>
+      <div class="form-group effect-params" id="shop-item-effect-params-group" style="display:none;">
+        <label>Параметры эффекта (JSON)</label>
+        <textarea id="shop-item-effect-params" rows="2">{"duration": 0}</textarea>
+      </div>
+      <div class="form-group"><label>Длительность (ч, 0=бессрочно) *</label><input type="number" id="shop-item-duration" value="0" min="0"></div>
+      <div class="form-group"><label>Уникальный</label><select id="shop-item-unique"><option value="true">Да</option><option value="false">Нет</option></select></div>
+      <div class="form-group"><label>Уведомить админа</label><select id="shop-item-notify-admin"><option value="false">Нет</option><option value="true">Да</option></select></div>
+      <div class="form-group"><label>Количество (пусто=∞)</label><input type="number" id="shop-item-stock"></div>
+      <div class="form-group checkbox-group"><label><input type="checkbox" id="shop-item-hidden"> Скрыть товар</label></div>
+      <button class="btn" id="shop-item-save">Сохранить</button>
+      <p id="shop-item-message" class="auth-message"></p>
     </div>
+  </div>
 
-    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js"></script>
-    <script src="js/firebase-config.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="js/supabase-client.js"></script>
-    <script src="js/auth.js"></script>
+  <footer class="footer"><div class="container"><p>© 2026 ваши амбассадоры</p></div></footer>
 
-    <script>
-        async function checkAdmin() {
-            const user = firebase.auth().currentUser;
-            if (!user) { window.location.href = 'index.html'; return; }
-            const { data } = await supabase.from('users').select('data').eq('id', user.uid).single();
-            if (data?.data?.role !== 'admin') { alert('Доступ запрещен!'); window.location.href = 'index.html'; }
-            else { loadShopItems(); }
+  <!-- Supabase SDK и модули -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="js/supabase-config.js"></script>
+  <script src="js/auth.js"></script>
+  <script src="js/storage.js"></script>
+  <script src="js/achievements.js"></script>
+  <script src="js/easter-eggs.js"></script>
+  <script src="js/notifications.js"></script>
+  <script src="js/main.js"></script>
+  <script src="js/feedback.js"></script>
+  <script src="js/effects-engine.js"></script>
+
+  <script>
+    (function() {
+      const CACHE_KEY = 'krugames_admin_shop';
+      const CACHE_TTL = 2 * 60 * 1000;
+      let allItems = [];
+      let curEditShopId = null;
+
+      function getCachedItems() {
+        const cached = sessionStorage.getItem(CACHE_KEY);
+        if (cached) {
+          try {
+            const parsed = JSON.parse(cached);
+            if (Date.now() - parsed.timestamp < CACHE_TTL) return parsed.data;
+          } catch (e) {}
+        }
+        return null;
+      }
+
+      function setCachedItems(items) {
+        sessionStorage.setItem(CACHE_KEY, JSON.stringify({ timestamp: Date.now(), data: items }));
+      }
+
+      document.addEventListener('DOMContentLoaded', async () => {
+        const container = document.getElementById('admin-container');
+
+        if (typeof onAuthStateChange === 'function') {
+          onAuthStateChange(async (event, session) => {
+            if (!session?.user) {
+              container.innerHTML = '<p>Вы не авторизованы.</p>';
+              return;
+            }
+            try {
+              const { data: row, error } = await supabase
+                .from('users')
+                .select('data')
+                .eq('id', session.user.id)
+                .single();
+              if (error || !row || (row.data?.role !== 'admin')) {
+                container.innerHTML = '<p>Доступ запрещён.</p>';
+                return;
+              }
+              renderPage();
+            } catch (e) { container.innerHTML = `<p>Ошибка: ${e.message}</p>`; }
+          });
+        } else {
+          container.innerHTML = '<p>Ошибка загрузки системы авторизации.</p>';
+        }
+
+        function renderPage() {
+          container.innerHTML = `
+            <a href="admin.html" class="back-link">← В админку</a>
+            <h2>🛒 Управление товарами магазина</h2>
+            <div id="items-table-container"></div>
+            <div class="add-form">
+              <h4>➕ Добавить товар</h4>
+              <form id="add-shop-item-form">
+                <div class="form-group"><label>ID</label><input type="text" id="shop-id"></div>
+                <div class="form-group"><label>Название *</label><input type="text" id="shop-title" required></div>
+                <div class="form-group"><label>Описание</label><textarea id="shop-desc" rows="2"></textarea></div>
+                <div class="form-group"><label>Категория</label><select id="shop-category">
+                  <option value="Кастомизация">Кастомизация</option><option value="Реакции">Реакции</option>
+                  <option value="Игровые бонусы">Игровые бонусы</option><option value="Рабочие плюшки">Рабочие плюшки</option>
+                  <option value="Особые товары">Особые товары</option>
+                </select></div>
+                <div class="form-group"><label>Цена *</label><input type="number" id="shop-price" min="1" required></div>
+                <div class="form-group"><label>Иконка</label><input type="text" id="shop-icon" value="🛒"></div>
+                <div class="form-group">
+                  <label>Тип эффекта</label>
+                  <select id="shop-effect-type">
+                    <option value="">Нет эффекта</option>
+                  </select>
+                </div>
+                <div class="form-group effect-params" id="shop-effect-params-group" style="display:none;">
+                  <label>Параметры эффекта (JSON)</label>
+                  <textarea id="shop-effect-params" rows="2">{"duration": 0}</textarea>
+                </div>
+                <div class="form-group"><label>Длительность (ч, 0=бессрочно) *</label><input type="number" id="shop-duration" value="0" min="0"></div>
+                <div class="form-group"><label>Уникальный</label><select id="shop-unique"><option value="true">Да</option><option value="false">Нет</option></select></div>
+                <div class="form-group"><label>Уведомить админа</label><select id="shop-notify-admin"><option value="false">Нет</option><option value="true">Да</option></select></div>
+                <div class="form-group"><label>Количество</label><input type="number" id="shop-stock"></div>
+                <div class="form-group checkbox-group"><label><input type="checkbox" id="shop-hidden"> Скрыть товар</label></div>
+                <button type="submit" class="btn">Добавить</button>
+              </form>
+            </div>
+          `;
+
+          // Заполняем список типов эффектов
+          const effectTypes = typeof getAvailableEffectTypes === 'function' ? getAvailableEffectTypes() : [];
+          document.querySelectorAll('#shop-effect-type, #shop-item-effect-type').forEach(select => {
+            effectTypes.forEach(et => {
+              const option = document.createElement('option');
+              option.value = et.id;
+              option.textContent = et.name;
+              select.appendChild(option);
+            });
+          });
+
+          // Показываем/скрываем параметры эффекта
+          document.getElementById('shop-effect-type').addEventListener('change', function() {
+            document.getElementById('shop-effect-params-group').style.display = this.value ? 'block' : 'none';
+          });
+          document.getElementById('shop-item-effect-type').addEventListener('change', function() {
+            document.getElementById('shop-item-effect-params-group').style.display = this.value ? 'block' : 'none';
+          });
+
+          loadShopItems();
+
+          document.getElementById('add-shop-item-form').addEventListener('submit', async e => {
+            e.preventDefault();
+            const id = document.getElementById('shop-id').value.trim();
+            const title = document.getElementById('shop-title').value.trim();
+            const desc = document.getElementById('shop-desc').value.trim();
+            const category = document.getElementById('shop-category').value;
+            const price = parseInt(document.getElementById('shop-price').value, 10);
+            const icon = document.getElementById('shop-icon').value.trim() || '🛒';
+            const effectType = document.getElementById('shop-effect-type').value;
+            const effectParamsText = document.getElementById('shop-effect-params').value.trim();
+            const duration = parseInt(document.getElementById('shop-duration').value, 10) || 0;
+            const unique = document.getElementById('shop-unique').value === 'true';
+            const notifyAdmin = document.getElementById('shop-notify-admin').value === 'true';
+            const stockVal = document.getElementById('shop-stock').value;
+            const stock = stockVal ? parseInt(stockVal, 10) : null;
+            const hidden = document.getElementById('shop-hidden').checked;
+
+            let effectParams = {};
+            if (effectType && effectParamsText) {
+              try { effectParams = JSON.parse(effectParamsText); } catch (ex) { showToast('Неверный JSON параметров', 'error'); return; }
+            }
+
+            const newItem = {
+              id: id || undefined,
+              name: title,
+              description: desc,
+              category,
+              price,
+              icon,
+              effect_type: effectType || null,
+              effect_params: effectType ? effectParams : null,
+              duration,
+              unique,
+              notify_admin: notifyAdmin,
+              stock,
+              hidden
+            };
+
+            const { error } = id
+              ? await supabase.from('shop_items').upsert([newItem])
+              : await supabase.from('shop_items').insert([{ ...newItem, id: undefined }]).select().single();
+
+            if (error) { showToast('Ошибка сохранения', 'error'); return; }
+            showToast('Сохранено', 'success');
+            document.getElementById('add-shop-item-form').reset();
+            loadShopItems();
+          });
+
+          // Закрытие модалки
+          document.getElementById('shop-item-modal-close').addEventListener('click', () => {
+            document.getElementById('shop-item-modal').style.display = 'none';
+          });
+          window.addEventListener('click', (e) => {
+            if (e.target === document.getElementById('shop-item-modal')) {
+              document.getElementById('shop-item-modal').style.display = 'none';
+            }
+          });
+
+          document.getElementById('shop-item-save').addEventListener('click', async () => {
+            const title = document.getElementById('shop-item-title').value.trim();
+            const desc = document.getElementById('shop-item-desc').value.trim();
+            const category = document.getElementById('shop-item-category').value;
+            const price = parseInt(document.getElementById('shop-item-price').value, 10);
+            const icon = document.getElementById('shop-item-icon').value.trim() || '🛒';
+            const effectType = document.getElementById('shop-item-effect-type').value;
+            const effectParamsText = document.getElementById('shop-item-effect-params').value.trim();
+            const duration = parseInt(document.getElementById('shop-item-duration').value, 10) || 0;
+            const unique = document.getElementById('shop-item-unique').value === 'true';
+            const notifyAdmin = document.getElementById('shop-item-notify-admin').value === 'true';
+            const stockVal = document.getElementById('shop-item-stock').value;
+            const stock = stockVal ? parseInt(stockVal, 10) : null;
+            const hidden = document.getElementById('shop-item-hidden').checked;
+
+            let effectParams = {};
+            if (effectType && effectParamsText) {
+              try { effectParams = JSON.parse(effectParamsText); } catch (ex) { showToast('Неверный JSON параметров', 'error'); return; }
+            }
+
+            const updatedItem = {
+              name: title,
+              description: desc,
+              category,
+              price,
+              icon,
+              effect_type: effectType || null,
+              effect_params: effectType ? effectParams : null,
+              duration,
+              unique,
+              notify_admin: notifyAdmin,
+              stock,
+              hidden
+            };
+
+            const { error } = await supabase
+              .from('shop_items')
+              .update(updatedItem)
+              .eq('id', curEditShopId);
+
+            if (error) {
+              document.getElementById('shop-item-message').textContent = 'Ошибка: ' + error.message;
+              return;
+            }
+            showToast('Обновлено', 'success');
+            document.getElementById('shop-item-modal').style.display = 'none';
+            loadShopItems();
+          });
         }
 
         async function loadShopItems() {
-            const tbody = document.getElementById('shop-table-body');
-            const { data, error } = await supabase.from('shop_items').select('*').order('price');
-            if (error) { tbody.innerHTML = '<tr><td colspan="6">Ошибка</td></tr>'; return; }
-            
-            tbody.innerHTML = data.map(item => `
-                <tr>
-                    <td class="small-text">${item.id.substring(0,8)}...</td>
-                    <td>${item.name} ${item.icon || ''}</td>
-                    <td>${item.price}</td>
-                    <td>${item.category}</td>
-                    <td>${item.effect_type || '-'}</td>
-                    <td>
-                        <button class="btn-sm btn-danger" onclick="deleteItem('${item.id}')">🗑️</button>
-                        <button class="btn-sm btn-edit" onclick='openEditModal(${JSON.stringify(item)})'>✏️</button>
-                    </td>
-                </tr>
-            `).join('');
+          const container = document.getElementById('items-table-container');
+          if (!container) return;
+
+          const cached = getCachedItems();
+          if (cached) { allItems = cached; renderItemsTable(); }
+          else container.innerHTML = '<p>Загрузка...</p>';
+
+          try {
+            const { data, error } = await supabase
+              .from('shop_items')
+              .select('*')
+              .order('category');
+            if (error) throw error;
+            allItems = data || [];
+            setCachedItems(allItems);
+            renderItemsTable();
+          } catch (e) {
+            console.error(e);
+            if (!allItems.length) container.innerHTML = '<p>Ошибка загрузки.</p>';
+          }
         }
 
-        window.deleteItem = async (id) => {
-            if(!confirm('Удалить товар?')) return;
-            await supabase.from('shop_items').delete().eq('id', id);
-            loadShopItems();
-        };
+        function renderItemsTable() {
+          const container = document.getElementById('items-table-container');
+          if (!container) return;
 
-        window.openAddModal = () => {
-            document.getElementById('item-id').value = '';
-            document.getElementById('item-name').value = '';
-            document.getElementById('item-price').value = '';
-            document.getElementById('item-modal').style.display = 'block';
-        };
+          if (!allItems.length) {
+            container.innerHTML = '<p>Нет товаров.</p>';
+            return;
+          }
 
-        window.openEditModal = (item) => {
-            document.getElementById('item-id').value = item.id;
-            document.getElementById('item-name').value = item.name;
-            document.getElementById('item-price').value = item.price;
-            document.getElementById('item-category').value = item.category;
-            document.getElementById('item-effect-type').value = item.effect_type || '';
-            document.getElementById('item-icon').value = item.icon || '';
-            document.getElementById('item-desc').value = item.description || '';
-            document.getElementById('item-modal').style.display = 'block';
-        };
+          let html = '<table class="admin-shop-table"><thead><tr><th>ID</th><th>Название</th><th>Категория</th><th>Цена</th><th>Эффект</th><th>Скрыт</th><th>Действия</th></tr></thead><tbody>';
+          allItems.forEach(item => {
+            html += `<tr>
+              <td>${item.id}</td>
+              <td>${item.icon || ''} ${item.name}</td>
+              <td>${item.category || ''}</td>
+              <td>${item.price}</td>
+              <td>${item.effect_type || '—'}</td>
+              <td>${item.hidden ? '🙈' : ''}</td>
+              <td>
+                <button class="btn btn-small edit-item-btn" data-item-id="${item.id}">✏️</button>
+                <button class="btn btn-small btn-danger delete-item-btn" data-item-id="${item.id}">Удалить</button>
+              </td>
+            </tr>`;
+          });
+          html += '</tbody></table>';
+          container.innerHTML = html;
 
-        document.querySelector('.close-modal').onclick = () => document.getElementById('item-modal').style.display = 'none';
-
-        document.getElementById('save-item-btn').onclick = async () => {
-            const id = document.getElementById('item-id').value || crypto.randomUUID();
-            const item = {
-                id: id,
-                name: document.getElementById('item-name').value,
-                price: parseInt(document.getElementById('item-price').value),
-                category: document.getElementById('item-category').value,
-                effect_type: document.getElementById('item-effect-type').value,
-                icon: document.getElementById('item-icon').value,
-                description: document.getElementById('item-desc').value,
-                data: {} 
-            };
-
-            const { error } = document.getElementById('item-id').value 
-                ? await supabase.from('shop_items').update(item).eq('id', id)
-                : await supabase.from('shop_items').insert([item]);
-
-            if(error) alert('Ошибка: ' + error.message);
-            else {
-                document.getElementById('item-modal').style.display = 'none';
+          document.querySelectorAll('.delete-item-btn').forEach(btn => {
+            btn.addEventListener('click', async () => {
+              if (confirm('Удалить товар?')) {
+                await supabase.from('shop_items').delete().eq('id', btn.dataset.itemId);
+                showToast('Удалён', 'success');
                 loadShopItems();
-            }
-        };
+              }
+            });
+          });
 
-        checkAdmin();
-    </script>
+          document.querySelectorAll('.edit-item-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+              const item = allItems.find(i => i.id === btn.dataset.itemId);
+              if (item) openEditModal(item);
+            });
+          });
+        }
+
+        function openEditModal(item) {
+          curEditShopId = item.id;
+          document.getElementById('shop-item-id-display').innerHTML = `<strong>ID:</strong> ${item.id}`;
+          document.getElementById('shop-item-title').value = item.name || '';
+          document.getElementById('shop-item-desc').value = item.description || '';
+          document.getElementById('shop-item-category').value = item.category || 'Кастомизация';
+          document.getElementById('shop-item-price').value = item.price || 1;
+          document.getElementById('shop-item-icon').value = item.icon || '🛒';
+          document.getElementById('shop-item-effect-type').value = item.effect_type || '';
+          document.getElementById('shop-item-effect-params').value = item.effect_params ? JSON.stringify(item.effect_params) : '{"duration": 0}';
+          document.getElementById('shop-item-effect-params-group').style.display = item.effect_type ? 'block' : 'none';
+          document.getElementById('shop-item-duration').value = item.duration || 0;
+          document.getElementById('shop-item-unique').value = item.unique ? 'true' : 'false';
+          document.getElementById('shop-item-notify-admin').value = item.notify_admin ? 'true' : 'false';
+          document.getElementById('shop-item-stock').value = item.stock ?? '';
+          document.getElementById('shop-item-hidden').checked = item.hidden || false;
+          document.getElementById('shop-item-message').textContent = '';
+          document.getElementById('shop-item-modal').style.display = 'flex';
+        }
+      });
+    })();
+  </script>
 </body>
 </html>
