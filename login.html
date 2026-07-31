@@ -127,33 +127,39 @@
 
   <footer class="footer"><div class="container"><p>© 2026 ваши амбассадоры</p></div></footer>
 
-  <!-- Firebase SDK -->
-  <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-auth-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore-compat.js"></script>
-  <script src="js/firebase-config.js"></script>
-  <script src="js/firebase-auth.js"></script>
+  <!-- Supabase SDK и переписанные модули -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="js/supabase-config.js"></script>
+  <script src="js/auth.js"></script>
   <script src="js/storage.js"></script>
   <script src="js/notifications.js"></script>
   <script src="js/easter-eggs.js"></script>
   <script src="js/main.js"></script>
 
   <script>
-    // Загрузка отделов
+    // Загрузка отделов из Supabase
     async function loadDepartments() {
       const select = document.getElementById('reg-department');
       try {
-        const snap = await db.collection('departments').orderBy('name').get();
-        if (!snap.empty) {
-          snap.forEach(doc => {
+        const { data, error } = await supabase
+          .from('departments')
+          .select('name')
+          .order('name');
+
+        if (error) throw error;
+
+        if (data && data.length > 0) {
+          data.forEach(d => {
             const option = document.createElement('option');
-            option.value = doc.data().name;
-            option.textContent = doc.data().name;
+            option.value = d.name;
+            option.textContent = d.name;
             select.appendChild(option);
           });
           return;
         }
       } catch (e) { console.error(e); }
+
+      // Значения по умолчанию, если таблица пуста
       const defaults = ['РБ','МСБ','ТМ','Депозиты','ОКК','ООБП','Боссы','Заблудшие души'];
       defaults.forEach(d => {
         const option = document.createElement('option');
@@ -168,19 +174,18 @@
       return params.get('redirect') || 'index.html';
     }
 
-    // Флаг, блокирующий автоматический редирект во время регистрации
-    let isRegistering = false;
-
     document.addEventListener('DOMContentLoaded', async () => {
       await loadDepartments();
 
-      // Слушатель авторизации
-      auth.onAuthStateChanged(user => {
-        if (user && !isRegistering) {
-          // Если пользователь уже вошёл и мы не в процессе регистрации – редирект
-          window.location.href = getRedirectUrl();
-        }
-      });
+      // Слушатель авторизации через onAuthStateChange (глобальная функция из auth.js)
+      if (typeof onAuthStateChange === 'function') {
+        onAuthStateChange((event, session) => {
+          // Если пользователь вошёл — сразу редиректим на целевую страницу
+          if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
+            // Не редиректим, если мы в процессе регистрации (управляем сами)
+          }
+        });
+      }
 
       // Переключение вкладок
       const tabs = document.querySelectorAll('.auth-tab');
@@ -211,15 +216,13 @@
         }
 
         try {
-          const userData = await firebaseLogin(email, password);
+          // Используем нашу функцию loginUser из auth.js
+          const userData = await loginUser(email, password);
           if (userData) {
+            // Обновляем время последней активности (если функция доступна)
             if (typeof updateLastActive === 'function') {
-              await updateLastActive(auth.currentUser.uid);
-            }
-            if (!auth.currentUser.emailVerified) {
-              msgEl.textContent = 'Пожалуйста, подтвердите email. Письмо отправлено повторно.';
-              msgEl.className = 'auth-message error';
-              return;
+              const { data: { user } } = await supabase.auth.getUser();
+              if (user) await updateLastActive(user.id);
             }
             msgEl.textContent = 'Успешный вход!';
             msgEl.className = 'auth-message success';
@@ -255,26 +258,25 @@
           return;
         }
 
-        // Устанавливаем флаг, чтобы onAuthStateChanged не делал редирект
-        isRegistering = true;
-
         try {
-          const userData = await firebaseRegister(email, password, username, department);
-          if (auth.currentUser) {
-            const checkDoc = await db.collection('users').doc(auth.currentUser.uid).get();
-            if (!checkDoc.exists) {
+          // Вызываем нашу функцию registerUser из auth.js
+          const userData = await registerUser(email, password, username, department);
+          if (userData) {
+            // Проверим, что запись в таблице users существует (на всякий случай)
+            const { data: checkRow } = await supabase
+              .from('users')
+              .select('id')
+              .eq('id', userData.id)
+              .single();
+            if (!checkRow) {
+              // Ошибка создания профиля – удаляем auth пользователя и показываем ошибку
+              await supabase.auth.signOut();
               msgEl.textContent = 'Ошибка создания профиля. Попробуйте позже или обратитесь к администратору.';
               msgEl.className = 'auth-message error';
-              await auth.signOut();
-              isRegistering = false;
               return;
             }
-          }
-          if (userData) {
             msgEl.textContent = 'Регистрация успешна! Проверьте почту для подтверждения email.';
             msgEl.className = 'auth-message success';
-            // Сбрасываем флаг перед редиректом (можно и не сбрасывать, страница уйдёт)
-            isRegistering = false;
             setTimeout(() => {
               window.location.href = getRedirectUrl();
             }, 2500);
@@ -283,11 +285,10 @@
           console.error(error);
           msgEl.textContent = error.message || 'Ошибка регистрации.';
           msgEl.className = 'auth-message error';
-          isRegistering = false;  // разрешаем редирект при следующем изменении, если нужно
         }
       });
 
-      // Восстановление пароля
+      // Восстановление пароля (через Supabase)
       document.getElementById('forgot-password-link').addEventListener('click', () => {
         document.getElementById('reset-modal').style.display = 'flex';
         document.getElementById('reset-email').value = document.getElementById('login-email').value;
@@ -307,7 +308,11 @@
           return;
         }
         try {
-          await auth.sendPasswordResetEmail(email, { url: window.location.origin + '/login.html' });
+          // Вызов Supabase для сброса пароля
+          const { error } = await supabase.auth.resetPasswordForEmail(email, {
+            redirectTo: window.location.origin + '/login.html'
+          });
+          if (error) throw error;
           msgEl.textContent = 'Письмо для сброса пароля отправлено! Проверьте почту.';
           msgEl.className = 'auth-message success';
           setTimeout(() => {
@@ -328,7 +333,7 @@
         });
       });
 
-      // Enter для отправки
+      // Enter для отправки формы
       document.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') {
           const activeForm = document.querySelector('.auth-form.active');
