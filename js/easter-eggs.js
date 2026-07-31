@@ -4,98 +4,105 @@
 // Активируются только для авторизованных пользователей
 
 function initEasterEggs() {
-  if (!auth.currentUser) return;
+  // Проверяем авторизацию через Supabase
+  supabase.auth.getUser().then(({ data: { user } }) => {
+    if (!user) return;
 
-  // 1. Клик по логотипу (3 раза)
-  let logoClicks = 0;
-  const logo = document.querySelector('.logo');
-  if (logo) {
-    logo.addEventListener('click', () => {
-      logoClicks++;
-      if (logoClicks >= 3) {
-        logoClicks = 0;
-        activateEasterEgg('logo', 'Вы нашли пасхалку в логотипе!');
-      }
-    });
-  }
+    // 1. Клик по логотипу (3 раза)
+    let logoClicks = 0;
+    const logo = document.querySelector('.logo');
+    if (logo) {
+      logo.addEventListener('click', () => {
+        logoClicks++;
+        if (logoClicks >= 3) {
+          logoClicks = 0;
+          activateEasterEgg('logo', 'Вы нашли пасхалку в логотипе!');
+        }
+      });
+    }
 
-  // 2. Невидимая кнопка в футере
-  const footer = document.querySelector('.footer');
-  if (footer) {
-    const easterBtn = document.createElement('span');
-    easterBtn.className = 'footer-easter-egg';
-    easterBtn.textContent = '🥚';
-    easterBtn.title = 'Пасхалка';
-    footer.querySelector('.container').appendChild(easterBtn);
-    easterBtn.addEventListener('click', () => {
-      activateEasterEgg('footer', 'Вы нашли пасхалку в подвале!');
-    });
-  }
+    // 2. Невидимая кнопка в футере
+    const footer = document.querySelector('.footer');
+    if (footer) {
+      const easterBtn = document.createElement('span');
+      easterBtn.className = 'footer-easter-egg';
+      easterBtn.textContent = '🥚';
+      easterBtn.title = 'Пасхалка';
+      footer.querySelector('.container').appendChild(easterBtn);
+      easterBtn.addEventListener('click', () => {
+        activateEasterEgg('footer', 'Вы нашли пасхалку в подвале!');
+      });
+    }
 
-  // 3. Секретный символ на главной
-  const secretSymbol = document.getElementById('secret-symbol');
-  if (secretSymbol) {
-    secretSymbol.addEventListener('click', () => {
-      activateEasterEgg('symbol', 'Вы нашли секретный символ!');
-    });
-  }
+    // 3. Секретный символ на главной
+    const secretSymbol = document.getElementById('secret-symbol');
+    if (secretSymbol) {
+      secretSymbol.addEventListener('click', () => {
+        activateEasterEgg('symbol', 'Вы нашли секретный символ!');
+      });
+    }
 
-  // 4. Konami Code
-  const konamiSequence = [38,38,40,40,37,39,37,39,66,65];
-  let konamiIndex = 0;
-  document.addEventListener('keydown', (e) => {
-    if (e.keyCode === konamiSequence[konamiIndex]) {
-      konamiIndex++;
-      if (konamiIndex === konamiSequence.length) {
+    // 4. Konami Code
+    const konamiSequence = [38,38,40,40,37,39,37,39,66,65];
+    let konamiIndex = 0;
+    document.addEventListener('keydown', (e) => {
+      if (e.keyCode === konamiSequence[konamiIndex]) {
+        konamiIndex++;
+        if (konamiIndex === konamiSequence.length) {
+          konamiIndex = 0;
+          activateEasterEgg('konami', 'Вы ввели Konami Code!');
+        }
+      } else {
         konamiIndex = 0;
-        activateEasterEgg('konami', 'Вы ввели Konami Code!');
       }
-    } else {
-      konamiIndex = 0;
+    });
+
+    // 5. Секретное слово "бонус"
+    let typedWord = '';
+    document.addEventListener('keydown', (e) => {
+      if (e.key.length === 1 && e.key.match(/[a-zA-Zа-яА-Я]/)) {
+        typedWord += e.key.toLowerCase();
+        if (typedWord.length > 10) typedWord = typedWord.slice(-10);
+        if (typedWord.includes('бонус')) {
+          typedWord = '';
+          activateEasterEgg('word', 'Вы ввели секретное слово "бонус"!');
+        }
+      }
+    });
+
+    // 6. Проверка "Ночной гость" при загрузке страницы
+    checkNightGuest();
+
+    // 7. Проверка "Конспиратор" — отслеживаем открытие консоли
+    checkConspirator();
+
+    // 8. "Библиотекарь" — инициализируется только на странице faq.html
+    if (window.location.pathname.includes('faq.html')) {
+      initLibrarian();
+    }
+
+    // 9. "Селфи" — инициализируется только на странице публичного профиля
+    if (window.location.pathname.includes('public-profile.html')) {
+      checkSelfie();
     }
   });
-
-  // 5. Секретное слово "бонус"
-  let typedWord = '';
-  document.addEventListener('keydown', (e) => {
-    if (e.key.length === 1 && e.key.match(/[a-zA-Zа-яА-Я]/)) {
-      typedWord += e.key.toLowerCase();
-      if (typedWord.length > 10) typedWord = typedWord.slice(-10);
-      if (typedWord.includes('бонус')) {
-        typedWord = '';
-        activateEasterEgg('word', 'Вы ввели секретное слово "бонус"!');
-      }
-    }
-  });
-
-  // 6. Проверка "Ночной гость" при загрузке страницы
-  checkNightGuest();
-
-  // 7. Проверка "Конспиратор" — отслеживаем открытие консоли
-  checkConspirator();
-
-  // 8. "Библиотекарь" — инициализируется только на странице faq.html
-  if (window.location.pathname.includes('faq.html')) {
-    initLibrarian();
-  }
-
-  // 9. "Селфи" — инициализируется только на странице публичного профиля
-  if (window.location.pathname.includes('public-profile.html')) {
-    checkSelfie();
-  }
 }
 
 async function activateEasterEgg(eggId, message) {
-  const user = auth.currentUser;
+  const { data: { user } } = await supabase.auth.getUser();
   if (!user) return;
 
   try {
-    const userRef = db.collection('users').doc(user.uid);
-    const doc = await userRef.get();
-    if (!doc.exists) return;
+    const { data: row, error } = await supabase
+      .from('users')
+      .select('data')
+      .eq('id', user.id)
+      .single();
 
-    const data = doc.data();
-    const easterEggs = data.easterEggsFound || [];
+    if (error || !row) return;
+
+    const userData = row.data || {};
+    const easterEggs = userData.easterEggsFound || [];
     if (easterEggs.includes(eggId)) {
       showToast('Вы уже нашли эту пасхалку!', 'info');
       return;
@@ -103,7 +110,13 @@ async function activateEasterEgg(eggId, message) {
 
     // Добавляем пасхалку
     easterEggs.push(eggId);
-    await userRef.update({ easterEggsFound: easterEggs });
+    const updatedData = { ...userData, easterEggsFound: easterEggs };
+    const { error: updateError } = await supabase
+      .from('users')
+      .update({ data: updatedData, updated_at: new Date().toISOString() })
+      .eq('id', user.id);
+
+    if (updateError) throw updateError;
 
     // Обновляем кэш
     const current = getCurrentUser();
@@ -112,14 +125,14 @@ async function activateEasterEgg(eggId, message) {
       setCurrentUser(current);
     }
 
-    // Начисляем баллы и локоины (если реализовано)
+    // Начисляем баллы (если реализовано)
     if (typeof addPointsToCurrentUser === 'function') {
-      await addPointsToCurrentUser(5, null); // 5 баллов за пасхалку
+      await addPointsToCurrentUser(5, null);
     }
 
     // Отправляем уведомление с типом 'achievement'
     if (typeof addNotification === 'function') {
-      await addNotification(user.uid, message, 'achievement', 'profile.html');
+      await addNotification(user.id, message, 'achievement', 'profile.html');
     }
 
     showToast(message + ' +5 баллов!', 'success');
@@ -136,8 +149,9 @@ async function activateEasterEgg(eggId, message) {
 
 // ========== НОВЫЕ ФУНКЦИИ ПАСХАЛОК ==========
 
-function checkNightGuest() {
-  if (!auth.currentUser) return;
+async function checkNightGuest() {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return;
   const now = new Date();
   const moscowHour = new Date(now.getTime() + 3 * 3600000).getHours();
   if (moscowHour >= 2 && moscowHour < 4) {
@@ -163,8 +177,9 @@ function checkConspirator() {
   setInterval(checkDevTools, 1000);
 }
 
-function checkSelfie() {
-  if (!auth.currentUser) return;
+async function checkSelfie() {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return;
   const params = new URLSearchParams(window.location.search);
   const userId = params.get('id');
   const currentUser = getCurrentUser();
