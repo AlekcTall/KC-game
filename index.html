@@ -49,12 +49,11 @@
     </div></section>
   </div></main>
   <footer class="footer"><div class="container"><p>© 2026 ваши амбассадоры</p></div></footer>
-  <!-- Firebase SDK -->
-  <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-auth-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore-compat.js"></script>
-  <script src="js/firebase-config.js"></script>
-  <script src="js/firebase-auth.js"></script>
+  
+  <!-- Supabase SDK и наши модули -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="js/supabase-config.js"></script>
+  <script src="js/auth.js"></script>
   <script src="js/storage.js"></script>
   <script src="js/achievements.js"></script>
   <script src="js/notifications.js"></script>
@@ -63,47 +62,279 @@
   <script src="js/main.js"></script>
   <script>
     document.addEventListener('DOMContentLoaded', () => {
-      const newsSection = document.getElementById('news-section'), newsGrid = document.getElementById('news-grid'), eventsSection = document.getElementById('events-section'), eventsGrid = document.getElementById('events-grid');
-      let newsListener = null, eventsListener = null;
+      const newsSection = document.getElementById('news-section'),
+            newsGrid = document.getElementById('news-grid'),
+            eventsSection = document.getElementById('events-section'),
+            eventsGrid = document.getElementById('events-grid');
 
-      auth.onAuthStateChanged(user => {
-        if (user) {
-          eventsSection.style.display = 'block';
-          if (eventsListener) eventsListener();
-          const now = firebase.firestore.Timestamp.now();
-          eventsListener = db.collection('events').where('status', '==', 'active').where('startTime', '<=', now).where('endTime', '>=', now).onSnapshot(snap => { const ev = []; snap.forEach(doc => ev.push({ id: doc.id, ...doc.data() })); renderEvents(ev); });
+      let newsChannel = null, eventsChannel = null;
 
-          newsSection.style.display = 'block';
-          if (newsListener) newsListener();
-          newsListener = db.collection('announcements').where('publishAt', '<=', now).orderBy('publishAt', 'desc').onSnapshot(snap => { const news = []; snap.forEach(doc => { const d = doc.data(); if (d.expireAt && d.expireAt.toMillis() < Date.now()) return; news.push({ id: doc.id, ...d }); }); renderNewsCards(news); });
-        } else {
-          eventsSection.style.display = 'none'; if (eventsListener) { eventsListener(); eventsListener = null; }
-          newsSection.style.display = 'none'; if (newsListener) { newsListener(); newsListener = null; }
+      // Подписка на изменения аутентификации через onAuthStateChange
+      if (typeof onAuthStateChange === 'function') {
+        onAuthStateChange((event, session) => {
+          if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
+            // Пользователь вошёл — показываем секции и загружаем данные
+            eventsSection.style.display = 'block';
+            newsSection.style.display = 'block';
+            loadEvents();
+            loadNews();
+            subscribeToEvents();
+            subscribeToNews();
+          } else if (event === 'SIGNED_OUT') {
+            eventsSection.style.display = 'none';
+            newsSection.style.display = 'none';
+            // Отписываемся от каналов
+            if (eventsChannel) { supabase.removeChannel(eventsChannel); eventsChannel = null; }
+            if (newsChannel) { supabase.removeChannel(newsChannel); newsChannel = null; }
+          }
+        });
+      } else {
+        // Если onAuthStateChange не определён, просто прячем секции
+        eventsSection.style.display = 'none';
+        newsSection.style.display = 'none';
+      }
+
+      // ========== ИВЕНТЫ ==========
+      async function loadEvents() {
+        const now = new Date().toISOString();
+        const { data: events, error } = await supabase
+          .from('events')
+          .select('*')
+          .eq('status', 'active')
+          .lte('start_time', now)
+          .gte('end_time', now)
+          .order('end_time', { ascending: true });
+
+        if (error) {
+          console.error('Ошибка загрузки ивентов:', error);
+          eventsSection.style.display = 'none';
+          return;
         }
-      });
+        renderEvents(events || []);
+      }
 
-      function renderEvents(ev) { if (!ev.length) { eventsSection.style.display = 'none'; return; } eventsSection.style.display = 'block'; eventsGrid.innerHTML = ev.map(e => { const end = e.endTime ? new Date(e.endTime.seconds * 1000) : null; let timer = ''; if (end) { const diff = end - Date.now(); timer = diff > 0 ? `Осталось: ${Math.floor(diff/86400000)} дн. ${Math.floor((diff%86400000)/3600000)} ч.` : 'Завершается...'; } return `<div class="event-card" data-event-url="${e.url||'#'}" data-event-id="${e.id}"><div class="event-card__icon">${e.icon||'🎪'}</div><div class="event-card__title">${e.title}</div><div class="event-card__desc">${e.description||''}</div><div class="event-card__timer">${timer}</div><button class="btn">Участвовать</button></div>`; }).join(''); document.querySelectorAll('.event-card').forEach(c => c.addEventListener('click', () => { const url = c.dataset.eventUrl, id = c.dataset.eventId; if (url && url !== '#') window.location.href = `${url}?id=${id}`; })); }
+      function renderEvents(ev) {
+        if (!ev.length) {
+          eventsSection.style.display = 'none';
+          return;
+        }
+        eventsSection.style.display = 'block';
+        eventsGrid.innerHTML = ev.map(e => {
+          const end = e.end_time ? new Date(e.end_time) : null;
+          let timer = '';
+          if (end) {
+            const diff = end - Date.now();
+            timer = diff > 0
+              ? `Осталось: ${Math.floor(diff/86400000)} дн. ${Math.floor((diff%86400000)/3600000)} ч.`
+              : 'Завершается...';
+          }
+          const eventUrl = e.data?.url || '#';
+          return `<div class="event-card" data-event-url="${eventUrl}" data-event-id="${e.id}">
+            <div class="event-card__icon">${e.data?.icon || '🎪'}</div>
+            <div class="event-card__title">${e.title}</div>
+            <div class="event-card__desc">${e.data?.description || ''}</div>
+            <div class="event-card__timer">${timer}</div>
+            <button class="btn">Участвовать</button>
+          </div>`;
+        }).join('');
 
-      function renderNewsCards(list) { if (!list.length) { newsSection.style.display = 'none'; return; } newsSection.style.display = 'block'; newsGrid.innerHTML = list.map(n => `<div class="news-card" data-news-id="${n.id}"><div class="news-card__icon">${n.icon||'📢'}</div><div class="news-card__title">${n.title}</div><div class="news-card__excerpt">${(n.body||'').substring(0,100)}${n.body&&n.body.length>100?'...':''}</div></div>`).join(''); document.querySelectorAll('.news-card').forEach(c => c.addEventListener('click', () => { const n = list.find(x => x.id === c.dataset.newsId); if (n) openNewsModal(n); })); }
+        document.querySelectorAll('.event-card').forEach(c => {
+          c.addEventListener('click', () => {
+            const url = c.dataset.eventUrl;
+            const id = c.dataset.eventId;
+            if (url && url !== '#') window.location.href = `${url}?id=${id}`;
+          });
+        });
+      }
 
+      function subscribeToEvents() {
+        if (eventsChannel) supabase.removeChannel(eventsChannel);
+        const now = new Date().toISOString();
+        eventsChannel = supabase
+          .channel('events_channel')
+          .on('postgres_changes', {
+            event: '*',
+            schema: 'public',
+            table: 'events',
+            filter: `status=eq.active`
+          }, () => {
+            // При любых изменениях в активных ивентах перезагружаем список
+            loadEvents();
+          })
+          .subscribe();
+      }
+
+      // ========== НОВОСТИ ==========
+      async function loadNews() {
+        const now = new Date().toISOString();
+        const { data: announcements, error } = await supabase
+          .from('announcements')
+          .select('*')
+          .lte('publish_at', now)
+          .order('publish_at', { ascending: false });
+
+        if (error) {
+          console.error('Ошибка загрузки новостей:', error);
+          newsSection.style.display = 'none';
+          return;
+        }
+
+        // Фильтруем просроченные на клиенте (если expire_at задано)
+        const filtered = (announcements || []).filter(a => {
+          if (a.expire_at) return new Date(a.expire_at) > new Date();
+          return true;
+        });
+        renderNewsCards(filtered);
+      }
+
+      function renderNewsCards(list) {
+        if (!list.length) {
+          newsSection.style.display = 'none';
+          return;
+        }
+        newsSection.style.display = 'block';
+        newsGrid.innerHTML = list.map(n => {
+          const icon = n.data?.icon || '📢';
+          return `<div class="news-card" data-news-id="${n.id}">
+            <div class="news-card__icon">${icon}</div>
+            <div class="news-card__title">${n.title}</div>
+            <div class="news-card__excerpt">${(n.content || '').substring(0,100)}${n.content && n.content.length > 100 ? '...' : ''}</div>
+          </div>`;
+        }).join('');
+
+        document.querySelectorAll('.news-card').forEach(c => {
+          c.addEventListener('click', () => {
+            const n = list.find(x => x.id === c.dataset.newsId);
+            if (n) openNewsModal(n);
+          });
+        });
+      }
+
+      function subscribeToNews() {
+        if (newsChannel) supabase.removeChannel(newsChannel);
+        newsChannel = supabase
+          .channel('announcements_channel')
+          .on('postgres_changes', {
+            event: '*',
+            schema: 'public',
+            table: 'announcements'
+          }, () => {
+            loadNews();
+          })
+          .subscribe();
+      }
+
+      // ========== МОДАЛЬНОЕ ОКНО НОВОСТИ ==========
       let currentNewsModal = null;
-      function openNewsModal(news) { if (currentNewsModal) { currentNewsModal.remove(); currentNewsModal = null; } const overlay = document.createElement('div'); overlay.className = 'modal-overlay'; overlay.style.display = 'flex'; overlay.innerHTML = `<div class="modal news-modal-content"><span class="modal-close">&times;</span><h2>${news.title}</h2><div class="news-body">${(news.body||'').replace(/\n/g,'<br>')}</div>${news.imageUrl?`<img src="${news.imageUrl}" onerror="this.style.display='none'">`:''}${news.videoUrl?`<div class="video-container"><iframe src="${news.videoUrl}" frameborder="0" allowfullscreen></iframe></div>`:''}${news.link?`<p><a href="${news.link}" target="_blank" class="btn">Подробнее</a></p>`:''}<div class="reactions-block" id="reactions-container"></div></div>`; document.body.appendChild(overlay); currentNewsModal = overlay; overlay.querySelector('.modal-close').addEventListener('click', () => { overlay.remove(); currentNewsModal = null; }); overlay.addEventListener('click', e => { if (e.target === overlay) { overlay.remove(); currentNewsModal = null; } }); loadReactions(news.id); }
+      function openNewsModal(news) {
+        if (currentNewsModal) {
+          currentNewsModal.remove();
+          currentNewsModal = null;
+        }
+        const overlay = document.createElement('div');
+        overlay.className = 'modal-overlay';
+        overlay.style.display = 'flex';
+        overlay.innerHTML = `<div class="modal news-modal-content">
+          <span class="modal-close">&times;</span>
+          <h2>${news.title}</h2>
+          <div class="news-body">${(news.content || '').replace(/\n/g,'<br>')}</div>
+          ${news.data?.imageUrl ? `<img src="${news.data.imageUrl}" onerror="this.style.display='none'">` : ''}
+          ${news.data?.videoUrl ? `<div class="video-container"><iframe src="${news.data.videoUrl}" frameborder="0" allowfullscreen></iframe></div>` : ''}
+          ${news.data?.link ? `<p><a href="${news.data.link}" target="_blank" class="btn">Подробнее</a></p>` : ''}
+          <div class="reactions-block" id="reactions-container"></div>
+        </div>`;
+        document.body.appendChild(overlay);
+        currentNewsModal = overlay;
 
+        overlay.querySelector('.modal-close').addEventListener('click', () => {
+          overlay.remove();
+          currentNewsModal = null;
+        });
+        overlay.addEventListener('click', e => {
+          if (e.target === overlay) {
+            overlay.remove();
+            currentNewsModal = null;
+          }
+        });
+
+        loadReactions(news.id);
+      }
+
+      // ========== РЕАКЦИИ (через announcement_reactions) ==========
       async function loadReactions(newsId) {
-        const container = document.getElementById('reactions-container'); if (!container) return;
-        const user = auth.currentUser; const reactionsRef = db.collection(`announcements/${newsId}/reactions`);
-        const snap = await reactionsRef.get();
+        const container = document.getElementById('reactions-container');
+        if (!container) return;
+
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) {
+          container.innerHTML = '<p style="color:#888;">Войдите, чтобы реагировать.</p>';
+          return;
+        }
+
+        // Получаем все реакции для этой новости
+        const { data: reactions, error } = await supabase
+          .from('announcement_reactions')
+          .select('*')
+          .eq('announcement_id', newsId);
+
+        if (error) {
+          console.error('Ошибка загрузки реакций:', error);
+          return;
+        }
+
         const purchased = getCurrentUser()?.purchasedItems || [];
         const hasSpecial = purchased.includes('special_reactions');
         const baseReactions = { '👍': 0, '❤️': 0, '😄': 0, '🎉': 0, '🔥': 0 };
-        if (hasSpecial) { baseReactions['🚀'] = 0; baseReactions['💯'] = 0; baseReactions['👑'] = 0; }
-        let userReactions = [];
-        snap.forEach(doc => { const t = doc.data().type; if (baseReactions[t] !== undefined) baseReactions[t]++; if (doc.id === user.uid) userReactions.push(t); });
+        if (hasSpecial) {
+          baseReactions['🚀'] = 0;
+          baseReactions['💯'] = 0;
+          baseReactions['👑'] = 0;
+        }
+
+        const userReactions = [];
+        (reactions || []).forEach(r => {
+          if (baseReactions[r.emoji] !== undefined) baseReactions[r.emoji]++;
+          if (r.user_id === user.id) userReactions.push(r.emoji);
+        });
+
         const canDoubleReact = purchased.includes('double_reactions');
         let html = '';
-        for (const [emoji, count] of Object.entries(baseReactions)) { const active = userReactions.includes(emoji) ? ' active' : ''; html += `<button class="reaction-btn${active}" data-emoji="${emoji}">${emoji} <span>${count}</span></button>`; }
+        for (const [emoji, count] of Object.entries(baseReactions)) {
+          const active = userReactions.includes(emoji) ? ' active' : '';
+          html += `<button class="reaction-btn${active}" data-emoji="${emoji}">${emoji} <span>${count}</span></button>`;
+        }
         container.innerHTML = html;
-        container.querySelectorAll('.reaction-btn').forEach(btn => btn.addEventListener('click', async () => { const emoji = btn.dataset.emoji; if (!canDoubleReact && userReactions.length >= 1 && !userReactions.includes(emoji)) { showToast('Можно поставить только 1 реакцию. Купите товар для 2 реакций!', 'info'); return; } if (userReactions.includes(emoji)) { await reactionsRef.doc(user.uid).delete(); } else { await reactionsRef.doc(user.uid).set({ type: emoji }); } loadReactions(newsId); }));
+
+        container.querySelectorAll('.reaction-btn').forEach(btn => {
+          btn.addEventListener('click', async () => {
+            const emoji = btn.dataset.emoji;
+            // Проверка на двойную реакцию
+            if (!canDoubleReact && userReactions.length >= 1 && !userReactions.includes(emoji)) {
+              showToast('Можно поставить только 1 реакцию. Купите товар для 2 реакций!', 'info');
+              return;
+            }
+
+            // Переключение реакции: если уже стоит — удаляем, иначе добавляем
+            if (userReactions.includes(emoji)) {
+              await supabase
+                .from('announcement_reactions')
+                .delete()
+                .eq('announcement_id', newsId)
+                .eq('user_id', user.id)
+                .eq('emoji', emoji);
+            } else {
+              await supabase
+                .from('announcement_reactions')
+                .insert([{
+                  announcement_id: newsId,
+                  user_id: user.id,
+                  emoji: emoji
+                }]);
+            }
+            // Обновляем блок реакций
+            loadReactions(newsId);
+          });
+        });
       }
     });
   </script>
