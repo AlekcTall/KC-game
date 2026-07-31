@@ -96,7 +96,7 @@ async function getAchievementStats(achievementId) {
     let unlocked = 0;
     (users || []).forEach(user => {
       total++;
-      const achievements = user.data?.achievements || [];
+      const achievements = Array.isArray(user.data?.achievements) ? user.data.achievements : [];
       if (achievements.includes(achievementId)) unlocked++;
     });
 
@@ -121,10 +121,10 @@ async function checkAndAwardAchievements() {
 
   if (userError || !userRow) return;
   const data = userRow.data || {};
-  let unlocked = data.achievements || [];
+  let unlocked = Array.isArray(data.achievements) ? data.achievements : [];
   const gameStats = data.gameStats || {};
-  const gameHistory = data.gameHistory || [];
-  const easterEggs = data.easterEggsFound || [];
+  const gameHistory = Array.isArray(data.gameHistory) ? data.gameHistory : [];
+  const easterEggs = Array.isArray(data.easterEggsFound) ? data.easterEggsFound : [];
   const description = data.description || '';
   const dailyLogin = data.dailyLogin || {};
   const battleshipStats = data.battleshipStats || {};
@@ -157,7 +157,6 @@ async function checkAndAwardAchievements() {
 
       case 'top10':
       case 'top3': {
-        // Получаем список всех не-админов, сортируем по очкам
         const { data: allPlayers, error: leaderError } = await supabase
           .from('users')
           .select('id, data')
@@ -232,15 +231,15 @@ async function checkAndAwardAchievements() {
       case 'tetris_level10': earned = (gameStats.tetris?.maxLevel || 0) >= 10; break;
 
       // НОВЫЕ ПАСХАЛКИ
-      case 'easter_dark_side': earned = (easterEggs || []).includes('dark_side'); break;
+      case 'easter_dark_side': earned = easterEggs.includes('dark_side'); break;
       case 'easter_collector': earned = (unlocked.length >= 10); break;
-      case 'easter_silence': earned = (easterEggs || []).includes('silence'); break;
-      case 'easter_night_guest': earned = (easterEggs || []).includes('night_guest'); break;
-      case 'easter_conspirator': earned = (easterEggs || []).includes('conspirator'); break;
-      case 'easter_selfie': earned = (easterEggs || []).includes('selfie'); break;
-      case 'easter_meteorism': earned = (easterEggs || []).includes('meteorism'); break;
-      case 'easter_librarian': earned = (easterEggs || []).includes('librarian'); break;
-      case 'easter_first_purchase': earned = (easterEggs || []).includes('first_purchase'); break;
+      case 'easter_silence': earned = easterEggs.includes('silence'); break;
+      case 'easter_night_guest': earned = easterEggs.includes('night_guest'); break;
+      case 'easter_conspirator': earned = easterEggs.includes('conspirator'); break;
+      case 'easter_selfie': earned = easterEggs.includes('selfie'); break;
+      case 'easter_meteorism': earned = easterEggs.includes('meteorism'); break;
+      case 'easter_librarian': earned = easterEggs.includes('librarian'); break;
+      case 'easter_first_purchase': earned = easterEggs.includes('first_purchase'); break;
     }
 
     if (earned && !alreadyUnlocked) {
