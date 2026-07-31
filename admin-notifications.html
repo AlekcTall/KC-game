@@ -41,12 +41,10 @@
 
   <footer class="footer"><div class="container"><p>© 2026 ваши амбассадоры</p></div></footer>
 
-  <!-- Firebase SDK -->
-  <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-auth-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore-compat.js"></script>
-  <script src="js/firebase-config.js"></script>
-  <script src="js/firebase-auth.js"></script>
+  <!-- Supabase SDK и модули -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="js/supabase-config.js"></script>
+  <script src="js/auth.js"></script>
   <script src="js/storage.js"></script>
   <script src="js/achievements.js"></script>
   <script src="js/easter-eggs.js"></script>
@@ -59,17 +57,28 @@
       document.addEventListener('DOMContentLoaded', async () => {
         const container = document.getElementById('admin-container');
 
-        auth.onAuthStateChanged(async fbUser => {
-          if (!fbUser) { container.innerHTML = '<p>Вы не авторизованы.</p>'; return; }
-          try {
-            const d = await db.collection('users').doc(fbUser.uid).get();
-            if (!d.exists || d.data().role !== 'admin') {
-              container.innerHTML = '<p>Доступ запрещён.</p>';
+        if (typeof onAuthStateChange === 'function') {
+          onAuthStateChange(async (event, session) => {
+            if (!session?.user) {
+              container.innerHTML = '<p>Вы не авторизованы.</p>';
               return;
             }
-            renderPage();
-          } catch (e) { container.innerHTML = `<p>Ошибка: ${e.message}</p>`; }
-        });
+            try {
+              const { data: row, error } = await supabase
+                .from('users')
+                .select('data')
+                .eq('id', session.user.id)
+                .single();
+              if (error || !row || (row.data?.role !== 'admin')) {
+                container.innerHTML = '<p>Доступ запрещён.</p>';
+                return;
+              }
+              renderPage();
+            } catch (e) { container.innerHTML = `<p>Ошибка: ${e.message}</p>`; }
+          });
+        } else {
+          container.innerHTML = '<p>Ошибка загрузки системы авторизации.</p>';
+        }
 
         function renderPage() {
           container.innerHTML = `
@@ -120,17 +129,27 @@
             fg.style.display = t === 'all' ? 'none' : 'block';
             fv.innerHTML = '';
             if (t === 'department') {
-              const snap = await db.collection('users').get();
-              const depts = [...new Set(snap.docs.map(d => d.data().department).filter(Boolean))];
-              depts.forEach(d => fv.add(new Option(d, d)));
+              // Получаем уникальные отделы из таблицы users
+              const { data: users, error } = await supabase
+                .from('users')
+                .select('data');
+              if (!error && users) {
+                const depts = [...new Set(users.map(u => u.data?.department).filter(Boolean))];
+                depts.forEach(d => fv.add(new Option(d, d)));
+              }
             } else if (t === 'role') {
               ['user', 'admin'].forEach(r => fv.add(new Option(r, r)));
             } else if (t === 'user') {
-              const snap = await db.collection('users').get();
-              snap.forEach(doc => {
-                const d = doc.data();
-                fv.add(new Option(d.username || d.email, doc.id));
-              });
+              const { data: users, error } = await supabase
+                .from('users')
+                .select('id, email, data')
+                .order('created_at', { ascending: false });
+              if (!error && users) {
+                users.forEach(u => {
+                  const name = u.data?.username || u.email;
+                  fv.add(new Option(name, u.id));
+                });
+              }
             }
           }
           ts.addEventListener('change', updateFilterOptions);
@@ -149,26 +168,49 @@
               let users = [];
               const t = ts.value;
               if (t === 'all') {
-                const snap = await db.collection('users').get();
-                snap.forEach(doc => users.push(doc.id));
+                const { data } = await supabase.from('users').select('id');
+                users = data ? data.map(u => u.id) : [];
               } else {
-                const field = t === 'department' ? 'department' : t === 'role' ? 'role' : '__name__';
                 const v = fv.value;
                 if (!v) { sm.textContent = 'Выберите значение.'; sb.disabled = false; return; }
-                const snap = await db.collection('users').where(field, '==', v).get();
-                snap.forEach(doc => users.push(doc.id));
+                let query = supabase.from('users').select('id');
+                if (t === 'department') {
+                  // Фильтрация по JSONB полю department
+                  query = query.filter('data->>department', 'eq', v);
+                } else if (t === 'role') {
+                  query = query.filter('data->>role', 'eq', v);
+                } else if (t === 'user') {
+                  query = query.eq('id', v);
+                }
+                const { data: filtered } = await query;
+                users = filtered ? filtered.map(u => u.id) : [];
               }
 
               if (!users.length) { sm.textContent = 'Нет пользователей.'; sb.disabled = false; return; }
 
-              let sent = 0;
-              for (const uid of users) {
-                await addNotification(uid, msg, 'admin', link || '');
-                sent++;
-                pf.style.width = (sent / users.length * 100) + '%';
+              // Формируем массив уведомлений для пакетной вставки
+              const notifications = users.map(uid => ({
+                user_id: uid,
+                message: msg,
+                type: 'admin',
+                link: link || '',
+                is_read: false,
+                created_at: new Date().toISOString()
+              }));
+
+              // Вставляем пачками по 100, чтобы не упереться в ограничения размера запроса
+              const BATCH_SIZE = 100;
+              let inserted = 0;
+              for (let i = 0; i < notifications.length; i += BATCH_SIZE) {
+                const batch = notifications.slice(i, i + BATCH_SIZE);
+                const { error } = await supabase.from('user_notifications').insert(batch);
+                if (error) throw error;
+                inserted += batch.length;
+                pf.style.width = (inserted / notifications.length * 100) + '%';
               }
-              sm.textContent = `Отправлено (${sent} шт.)`;
-              showToast(`Разослано ${sent}`, 'success');
+
+              sm.textContent = `Отправлено ${inserted} шт.`;
+              showToast(`Разослано ${inserted}`, 'success');
             } catch (err) {
               sm.textContent = 'Ошибка: ' + err.message;
             } finally {
