@@ -81,12 +81,10 @@
 
   <footer class="footer"><div class="container"><p>© 2026 ваши амбассадоры</p></div></footer>
 
-  <!-- Firebase SDK -->
-  <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-auth-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore-compat.js"></script>
-  <script src="js/firebase-config.js"></script>
-  <script src="js/firebase-auth.js"></script>
+  <!-- Supabase SDK и модули -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="js/supabase-config.js"></script>
+  <script src="js/auth.js"></script>
   <script src="js/storage.js"></script>
   <script src="js/achievements.js"></script>
   <script src="js/easter-eggs.js"></script>
@@ -120,16 +118,22 @@
 
       async function loadDepartments() {
         try {
-          const s = await db.collection('departments').orderBy('name').get();
-          departmentsCache = [];
-          s.forEach(d => departmentsCache.push({ id: d.id, name: d.data().name }));
+          const { data, error } = await supabase
+            .from('departments')
+            .select('id, name')
+            .order('name');
+          if (error) throw error;
+          departmentsCache = data || [];
           if (!departmentsCache.length) {
-            const def = ['РБ','МСБ','ТМ','Депозиты','ОКК','ООБП','Боссы','Заблудшие души'];
-            for (const n of def) await db.collection('departments').add({ name: n });
+            const defaults = ['РБ','МСБ','ТМ','Депозиты','ОКК','ООБП','Боссы','Заблудшие души'];
+            for (const n of defaults) {
+              await supabase.from('departments').insert([{ name: n }]);
+            }
             return loadDepartments();
           }
         } catch (e) {
-          departmentsCache = def.map((n,i)=>({id:'fb'+i, name:n}));
+          console.error(e);
+          departmentsCache = [{ id:'default', name:'Ошибка загрузки' }];
         }
       }
 
@@ -139,17 +143,28 @@
         const container = document.getElementById('admin-container');
         await loadDepartments();
 
-        auth.onAuthStateChanged(async fbUser => {
-          if (!fbUser) { container.innerHTML = '<p>Вы не авторизованы.</p>'; return; }
-          try {
-            const d = await db.collection('users').doc(fbUser.uid).get();
-            if (!d.exists || d.data().role !== 'admin') {
-              container.innerHTML = '<p>Доступ запрещён.</p>';
+        if (typeof onAuthStateChange === 'function') {
+          onAuthStateChange(async (event, session) => {
+            if (!session?.user) {
+              container.innerHTML = '<p>Вы не авторизованы.</p>';
               return;
             }
-            renderPage();
-          } catch (e) { container.innerHTML = `<p>Ошибка: ${e.message}</p>`; }
-        });
+            try {
+              const { data: row, error } = await supabase
+                .from('users')
+                .select('data')
+                .eq('id', session.user.id)
+                .single();
+              if (error || !row || (row.data?.role !== 'admin')) {
+                container.innerHTML = '<p>Доступ запрещён.</p>';
+                return;
+              }
+              renderPage();
+            } catch (e) { container.innerHTML = `<p>Ошибка: ${e.message}</p>`; }
+          });
+        } else {
+          container.innerHTML = '<p>Ошибка загрузки системы авторизации.</p>';
+        }
 
         function renderPage() {
           container.innerHTML = `
@@ -189,9 +204,12 @@
           else content.innerHTML = '<ul class="announcements-list"><li class="skeleton-row"><div class="skeleton-cell" style="width:80%;"></div></li></ul>';
 
           try {
-            const snap = await db.collection('announcements').orderBy('createdAt', 'desc').get();
-            allNews = [];
-            snap.forEach(d => allNews.push({ id: d.id, ...d.data() }));
+            const { data, error } = await supabase
+              .from('announcements')
+              .select('*')
+              .order('created_at', { ascending: false });
+            if (error) throw error;
+            allNews = data || [];
             setCached(CACHE_NEWS_KEY, allNews);
             renderNewsList();
           } catch (e) {
@@ -204,8 +222,10 @@
           const content = document.getElementById('admin-tab-content');
           let html = `<h3>Новости (${allNews.length})</h3><ul class="announcements-list">`;
           allNews.forEach(x => {
-            const dt = x.createdAt ? new Date(x.createdAt.seconds * 1000).toLocaleString('ru-RU') : '';
-            html += `<li><div><strong>${x.title}</strong> — ${(x.body || '').substring(0, 50)}...<br><small>${dt}</small></div><div><button class="btn btn-small edit-news-btn" data-news-id="${x.id}">✏️</button><button class="btn btn-small btn-danger delete-news-btn" data-news-id="${x.id}">Удалить</button></div></li>`;
+            const dt = x.created_at ? new Date(x.created_at).toLocaleString('ru-RU') : '';
+            const title = x.title || '';
+            const body = x.content || '';
+            html += `<li><div><strong>${title}</strong> — ${body.substring(0, 50)}...<br><small>${dt}</small></div><div><button class="btn btn-small edit-news-btn" data-news-id="${x.id}">✏️</button><button class="btn btn-small btn-danger delete-news-btn" data-news-id="${x.id}">Удалить</button></div></li>`;
           });
           html += '</ul><button class="btn" id="add-news-btn" style="margin-top:1rem;">➕ Создать</button>';
           content.innerHTML = html;
@@ -217,7 +237,7 @@
           }));
           document.querySelectorAll('.delete-news-btn').forEach(b => b.addEventListener('click', async e => {
             if (confirm('Удалить?')) {
-              await db.collection('announcements').doc(e.target.dataset.newsId).delete();
+              await supabase.from('announcements').delete().eq('id', e.target.dataset.newsId);
               showToast('Удалена', 'success');
               renderNewsTab();
             }
@@ -230,13 +250,15 @@
             curNewsId = news.id;
             document.getElementById('news-modal-title').textContent = 'Редактировать';
             document.getElementById('news-title').value = news.title || '';
-            document.getElementById('news-body').value = news.body || '';
-            document.getElementById('news-icon').value = news.icon || '📢';
-            document.getElementById('news-image-url').value = news.imageUrl || '';
-            document.getElementById('news-video-url').value = news.videoUrl || '';
-            document.getElementById('news-link').value = news.link || '';
-            document.getElementById('news-publish-at').value = news.publishAt ? toDatetimeLocal(news.publishAt.toDate()) : '';
-            document.getElementById('news-expire-at').value = news.expireAt ? toDatetimeLocal(news.expireAt.toDate()) : '';
+            document.getElementById('news-body').value = news.content || '';
+            // Извлекаем данные из JSONB data
+            const nd = news.data || {};
+            document.getElementById('news-icon').value = nd.icon || '📢';
+            document.getElementById('news-image-url').value = nd.imageUrl || '';
+            document.getElementById('news-video-url').value = nd.videoUrl || '';
+            document.getElementById('news-link').value = nd.link || '';
+            document.getElementById('news-publish-at').value = news.publish_at ? toDatetimeLocal(new Date(news.publish_at)) : '';
+            document.getElementById('news-expire-at').value = news.expire_at ? toDatetimeLocal(new Date(news.expire_at)) : '';
             document.getElementById('news-notify-all').checked = false;
           } else {
             curNewsId = null;
@@ -252,28 +274,39 @@
         document.getElementById('news-save-btn').addEventListener('click', async () => {
           const title = document.getElementById('news-title').value.trim();
           if (!title) { document.getElementById('news-message').textContent = 'Введите заголовок'; return; }
-          const data = {
+          const body = document.getElementById('news-body').value.trim();
+          const icon = document.getElementById('news-icon').value.trim() || '📢';
+          const imageUrl = document.getElementById('news-image-url').value.trim();
+          const videoUrl = document.getElementById('news-video-url').value.trim();
+          const link = document.getElementById('news-link').value.trim();
+          const publishAt = document.getElementById('news-publish-at').value 
+            ? new Date(document.getElementById('news-publish-at').value).toISOString() 
+            : new Date().toISOString();
+          const expireAt = document.getElementById('news-expire-at').value 
+            ? new Date(document.getElementById('news-expire-at').value).toISOString() 
+            : null;
+
+          const dataRow = {
             title,
-            body: document.getElementById('news-body').value.trim(),
-            icon: document.getElementById('news-icon').value.trim() || '📢',
-            imageUrl: document.getElementById('news-image-url').value.trim(),
-            videoUrl: document.getElementById('news-video-url').value.trim(),
-            link: document.getElementById('news-link').value.trim(),
-            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+            content: body,
+            data: { icon, imageUrl, videoUrl, link },
+            publish_at: publishAt,
+            expire_at: expireAt,
+            updated_at: new Date().toISOString()
           };
-          const ps = document.getElementById('news-publish-at').value;
-          data.publishAt = ps ? firebase.firestore.Timestamp.fromDate(new Date(ps)) : firebase.firestore.FieldValue.serverTimestamp();
-          const es = document.getElementById('news-expire-at').value;
-          data.expireAt = es ? firebase.firestore.Timestamp.fromDate(new Date(es)) : null;
+
           try {
-            if (curNewsId) await db.collection('announcements').doc(curNewsId).update(data);
-            else {
-              data.createdAt = firebase.firestore.FieldValue.serverTimestamp();
-              await db.collection('announcements').add(data);
+            if (curNewsId) {
+              await supabase.from('announcements').update(dataRow).eq('id', curNewsId);
+            } else {
+              dataRow.created_at = new Date().toISOString();
+              await supabase.from('announcements').insert([dataRow]);
             }
             if (document.getElementById('news-notify-all').checked) {
-              const s = await db.collection('users').get();
-              for (const doc of s.docs) await addNotification(doc.id, `Новая новость: ${title}`, 'system', 'index.html');
+              const { data: users } = await supabase.from('users').select('id');
+              for (const u of (users || [])) {
+                await addNotification(u.id, `Новая новость: ${title}`, 'system', 'index.html');
+              }
             }
             showToast(curNewsId ? 'Обновлена' : 'Создана', 'success');
             document.getElementById('news-modal').style.display = 'none';
@@ -291,9 +324,11 @@
           else content.innerHTML = '<ul class="awards-list"><li class="skeleton-row"><div class="skeleton-cell" style="width:80%;"></div></li></ul>';
 
           try {
-            const snap = await db.collection('awards').get();
-            allAwards = [];
-            snap.forEach(d => allAwards.push({ id: d.id, ...d.data() }));
+            const { data, error } = await supabase
+              .from('awards')
+              .select('*');
+            if (error) throw error;
+            allAwards = data || [];
             setCached(CACHE_AWARDS_KEY, allAwards);
             renderAwardsList();
           } catch (e) {
@@ -308,7 +343,7 @@
           if (allAwards.length) {
             html += '<ul class="awards-list">';
             allAwards.forEach(x => {
-              html += `<li><span><img src="img/awards/${x.icon}" class="award-icon-preview" onerror="this.style.display='none'"> <strong>${x.name}</strong> (${x.id})${x.lokoinReward>0?` — +${x.lokoinReward} лок.`:''}</span><div><button class="btn btn-small edit-award-btn" data-award-id="${x.id}">✏️</button><button class="btn btn-small btn-danger delete-award-btn" data-award-id="${x.id}">Удалить</button></div></li>`;
+              html += `<li><span><img src="img/awards/${x.icon}" class="award-icon-preview" onerror="this.style.display='none'"> <strong>${x.name}</strong> (${x.id})${x.lokoin_reward>0?` — +${x.lokoin_reward} лок.`:''}</span><div><button class="btn btn-small edit-award-btn" data-award-id="${x.id}">✏️</button><button class="btn btn-small btn-danger delete-award-btn" data-award-id="${x.id}">Удалить</button></div></li>`;
             });
             html += '</ul>';
           } else html += '<p>Нет наград.</p>';
@@ -322,7 +357,7 @@
           }));
           document.querySelectorAll('.delete-award-btn').forEach(b => b.addEventListener('click', async e => {
             if (confirm('Удалить?')) {
-              await db.collection('awards').doc(e.target.dataset.awardId).delete();
+              await supabase.from('awards').delete().eq('id', e.target.dataset.awardId);
               showToast('Удалена', 'success');
               renderAwardsTab();
             }
@@ -339,7 +374,7 @@
             document.getElementById('award-name').value = award.name || '';
             document.getElementById('award-desc').value = award.description || '';
             document.getElementById('award-icon-file').value = award.icon || '';
-            document.getElementById('award-lokoin').value = award.lokoinReward || 0;
+            document.getElementById('award-lokoin').value = award.lokoin_reward || 0;
           } else {
             curAwardId = null;
             document.getElementById('award-modal-title').textContent = 'Создать';
@@ -359,13 +394,14 @@
                 icon = document.getElementById('award-icon-file').value.trim();
           if (!id || !name || !icon) { document.getElementById('award-message').textContent = 'Заполните ID, название и файл.'; return; }
           const data = {
+            id,
             name,
             description: document.getElementById('award-desc').value.trim(),
             icon,
-            lokoinReward: parseInt(document.getElementById('award-lokoin').value, 10) || 0
+            lokoin_reward: parseInt(document.getElementById('award-lokoin').value, 10) || 0
           };
           try {
-            await db.collection('awards').doc(id).set(data);
+            await supabase.from('awards').upsert([data]);
             showToast('Сохранена', 'success');
             document.getElementById('award-modal').style.display = 'none';
             renderAwardsTab();
@@ -385,14 +421,15 @@
           document.getElementById('add-dept-btn').addEventListener('click', async () => {
             const n = document.getElementById('new-dept-name').value.trim();
             if (!n) { showToast('Введите название', 'error'); return; }
-            await db.collection('departments').add({ name: n });
+            const { error } = await supabase.from('departments').insert([{ name: n }]);
+            if (error) { showToast('Ошибка добавления', 'error'); return; }
             await loadDepartments();
             renderDepartmentsTab();
             showToast('Добавлен', 'success');
           });
           document.querySelectorAll('.delete-dept-btn').forEach(b => b.addEventListener('click', async e => {
             if (confirm('Удалить?')) {
-              await db.collection('departments').doc(e.target.dataset.deptId).delete();
+              await supabase.from('departments').delete().eq('id', e.target.dataset.deptId);
               await loadDepartments();
               renderDepartmentsTab();
               showToast('Удалён', 'success');
