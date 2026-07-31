@@ -55,7 +55,7 @@
             display: block; 
             margin: 0 auto; 
             box-shadow: 0 8px 20px rgba(187, 173, 160, 0.4); 
-            touch-action: none; /* Критично для предотвращения скролла при свайпах */
+            touch-action: none;
         }
         
         .mobile-arrows { 
@@ -93,7 +93,6 @@
         .btn-back-2048 { display: inline-flex; align-items: center; gap: 0.5rem; margin-top: 1.5rem; color: var(--text-dark); text-decoration: none; font-weight: 600; transition: color 0.2s; }
         .btn-back-2048:hover { color: #e67e22; }
 
-        /* Модальные окна */
         .modal-overlay { 
             position: fixed; top: 0; left: 0; right: 0; bottom: 0; 
             background: rgba(119, 110, 101, 0.7); 
@@ -124,7 +123,6 @@
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
         @keyframes slideUp { from { opacity: 0; transform: translateY(20px) scale(0.95); } to { opacity: 1; transform: translateY(0) scale(1); } }
 
-        /* Лидерборд */
         .leaderboard-2048 { margin-top: 2rem; text-align: left; background: #f8fafc; padding: 1rem; border-radius: 16px; } 
         .leaderboard-2048 h3 { text-align: center; margin-bottom: 1rem; font-size: 1.1rem; color: var(--text-dark); } 
         .leaderboard-2048 table { width: 100%; border-collapse: collapse; font-size: 0.9rem; } 
@@ -197,11 +195,10 @@
     <a href="../games.html" class="btn-back-2048">← Вернуться к играм</a>
 </div>
 
-<script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-auth-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore-compat.js"></script>
-<script src="../js/firebase-config.js"></script>
-<script src="../js/firebase-auth.js"></script>
+<!-- Supabase SDK и модули -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="../js/supabase-config.js"></script>
+<script src="../js/auth.js"></script>
 <script src="../js/storage.js"></script>
 <script src="../js/achievements.js"></script>
 <script src="../js/notifications.js"></script>
@@ -231,7 +228,6 @@
     const SIZE = 4;
     const DISPLAY_SIZE = 400;
     
-    // Поддержка Retina/HiDPI для четкой картинки
     const dpr = window.devicePixelRatio || 1;
     canvas.width = DISPLAY_SIZE * dpr;
     canvas.height = DISPLAY_SIZE * dpr;
@@ -276,7 +272,7 @@
         awardedLevel = 0; 
         gameActive = true; 
         gameOverFlag = false; 
-        hasWonCurrentGame = false; // Сброс флага победы для новой игры
+        hasWonCurrentGame = false;
         maxTile = 0; 
         addRandomTile(); 
         addRandomTile(); 
@@ -428,7 +424,6 @@
         return true; 
     }
 
-    // === КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ АНИМАЦИИ ===
     async function performMove(moveFunc) { 
         if (!gameActive || gameOverFlag) return; 
         
@@ -437,7 +432,6 @@
             addRandomTile(); 
             updateScore(); 
             
-            // 1. Вычисляем реальный максимум на доске прямо сейчас
             let currentMax = 0;
             for (let r = 0; r < SIZE; r++) { 
                 for (let c = 0; c < SIZE; c++) { 
@@ -445,26 +439,20 @@
                 } 
             }
             
-            // 2. Обновляем глобальный maxTile для сохранения в БД
             if (currentMax > maxTile) {
                 maxTile = currentMax;
             }
 
-            // 3. ОТРИСОВКА ДОЛЖНА БЫТЬ ЗДЕСЬ, ДО ЛЮБЫХ AWAIT!
-            // Это гарантирует мгновенный отклик интерфейса
             drawGrid(); 
 
-            // 4. Начисление баллов за порог (логика)
             const threshold = 500;
             const newLevel = Math.floor(score / threshold);
             if (newLevel > awardedLevel) {
                 const pointsToAdd = newLevel - awardedLevel;
                 awardedLevel = newLevel;
-                // Запускаем асинхронно, но не блокируем UI оператором await здесь
                 awardPoints(pointsToAdd);
             }
 
-            // 5. Проверка победы/поражения
             if (currentMax >= 2048 && !hasWonCurrentGame) {
                 hasWonCurrentGame = true;
                 showEndGameModal(true);
@@ -474,8 +462,7 @@
                 showEndGameModal(false);
             } 
 
-            // 6. Асинхронное сохранение в БД (теперь оно не блокирует отрисовку)
-            if (typeof auth !== 'undefined' && auth.currentUser && typeof syncGameStats === 'function') {
+            if (currentUid && typeof syncGameStats === 'function') {
                 syncGameStats('2048', { maxTile: maxTile }).catch(console.error);
                 if (typeof checkAndAwardAchievements === 'function') {
                     checkAndAwardAchievements().catch(console.error);
@@ -485,22 +472,19 @@
     }
 
     async function awardPoints(amount) {
-        if (amount <= 0) return;
-        const cu = typeof getCurrentUser === 'function' ? getCurrentUser() : null;
-        if (cu && cu.uid && typeof auth !== 'undefined' && auth.currentUser) {
-            try {
-                if (typeof addPointsToCurrentUser === 'function') {
-                    const result = await addPointsToCurrentUser(amount, '2048');
-                    if (result && result.success) {
-                        const earned = result.points;
-                        const hasDouble = earned > amount;
-                        const msg = `🎉 Бонус за прогресс: +${earned} балл(ов)${hasDouble ? ' (x2 бонус)' : ''}!`;
-                        if (typeof showToast === 'function') showToast(msg, 'success');
-                        messageEl.textContent = msg;
-                    }
+        if (amount <= 0 || !currentUid) return;
+        try {
+            if (typeof addPointsToCurrentUser === 'function') {
+                const result = await addPointsToCurrentUser(amount, '2048');
+                if (result && result.success) {
+                    const earned = result.points;
+                    const hasDouble = earned > amount;
+                    const msg = `🎉 Бонус за прогресс: +${earned} балл(ов)${hasDouble ? ' (x2 бонус)' : ''}!`;
+                    if (typeof showToast === 'function') showToast(msg, 'success');
+                    messageEl.textContent = msg;
                 }
-            } catch (e) { console.error('Ошибка начисления:', e); }
-        }
+            }
+        } catch (e) { console.error('Ошибка начисления:', e); }
     }
 
     function showEndGameModal(isWin) {
@@ -521,7 +505,7 @@
         if (score > bestScore) { 
             bestScore = score; 
             updateScore(); 
-            if (typeof auth !== 'undefined' && auth.currentUser && typeof syncGameStats === 'function') { 
+            if (currentUid && typeof syncGameStats === 'function') { 
                 await syncGameStats('2048', { maxScore: bestScore, maxTile: maxTile }); 
                 if (typeof checkAndAwardAchievements === 'function') await checkAndAwardAchievements(); 
             } 
@@ -530,7 +514,6 @@
         updateTop(); 
     }
 
-    // Управление с клавиатуры
     document.addEventListener('keydown', (e) => { 
         if (e.code === 'Space' || e.key === 'Enter') { 
             if (gameOverModal.style.display !== 'none') {
@@ -548,7 +531,6 @@
         } 
     });
 
-    // Управление мобильными кнопками
     document.querySelector('.mobile-arrows').addEventListener('click', (e) => { 
         if (!gameActive || gameOverFlag) return; 
         if (e.target.classList.contains('up')) performMove(moveUp); 
@@ -557,7 +539,6 @@
         else if (e.target.classList.contains('right')) performMove(moveRight); 
     });
 
-    // Управление свайпами
     let touchStartX = 0, touchStartY = 0;
     canvas.addEventListener('touchstart', (e) => { 
         e.preventDefault(); 
@@ -599,34 +580,42 @@
         } 
     });
 
-    // Безопасная инициализация Firebase
-    if (typeof auth !== 'undefined') {
-        auth.onAuthStateChanged(user => { 
-            if (user) { loadBestAndTop(); } 
-            else { updateTopVisibility(); } 
+    // Авторизация через onAuthStateChange
+    if (typeof onAuthStateChange === 'function') {
+        onAuthStateChange((event, session) => {
+            if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
+                if (session?.user) {
+                    currentUid = session.user.id;
+                    loadBestAndTop();
+                }
+            } else {
+                currentUid = null;
+                updateTopVisibility();
+            }
         });
     } else {
-        console.warn('Firebase не загружен. Игра работает в демо-режиме.');
+        console.warn('Система авторизации не загружена. Игра работает в демо-режиме.');
         updateTopVisibility();
     }
 
     async function loadBestAndTop() { 
         const cu = typeof getCurrentUser === 'function' ? getCurrentUser() : null;
-        if (cu) currentUid = cu.uid || cu.id; 
-        
+
         if (cu?.gameStats?.['2048']?.maxTile) maxTile = cu.gameStats['2048'].maxTile; 
         if (cu?.gameStats?.['2048']?.maxScore) bestScore = cu.gameStats['2048'].maxScore; 
         
-        if (typeof auth !== 'undefined' && auth.currentUser && typeof db !== 'undefined') { 
-            try { 
-                const docSnap = await db.collection('users').doc(auth.currentUser.uid).get(); 
-                if (docSnap.exists) { 
-                    const stats = docSnap.data().gameStats?.['2048'] || {}; 
-                    if (stats.maxScore) bestScore = stats.maxScore; 
-                    if (stats.maxTile) maxTile = stats.maxTile; 
-                } 
-            } catch (e) { console.error(e); } 
-        } 
+        try { 
+            const { data: row, error } = await supabase
+                .from('users')
+                .select('data')
+                .eq('id', currentUid)
+                .single();
+            if (!error && row) { 
+                const stats = row.data?.gameStats?.['2048'] || {}; 
+                if (stats.maxScore) bestScore = stats.maxScore; 
+                if (stats.maxTile) maxTile = stats.maxTile; 
+            } 
+        } catch (e) { console.error(e); } 
         updateScore(); 
         updateTopVisibility(); 
         updateTop(); 
@@ -636,9 +625,8 @@
     function updateTopVisibility() { 
         const table = document.getElementById('top-table'); 
         const warning = document.getElementById('auth-warning'); 
-        const isAuth = typeof auth !== 'undefined' && auth.currentUser;
         
-        if (!isAuth) { 
+        if (!currentUid) { 
             if (table) table.style.display = 'none'; 
             if (warning) warning.style.display = 'block'; 
         } else { 
@@ -649,21 +637,26 @@
 
     async function updateTop() { 
         const tbody = document.querySelector('#top-table tbody'); 
-        if (!tbody || typeof auth === 'undefined' || !auth.currentUser || typeof db === 'undefined') return; 
+        if (!tbody || !currentUid) return; 
         
         try { 
-            const snap = await db.collection('users').get(); 
-            const players = []; 
-            snap.forEach(doc => { 
-                const d = doc.data(); 
-                if (d.role === 'admin') return; 
-                const sc = d.gameStats?.['2048']?.maxScore || 0; 
-                if (sc > 0) players.push({ uid: doc.id, username: d.username || 'Аноним', score: sc }); 
-            }); 
-            players.sort((a, b) => b.score - a.score); 
-            const top10 = players.slice(0, 10); 
+            const { data: users, error } = await supabase
+                .from('users')
+                .select('id, data')
+                .neq('data->>role', 'admin')
+                .not('data->gameStats->2048->maxScore', 'is', null)
+                .order('data->gameStats->2048->maxScore', { ascending: false })
+                .limit(10);
+
+            if (error) throw error;
+
+            const players = (users || []).map(u => ({ 
+                uid: u.id, 
+                username: u.data?.username || 'Аноним', 
+                score: u.data?.gameStats?.['2048']?.maxScore || 0 
+            })); 
             
-            tbody.innerHTML = top10.map((p, i) => { 
+            tbody.innerHTML = players.map((p, i) => { 
                 const me = (currentUid && p.uid === currentUid) ? ' class="me"' : ''; 
                 return `<tr${me}><td>${i+1}</td><td>${p.username}</td><td>${p.score.toLocaleString()}</td></tr>`; 
             }).join('') || '<tr><td colspan="3">Пока нет рекордов</td></tr>'; 
