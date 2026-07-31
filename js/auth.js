@@ -535,3 +535,11 @@ window.firebaseLogout = logoutUser;
 window.firebaseUpdateProfile = updateProfile;
 window.syncEasterEggsToFirestore = syncEasterEggs;
 window.syncAchievementsToFirestore = syncAchievements;
+
+// Глобальная функция onAuthStateChange для совместимости с новыми модулями
+window.onAuthStateChange = function(callback) {
+  const { data: { subscription } } = supa.auth.onAuthStateChange((event, session) => {
+    callback(event, session);
+  });
+  return () => subscription.unsubscribe();
+};
