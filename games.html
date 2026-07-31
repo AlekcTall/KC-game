@@ -23,11 +23,10 @@
   <main class="main"><div class="container"><h2>Доступные игры</h2><div id="games-filters-container"></div><div id="games-grid" class="games-grid"></div></div></main>
   <footer class="footer"><div class="container"><p>© 2026 ваши амбассадоры</p></div></footer>
 
-  <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-auth-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore-compat.js"></script>
-  <script src="js/firebase-config.js"></script>
-  <script src="js/firebase-auth.js"></script>
+  <!-- Supabase SDK и модули -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="js/supabase-config.js"></script>
+  <script src="js/auth.js"></script>
   <script src="js/storage.js"></script>
   <script src="js/achievements.js"></script>
   <script src="js/notifications.js"></script>
@@ -100,7 +99,7 @@
         });
       }
 
-      // Загрузка игр из Firestore с кешированием
+      // Загрузка игр из Supabase с кешированием
       async function loadGames() {
         const cachedData = sessionStorage.getItem(CACHE_KEY);
         if (cachedData) {
@@ -109,8 +108,8 @@
             if (Date.now() - parsed.timestamp < CACHE_TTL) {
               allGames = parsed.games;
               renderGames();
+              return;
             } else {
-              // Кеш устарел – удаляем и показываем скелетоны
               sessionStorage.removeItem(CACHE_KEY);
               renderSkeletons();
             }
@@ -123,9 +122,13 @@
         }
 
         try {
-          const snap = await db.collection('games').get();
-          allGames = [];
-          snap.forEach(doc => allGames.push({ id: doc.id, ...doc.data() }));
+          const { data, error } = await supabase
+            .from('games')
+            .select('*');
+
+          if (error) throw error;
+
+          allGames = data || [];
           sessionStorage.setItem(CACHE_KEY, JSON.stringify({ timestamp: Date.now(), games: allGames }));
           renderGames();
         } catch (e) {
