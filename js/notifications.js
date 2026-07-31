@@ -2,8 +2,8 @@
 
 let notificationsUnreadCount = 0;
 let notificationsList = [];
-let notificationsListener = null;
 let notificationDropdown = null;
+let notificationsChannel = null; // Supabase Realtime канал
 
 // Иконки для типов уведомлений
 const TYPE_ICONS = {
@@ -16,7 +16,8 @@ const TYPE_ICONS = {
   gift: '🎁',
   award: '🎖️'
 };
-// Склонение слова "локоин"
+
+// Склонение слова "локоин" (дублируется из main.js, оставлено для автономности)
 function pluralizeLokoin(n) {
   const abs = Math.abs(n);
   const lastDigit = abs % 10;
@@ -26,6 +27,7 @@ function pluralizeLokoin(n) {
   if (lastDigit >= 2 && lastDigit <= 4) return 'а';
   return 'ов';
 }
+
 // Модальное окно уведомления (создадим динамически)
 let notifModal = null;
 
@@ -68,7 +70,10 @@ function openNotifModal(notification) {
   const icon = TYPE_ICONS[notification.type] || '🔔';
   document.getElementById('notif-detail-icon').textContent = icon;
   document.getElementById('notif-detail-message').textContent = notification.message;
-  const date = notification.timestamp ? new Date(notification.timestamp.seconds * 1000).toLocaleString('ru-RU') : '';
+  // timestamp теперь ISO строка (TIMESTAMPTZ) из Supabase
+  const date = notification.created_at
+    ? new Date(notification.created_at).toLocaleString('ru-RU')
+    : '';
   document.getElementById('notif-detail-date').textContent = date;
   
   const linkBtn = document.getElementById('notif-detail-link-btn');
@@ -128,12 +133,15 @@ function initNotifications() {
 
   clearBtn.addEventListener('click', async () => {
     const currentUser = getCurrentUser();
-    if (!currentUser || !currentUser.uid) return;
-    const notifRef = db.collection('users').doc(currentUser.uid).collection('notifications');
-    const snapshot = await notifRef.get();
-    const batch = db.batch();
-    snapshot.forEach(doc => batch.delete(doc.ref));
-    await batch.commit();
+    if (!currentUser || !currentUser.id) return;
+    const uid = currentUser.id;
+    // Удаляем все уведомления пользователя
+    const { error } = await supabase
+      .from('user_notifications')
+      .delete()
+      .eq('user_id', uid);
+    if (error) console.error('Ошибка удаления уведомлений:', error);
+
     notificationsUnreadCount = 0;
     notificationsList = [];
     updateBadge();
@@ -148,33 +156,26 @@ function initNotifications() {
     if (notificationDropdown) notificationDropdown.style.display = 'none';
   });
 
-  if (typeof auth !== 'undefined') {
-    auth.onAuthStateChanged((user) => {
-      if (user) {
-        if (notificationsListener) notificationsListener();
-        notificationsListener = db.collection('users').doc(user.uid)
-          .collection('notifications')
-          .orderBy('timestamp', 'desc')
-          .limit(20)
-          .onSnapshot(snapshot => {
-            notificationsList = [];
-            notificationsUnreadCount = 0;
-            snapshot.forEach(doc => {
-              const data = doc.data();
-              notificationsList.push({ id: doc.id, ...data });
-              if (!data.read) notificationsUnreadCount++;
-            });
-            updateBadge();
-            renderNotifications();
-            const last = notificationsList[0];
-            if (last && !last.read && last.timestamp) {
-              showBrowserNotification(last.message || 'Новое уведомление');
-            }
-          });
-      } else {
-        if (notificationsListener) {
-          notificationsListener();
-          notificationsListener = null;
+  // Подписка на изменения аутентификации (аналог onAuthStateChanged)
+  if (typeof onAuthStateChange === 'function') {
+    onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
+        const user = session?.user ?? null;
+        if (user) {
+          // Отписываемся от старого канала, если был
+          if (notificationsChannel) {
+            supabase.removeChannel(notificationsChannel);
+            notificationsChannel = null;
+          }
+          // Загружаем начальные уведомления
+          loadInitialNotifications(user.id);
+          // Подписываемся на новые уведомления через Realtime
+          subscribeToNotifications(user.id);
+        }
+      } else if (event === 'SIGNED_OUT') {
+        if (notificationsChannel) {
+          supabase.removeChannel(notificationsChannel);
+          notificationsChannel = null;
         }
         notificationsList = [];
         notificationsUnreadCount = 0;
@@ -182,6 +183,54 @@ function initNotifications() {
         renderNotifications();
       }
     });
+  }
+
+  // Загрузка последних 20 уведомлений
+  async function loadInitialNotifications(uid) {
+    const { data, error } = await supabase
+      .from('user_notifications')
+      .select('*')
+      .eq('user_id', uid)
+      .order('created_at', { ascending: false })
+      .limit(20);
+    if (error) {
+      console.error('Ошибка загрузки уведомлений:', error);
+      return;
+    }
+    notificationsList = data || [];
+    notificationsUnreadCount = notificationsList.filter(n => !n.is_read).length;
+    updateBadge();
+    renderNotifications();
+  }
+
+  // Подписка на вставку новых уведомлений
+  function subscribeToNotifications(uid) {
+    notificationsChannel = supabase
+      .channel('user_notifications_channel')
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'user_notifications',
+          filter: `user_id=eq.${uid}`
+        },
+        (payload) => {
+          const newNotif = payload.new;
+          // Добавляем в начало списка
+          notificationsList.unshift(newNotif);
+          if (!newNotif.is_read) notificationsUnreadCount++;
+          // Ограничиваем список 20 записями
+          if (notificationsList.length > 20) notificationsList.pop();
+          updateBadge();
+          renderNotifications();
+          // Показываем браузерное уведомление, если вкладка не активна
+          if (!newNotif.is_read && document.visibilityState === 'hidden') {
+            showBrowserNotification(newNotif.message || 'Новое уведомление');
+          }
+        }
+      )
+      .subscribe();
   }
 
   function updateBadge() {
@@ -201,10 +250,14 @@ function initNotifications() {
       return;
     }
     listEl.innerHTML = notificationsList.map(n => {
-      const date = n.timestamp ? new Date(n.timestamp.seconds * 1000).toLocaleString('ru-RU') : '';
+      const date = n.created_at
+        ? new Date(n.created_at).toLocaleString('ru-RU')
+        : '';
       const icon = TYPE_ICONS[n.type] || '🔔';
-      const shortMsg = n.message && n.message.length > 60 ? n.message.substring(0, 60) + '...' : (n.message || '');
-      return `<div class="notification-item ${n.read ? 'read' : 'unread'}" data-id="${n.id}">
+      const shortMsg = n.message && n.message.length > 60
+        ? n.message.substring(0, 60) + '...'
+        : (n.message || '');
+      return `<div class="notification-item ${n.is_read ? 'read' : 'unread'}" data-id="${n.id}">
         <span class="notif-icon">${icon}</span>
         <span class="notif-message">${shortMsg}</span>
         <small class="notif-date">${date}</small>
@@ -217,12 +270,13 @@ function initNotifications() {
         const id = item.dataset.id;
         const notification = notificationsList.find(n => n.id === id);
         if (notification) {
-          // Отмечаем прочитанным
-          if (!notification.read) {
+          if (!notification.is_read) {
             const currentUser = getCurrentUser();
-            if (currentUser && currentUser.uid) {
-              await db.collection('users').doc(currentUser.uid)
-                .collection('notifications').doc(id).update({ read: true });
+            if (currentUser && currentUser.id) {
+              await supabase
+                .from('user_notifications')
+                .update({ is_read: true })
+                .eq('id', id);
             }
           }
           openNotifModal(notification);
@@ -233,12 +287,13 @@ function initNotifications() {
 
   async function markAllRead() {
     const currentUser = getCurrentUser();
-    if (!currentUser || !currentUser.uid) return;
-    const notifRef = db.collection('users').doc(currentUser.uid).collection('notifications');
-    const snapshot = await notifRef.where('read', '==', false).get();
-    const batch = db.batch();
-    snapshot.forEach(doc => batch.update(doc.ref, { read: true }));
-    await batch.commit();
+    if (!currentUser || !currentUser.id) return;
+    const uid = currentUser.id;
+    await supabase
+      .from('user_notifications')
+      .update({ is_read: true })
+      .eq('user_id', uid)
+      .eq('is_read', false);
   }
 }
 
@@ -246,13 +301,16 @@ function initNotifications() {
 async function addNotification(userId, message, type = 'system', link = '') {
   if (!userId) return;
   try {
-    await db.collection('users').doc(userId).collection('notifications').add({
-      message,
-      type,
-      link,
-      timestamp: firebase.firestore.FieldValue.serverTimestamp(),
-      read: false
-    });
+    const { error } = await supabase
+      .from('user_notifications')
+      .insert([{
+        user_id: userId,
+        message,
+        type,
+        link,
+        is_read: false
+      }]);
+    if (error) console.error('Ошибка добавления уведомления:', error);
   } catch (error) {
     console.error('Ошибка добавления уведомления:', error);
   }
@@ -261,9 +319,17 @@ async function addNotification(userId, message, type = 'system', link = '') {
 // Уведомление о пополнении/списании локоинов
 async function addLokoinNotification(userId, amount, comment = '') {
   if (!userId || amount === 0) return;
-  const userDoc = await db.collection('users').doc(userId).get();
-  if (!userDoc.exists) return;
-  const balance = userDoc.data().lokoin_balance || 0;
+
+  // Получаем баланс пользователя из Supabase
+  const { data: userData, error } = await supabase
+    .from('users')
+    .select('data')
+    .eq('id', userId)
+    .single();
+  if (error || !userData) return;
+
+  const userInfo = userData.data || {};
+  const balance = userInfo.lokoin_balance || 0;
   const absAmount = Math.abs(amount);
   const plural = pluralizeLokoin(absAmount);
   const balancePlural = pluralizeLokoin(balance);
