@@ -89,7 +89,6 @@
         .tab { background: none; border: none; padding: 0.5rem 1rem; font-size: 1rem; cursor: pointer; border-radius: 4px 4px 0 0; }
         .tab.active { background: var(--color-primary); color: white; }
         .back-link { display: inline-block; margin-top: 1rem; color: var(--color-primary); text-decoration: none; }
-        /* Оверлей Game Over */
         .game-over-overlay {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
             background: rgba(0, 0, 0, 0.6); display: flex; flex-direction: column;
@@ -120,11 +119,10 @@
     <a href="../games.html" class="back-link">← Вернуться к играм</a>
 </div>
 
-<script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-auth-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore-compat.js"></script>
-<script src="../js/firebase-config.js"></script>
-<script src="../js/firebase-auth.js"></script>
+<!-- Supabase SDK и модули -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="../js/supabase-config.js"></script>
+<script src="../js/auth.js"></script>
 <script src="../js/storage.js"></script>
 <script src="../js/achievements.js"></script>
 <script src="../js/notifications.js"></script>
@@ -136,21 +134,18 @@
         const COLS = 10;
         const ROWS = 20;
         const CELL_SIZE = 30;
-        // Основные цвета блоков (индексы 0..6)
         const BASE_COLORS = ['#00f0f0', '#f0f000', '#a000f0', '#00f000', '#f00000', '#0000f0', '#f0a000'];
-        // Светлые оттенки для градиента (верхняя левая часть)
         const LIGHT_COLORS = ['#7fffff', '#ffff7f', '#d07fff', '#7fff7f', '#ff7f7f', '#7f7fff', '#ffd07f'];
-        // Тёмные оттенки для градиента (нижняя правая часть)
         const DARK_COLORS = ['#009f9f', '#9f9f00', '#60009f', '#009f00', '#9f0000', '#00009f', '#9f6000'];
 
         const SHAPES = [
-            [[1,1,1,1]],                         // I
-            [[1,1],[1,1]],                       // O
-            [[0,1,0],[1,1,1]],                   // T
-            [[1,0,0],[1,1,1]],                   // J
-            [[0,0,1],[1,1,1]],                   // L
-            [[0,1,1],[1,1,0]],                   // S
-            [[1,1,0],[0,1,1]]                    // Z
+            [[1,1,1,1]],
+            [[1,1],[1,1]],
+            [[0,1,0],[1,1,1]],
+            [[1,0,0],[1,1,1]],
+            [[0,0,1],[1,1,1]],
+            [[0,1,1],[1,1,0]],
+            [[1,1,0],[0,1,1]]
         ];
 
         const gameContainer = document.getElementById('tab-content');
@@ -162,22 +157,26 @@
         let bestScore = 0, bestLines = 0, bestLevel = 1;
         let currentUid = null;
 
-        // Переменные для анимации очистки линий
-        let clearingRows = [];       // номера строк, которые нужно очистить
-        let clearingTimer = null;   // таймер анимации
-        let flashOn = false;        // состояние вспышки
+        let clearingRows = [];
+        let clearingTimer = null;
+        let flashOn = false;
 
-        let bgCanvas = null;        // фоновый canvas с сеткой
+        let bgCanvas = null;
 
-        auth.onAuthStateChanged(user => {
-            if (user) {
-                currentUid = user.uid;
-                loadBestResults();
-            } else {
-                currentUid = null;
-            }
-            switchTab('game');
-        });
+        // Авторизация через onAuthStateChange
+        if (typeof onAuthStateChange === 'function') {
+            onAuthStateChange((event, session) => {
+                if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
+                    if (session?.user) {
+                        currentUid = session.user.id;
+                        loadBestResults();
+                    }
+                } else {
+                    currentUid = null;
+                }
+                switchTab('game');
+            });
+        }
 
         document.querySelectorAll('.tab').forEach(tab => {
             tab.addEventListener('click', () => {
@@ -193,11 +192,15 @@
         }
 
         async function loadBestResults() {
-            if (!auth.currentUser) return;
+            if (!currentUid) return;
             try {
-                const doc = await db.collection('users').doc(auth.currentUser.uid).get();
-                if (doc.exists) {
-                    const stats = doc.data().gameStats?.tetris || {};
+                const { data: row, error } = await supabase
+                    .from('users')
+                    .select('data')
+                    .eq('id', currentUid)
+                    .single();
+                if (!error && row) {
+                    const stats = row.data?.gameStats?.tetris || {};
                     if (stats.maxScore) bestScore = stats.maxScore;
                     if (stats.maxLines) bestLines = stats.maxLines;
                     if (stats.maxLevel) bestLevel = stats.maxLevel;
@@ -212,13 +215,11 @@
                 bgCanvas.height = ROWS * CELL_SIZE;
             }
             const bgCtx = bgCanvas.getContext('2d');
-            // Лёгкий градиент фона
             const gradient = bgCtx.createLinearGradient(0, 0, COLS * CELL_SIZE, ROWS * CELL_SIZE);
             gradient.addColorStop(0, '#fdfdfd');
             gradient.addColorStop(1, '#f0f0f0');
             bgCtx.fillStyle = gradient;
             bgCtx.fillRect(0, 0, bgCanvas.width, bgCanvas.height);
-            // Сетка
             bgCtx.strokeStyle = '#e0e0e0';
             bgCtx.lineWidth = 0.5;
             for (let i = 0; i <= COLS; i++) {
@@ -306,7 +307,6 @@
         }
 
         function newGame() {
-            // Очищаем предыдущий оверлей
             const overlay = document.querySelector('.game-over-overlay');
             if (overlay) overlay.remove();
 
@@ -429,27 +429,23 @@
                 }
             }
             if (filledRows.length > 0) {
-                // Запускаем анимацию очистки
                 clearingRows = filledRows;
                 flashOn = true;
-                // Приостанавливаем основную логику
-                draw(); // покажем вспышку
+                draw();
                 if (clearingTimer) clearInterval(clearingTimer);
                 let flashes = 0;
                 clearingTimer = setInterval(() => {
                     flashOn = !flashOn;
                     draw();
                     flashes++;
-                    if (flashes >= 3) { // 3 переключения = ~180мс при 60мс интервале
+                    if (flashes >= 3) {
                         clearInterval(clearingTimer);
                         clearingTimer = null;
-                        // Удаляем линии
                         for (const row of clearingRows.sort((a,b) => a - b)) {
                             board.splice(row, 1);
                             board.unshift(Array(COLS).fill(0));
                         }
                         clearingRows = [];
-                        // Начисляем очки и т.д.
                         const cleared = filledRows.length;
                         const linePoints = [0, 100, 300, 500, 800];
                         score += linePoints[cleared] || 0;
@@ -457,11 +453,10 @@
                         level = Math.floor(lines / 10) + 1;
                         fallSpeed = Math.max(50, 500 - (level - 1) * 50);
                         updateStats();
-                        startGameLoop(); // перезапускаем интервал с новой скоростью
+                        startGameLoop();
                         draw();
 
-                        // Проверка достижений
-                        if (cleared >= 4 && auth.currentUser) {
+                        if (cleared >= 4 && currentUid) {
                             syncGameStats('tetris', { tetrisCleared: true });
                             if (typeof checkAndAwardAchievements === 'function') {
                                 checkAndAwardAchievements();
@@ -483,13 +478,11 @@
             showToast(gamePaused ? 'Пауза' : 'Продолжить', 'info');
         }
 
-        // Рисование объёмного блока
         function drawBlock(ctx, x, y, colorKey, size = CELL_SIZE) {
             const baseColor = BASE_COLORS[colorKey];
             const lightColor = LIGHT_COLORS[colorKey];
             const darkColor = DARK_COLORS[colorKey];
 
-            // Основной градиент (светлый верхний левый угол -> тёмный нижний правый)
             const gradient = ctx.createLinearGradient(x, y, x + size, y + size);
             gradient.addColorStop(0, lightColor);
             gradient.addColorStop(0.6, baseColor);
@@ -497,12 +490,10 @@
             ctx.fillStyle = gradient;
             ctx.fillRect(x, y, size, size);
 
-            // Блик (белая полоса сверху слева)
             ctx.fillStyle = 'rgba(255,255,255,0.3)';
             ctx.fillRect(x + 2, y + 2, size - 4, 4);
             ctx.fillRect(x + 2, y + 2, 4, size - 4);
 
-            // Внутренняя обводка для разделения блоков
             ctx.strokeStyle = 'rgba(0,0,0,0.2)';
             ctx.lineWidth = 1;
             ctx.strokeRect(x + 0.5, y + 0.5, size - 1, size - 1);
@@ -511,17 +502,14 @@
         function draw() {
             if (!ctx) return;
             ctx.clearRect(0, 0, canvas.width, canvas.height);
-            // Фон с сеткой
             if (bgCanvas) {
                 ctx.drawImage(bgCanvas, 0, 0);
             }
 
-            // Рисуем статичные блоки на доске
             for (let r = 0; r < ROWS; r++) {
                 for (let c = 0; c < COLS; c++) {
                     if (board[r][c]) {
                         const colorIndex = board[r][c] - 1;
-                        // Если строка в процессе очистки и flashOn, рисуем белым
                         if (clearingRows.includes(r) && flashOn) {
                             ctx.fillStyle = '#ffffff';
                             ctx.fillRect(c * CELL_SIZE, r * CELL_SIZE, CELL_SIZE, CELL_SIZE);
@@ -534,7 +522,6 @@
                 }
             }
 
-            // Рисуем текущую фигуру (если не в режиме очистки)
             if (currentPiece && gameActive && clearingRows.length === 0) {
                 for (let r = 0; r < currentPiece.shape.length; r++) {
                     for (let c = 0; c < currentPiece.shape[r].length; c++) {
@@ -547,7 +534,6 @@
                 }
             }
 
-            // Отрисовка следующей фигуры
             nextCtx.clearRect(0, 0, nextCanvas.width, nextCanvas.height);
             if (nextPiece) {
                 const offX = Math.floor((4 - nextPiece.shape[0].length) / 2);
@@ -575,12 +561,12 @@
                 if (newBestScore) bestScore = score;
                 if (newBestLines) bestLines = lines;
                 if (newBestLevel) bestLevel = level;
-                if (auth.currentUser) {
+                if (currentUid) {
                     await syncGameStats('tetris', { maxScore: bestScore, maxLines: bestLines, maxLevel: bestLevel });
                 }
             }
 
-            if (auth.currentUser && typeof addPointsToCurrentUser === 'function') {
+            if (currentUid && typeof addPointsToCurrentUser === 'function') {
                 const pointsEarned = Math.floor(score / 500);
                 if (pointsEarned > 0) {
                     const result = await addPointsToCurrentUser(pointsEarned, 'tetris');
@@ -596,7 +582,6 @@
                 await checkAndAwardAchievements();
             }
 
-            // Показываем оверлей Game Over
             const wrapper = document.getElementById('canvas-wrapper');
             if (wrapper) {
                 const old = wrapper.querySelector('.game-over-overlay');
@@ -622,16 +607,22 @@
         async function renderLeaderboardTab() {
             gameContainer.innerHTML = '<p>Загрузка...</p>';
             try {
-                const snap = await db.collection('users').get();
+                const { data: users, error } = await supabase
+                    .from('users')
+                    .select('id, data')
+                    .neq('data->>role', 'admin');
+
+                if (error) throw error;
+
                 const scoreList = [], linesList = [], levelList = [];
-                snap.forEach(doc => {
-                    const d = doc.data();
-                    if (d.role === 'admin') return;
-                    const stats = d.gameStats?.tetris || {};
-                    if (stats.maxScore > 0) scoreList.push({ username: d.username || 'Аноним', value: stats.maxScore, uid: doc.id });
-                    if (stats.maxLines > 0) linesList.push({ username: d.username || 'Аноним', value: stats.maxLines, uid: doc.id });
-                    if (stats.maxLevel > 1) levelList.push({ username: d.username || 'Аноним', value: stats.maxLevel, uid: doc.id });
+                (users || []).forEach(u => {
+                    const stats = u.data?.gameStats?.tetris || {};
+                    const username = u.data?.username || 'Аноним';
+                    if (stats.maxScore > 0) scoreList.push({ username, value: stats.maxScore, uid: u.id });
+                    if (stats.maxLines > 0) linesList.push({ username, value: stats.maxLines, uid: u.id });
+                    if (stats.maxLevel > 1) levelList.push({ username, value: stats.maxLevel, uid: u.id });
                 });
+
                 scoreList.sort((a,b) => b.value - a.value);
                 linesList.sort((a,b) => b.value - a.value);
                 levelList.sort((a,b) => b.value - a.value);
