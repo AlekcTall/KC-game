@@ -1,382 +1,526 @@
-// js/firebase-auth.js
+/**
+ * Firebase Auth + Supabase Profile Management
+ * Вход/Регистрация через Firebase Auth
+ * Данные профиля (баланс, очки, аватар) хранятся в Supabase
+ */
 
-const auth = firebase.auth();
-const db = firebase.firestore();
+// Глобальные переменные для кэширования профиля
+let currentUserProfile = null;
+let profileCacheTime = 0;
+const PROFILE_CACHE_TTL = 5 * 60 * 1000; // 5 минут
 
-// ================== АВТОРИЗАЦИЯ ==================
+/**
+ * Инициализация аутентификации
+ */
+function initAuth() {
+  firebase.auth().onAuthStateChanged(async (user) => {
+    if (user) {
+      console.log('🔥 User logged in:', user.uid);
+      await loadUserProfile(user.uid);
+      updateAuthUI(true, user);
+      
+      // Запуск фоновых процессов
+      startBackgroundTasks();
+    } else {
+      console.log('❌ User logged out');
+      currentUserProfile = null;
+      updateAuthUI(false, null);
+      stopBackgroundTasks();
+    }
+  });
+}
 
-async function firebaseRegister(email, password, username, department) {
+/**
+ * Загрузка профиля из Supabase
+ */
+async function loadUserProfile(uid) {
+  const now = Date.now();
+  
+  // Проверка кэша
+  if (currentUserProfile && (now - profileCacheTime) < PROFILE_CACHE_TTL) {
+    console.log('💾 Loading profile from cache');
+    return currentUserProfile;
+  }
+
   try {
-    const userCredential = await auth.createUserWithEmailAndPassword(email, password);
-    const user = userCredential.user;
-    await user.updateProfile({ displayName: username });
-    await user.sendEmailVerification();
+    console.log('📡 Fetching profile from Supabase...');
+    
+    const { data, error } = await supabase
+      .from('users')
+      .select('*')
+      .eq('id', uid)
+      .single();
 
-    const userRef = db.collection('users').doc(user.uid);
-    await userRef.set({
-      username: username,
-      email: email,
-      department: department,
+    if (error) {
+      if (error.code === 'PGRST116') {
+        // Профиль не найден - создаем новый
+        console.log('📝 Creating new profile...');
+        return await createNewProfile(uid);
+      }
+      throw error;
+    }
+
+    currentUserProfile = data;
+    profileCacheTime = now;
+    
+    // Обновляем UI профиля
+    if (typeof updateProfileUI === 'function') {
+      updateProfileUI(currentUserProfile);
+    }
+    
+    console.log('✅ Profile loaded:', currentUserProfile.username);
+    return currentUserProfile;
+
+  } catch (err) {
+    console.error('❌ Error loading profile:', err);
+    showError('Не удалось загрузить профиль. Попробуйте позже.');
+    return null;
+  }
+}
+
+/**
+ * Создание нового профиля при первой регистрации
+ */
+async function createNewProfile(uid) {
+  const user = firebase.auth().currentUser;
+  if (!user) throw new Error('User not authenticated');
+
+  const newProfile = {
+    id: uid,
+    email: user.email || '',
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+    data: {
+      username: user.displayName || 'Игрок',
       points: 0,
       lokoin_balance: 0,
-      purchasedItems: [],
       role: 'user',
       description: '',
       achievements: [],
       easterEggsFound: [],
       completedGames: [],
       disabled: false,
-      lastActive: firebase.firestore.FieldValue.serverTimestamp(),
-      createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+      lastActive: new Date().toISOString(),
       dailyLogin: {
-        lastLoginDate: null,
-        streak: 0,
-        longestStreak: 0,
-        totalLogins: 0,
-        loginHistory: []
+        count: 0,
+        lastDate: null
       },
-      activeEffects: {}
-    });
-
-    const doc = await userRef.get();
-    if (!doc.exists) {
-      await user.delete();
-      throw new Error('Не удалось создать профиль. Документ не появился.');
+      activeEffects: {},
+      gameStats: {
+        totalGames: 0,
+        wins: 0,
+        losses: 0
+      },
+      gameHistory: [],
+      battleshipStats: { wins: 0, losses: 0 },
+      tictactoeStats: { wins: 0, losses: 0 },
+      rpsStats: { wins: 0, losses: 0 },
+      ownedAvatars: ['default'],
+      avatarEmoji: '😀',
+      activeTheme: 'light'
     }
+  };
 
-    const userData = {
-      uid: user.uid, email, username, department,
-      points: 0, lokoin_balance: 0, purchasedItems: [], role: 'user',
-      description: '', achievements: [], easterEggsFound: [], completedGames: [],
-      disabled: false,
-      dailyLogin: { lastLoginDate: null, streak: 0, longestStreak: 0, totalLogins: 0, loginHistory: [] },
-      activeEffects: {}
-    };
-    setCurrentUser(userData);
-    updateAuthUI(user);
-    return userData;
+  const { data, error } = await supabase
+    .from('users')
+    .insert([newProfile])
+    .select()
+    .single();
+
+  if (error) throw error;
+
+  currentUserProfile = data;
+  profileCacheTime = Date.now();
+  
+  if (typeof updateProfileUI === 'function') {
+    updateProfileUI(currentUserProfile);
+  }
+
+  console.log('✅ New profile created');
+  return currentUserProfile;
+}
+
+/**
+ * Регистрация пользователя
+ */
+async function firebaseRegister(email, password, username) {
+  try {
+    const credential = await firebase.auth().createUserWithEmailAndPassword(email, password);
+    await credential.user.updateProfile({ displayName: username });
+    
+    // Профиль создастся автоматически в onAuthStateChanged
+    console.log('✅ Registration successful');
+    return { success: true };
   } catch (error) {
-    console.error('Ошибка регистрации:', error);
-    if (auth.currentUser) await auth.currentUser.delete();
-    throw error;
+    console.error('❌ Registration error:', error);
+    return { success: false, error: error.message };
   }
 }
 
+/**
+ * Вход пользователя
+ */
 async function firebaseLogin(email, password) {
   try {
-    const userCredential = await auth.signInWithEmailAndPassword(email, password);
-    const user = userCredential.user;
-    if (!user.emailVerified) {
-      await user.sendEmailVerification();
-      await auth.signOut();
-      throw new Error('Email не подтверждён. Новое письмо отправлено.');
-    }
-    const doc = await db.collection('users').doc(user.uid).get();
-    if (doc.exists) {
-      const data = doc.data();
-      if (data.disabled) {
-        await auth.signOut();
-        throw new Error('Учётная запись заблокирована.');
-      }
-      const userData = {
-        uid: user.uid, email: user.email, username: data.username, department: data.department,
-        points: data.points || 0, lokoin_balance: data.lokoin_balance || 0,
-        purchasedItems: data.purchasedItems || [], role: data.role || 'user',
-        description: data.description || '', achievements: data.achievements || [],
-        easterEggsFound: data.easterEggsFound || [], completedGames: data.completedGames || [],
-        disabled: data.disabled || false,
-        dailyLogin: data.dailyLogin || {},
-        activeEffects: data.activeEffects || {}
-      };
-      setCurrentUser(userData);
-      updateAuthUI(user);
-      await updateLastActive(user.uid);
-      const loginResult = await processDailyLogin(user.uid);
-      if (loginResult) {
-        userData._dailyReward = loginResult;
-        setCurrentUser(userData);
-      }
-      return userData;
-    } else {
-      throw new Error('Документ пользователя не найден');
-    }
+    await firebase.auth().signInWithEmailAndPassword(email, password);
+    console.log('✅ Login successful');
+    return { success: true };
   } catch (error) {
-    console.error('Ошибка входа:', error);
-    throw error;
+    console.error('❌ Login error:', error);
+    return { success: false, error: error.message };
   }
 }
 
-function firebaseLogout() {
-  auth.signOut().then(() => {
-    localStorage.removeItem('krugames_currentUser');
-    updateAuthUI(null);
-    window.location.href = 'index.html';
-  }).catch(e => console.error(e));
-}
-
-// ================== ЭФФЕКТЫ ТОВАРОВ ==================
-
-function hasActiveEffect(effectCode) {
-  const current = getCurrentUser();
-  if (!current || !current.activeEffects) return false;
-  const effect = current.activeEffects[effectCode];
-  if (!effect) return false;
-  if (effect.durationHours === 0) return true;
-  const elapsed = (Date.now() - effect.activatedAt) / 3600000;
-  return elapsed < effect.durationHours;
-}
-
-// ================== ЕЖЕДНЕВНЫЙ ВХОД ==================
-
-function getDailyReward(day) {
-  const rewards = {
-    1: { points: 2, lokoin: 1, label: 'День 1' },
-    2: { points: 3, lokoin: 1, label: 'День 2' },
-    3: { points: 5, lokoin: 2, label: 'День 3' },
-    4: { points: 5, lokoin: 2, label: 'День 4' },
-    5: { points: 8, lokoin: 3, label: 'День 5' },
-    6: { points: 8, lokoin: 3, label: 'День 6' },
-    7: { points: 12, lokoin: 5, label: 'День 7' }
-  };
-  if (day > 7) return { points: 12, lokoin: 5, label: `День ${day}` };
-  return rewards[day] || rewards[1];
-}
-
-function getMoscowDate() {
-  const now = new Date();
-  return new Date(now.getTime() + 3 * 3600000).toISOString().slice(0, 10);
-}
-
-function getYesterdayMoscow() {
-  const d = new Date(Date.now() + 3 * 3600000);
-  d.setDate(d.getDate() - 1);
-  return d.toISOString().slice(0, 10);
-}
-
-async function processDailyLogin(uid) {
-  if (!uid) return null;
+/**
+ * Выход
+ */
+async function firebaseLogout() {
   try {
-    const userRef = db.collection('users').doc(uid);
-    const doc = await userRef.get();
-    if (!doc.exists) return null;
-    const data = doc.data();
-    const dailyLogin = data.dailyLogin || { lastLoginDate: null, streak: 0, longestStreak: 0, totalLogins: 0, loginHistory: [] };
-    const today = getMoscowDate();
-    const yesterday = getYesterdayMoscow();
-    if (dailyLogin.lastLoginDate === today) return null;
-    let newStreak = dailyLogin.streak || 0;
-    if (dailyLogin.lastLoginDate === yesterday) newStreak += 1;
-    else newStreak = 1;
-    const reward = getDailyReward(newStreak);
-    const loginHistory = dailyLogin.loginHistory || [];
-    loginHistory.push(today);
-    const newDailyLogin = {
-      lastLoginDate: today,
-      streak: newStreak,
-      longestStreak: Math.max(dailyLogin.longestStreak || 0, newStreak),
-      totalLogins: (dailyLogin.totalLogins || 0) + 1,
-      loginHistory: loginHistory.slice(-60)
+    await firebase.auth().signOut();
+    console.log('👋 Logged out');
+  } catch (error) {
+    console.error('❌ Logout error:', error);
+  }
+}
+
+/**
+ * Обновление профиля (имя, описание, аватар)
+ */
+async function firebaseUpdateProfile(updates) {
+  if (!currentUserProfile) return { success: false, error: 'No profile loaded' };
+
+  try {
+    // Объединяем старые данные с новыми
+    const updatedData = {
+      ...currentUserProfile.data,
+      ...updates
     };
-    const oldPoints = data.points || 0;
-    const newPoints = oldPoints + reward.points;
-    const oldLokoin = data.lokoin_balance || 0;
-    const newLokoin = oldLokoin + reward.lokoin;
-    await userRef.update({ dailyLogin: newDailyLogin, points: newPoints, lokoin_balance: newLokoin });
-    if (typeof addNotification === 'function') {
-      await addNotification(uid, `Ежедневный вход (${reward.label}): +${reward.points} баллов, +${reward.lokoin} локоинов`, 'game', 'profile.html');
+
+    const { data, error } = await supabase
+      .from('users')
+      .update({ 
+        data: updatedData,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', currentUserProfile.id)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    currentUserProfile = data;
+    profileCacheTime = Date.now();
+    
+    if (typeof updateProfileUI === 'function') {
+      updateProfileUI(currentUserProfile);
     }
-    if (typeof checkAndAwardAchievements === 'function') await checkAndAwardAchievements();
-    const current = getCurrentUser();
-    if (current) {
-      current.points = newPoints;
-      current.lokoin_balance = newLokoin;
-      current.dailyLogin = newDailyLogin;
-      setCurrentUser(current);
-    }
-    return { streak: newStreak, points: reward.points, lokoin: reward.lokoin, label: reward.label };
-  } catch (e) { console.error(e); return null; }
+
+    console.log('✅ Profile updated');
+    return { success: true };
+  } catch (err) {
+    console.error('❌ Profile update error:', err);
+    return { success: false, error: err.message };
+  }
 }
 
-// ================== ОБНОВЛЕНИЕ ПРОФИЛЯ ==================
+/**
+ * Начисление баллов (с учетом эффектов двойного опыта)
+ * @param {number} points - Количество очков
+ * @returns {Promise<{success: boolean, points: number}>}
+ */
+async function addPointsToCurrentUser(points) {
+  if (!currentUserProfile) return { success: false, points: 0 };
 
-async function firebaseUpdateProfile(uid, data) {
+  let finalPoints = points;
+  
+  // Проверка эффекта двойного опыта
+  const activeEffects = currentUserProfile.data.activeEffects || {};
+  if (activeEffects.double_xp && activeEffects.double_xp.expires > Date.now()) {
+    finalPoints *= 2;
+    console.log('⚡ Double XP active! Points doubled.');
+  }
+
   try {
-    await db.collection('users').doc(uid).update(data);
-    const current = getCurrentUser();
-    if (current && (current.uid === uid || current.id === uid)) {
-      Object.assign(current, data);
-      setCurrentUser(current);
+    const newTotal = (currentUserProfile.data.points || 0) + finalPoints;
+    
+    const { data, error } = await supabase
+      .from('users')
+      .update({ 
+        data: { 
+          ...currentUserProfile.data, 
+          points: newTotal 
+        },
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', currentUserProfile.id)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    currentUserProfile = data;
+    profileCacheTime = Date.now();
+    
+    if (typeof updateProfileUI === 'function') {
+      updateProfileUI(currentUserProfile);
     }
-    return true;
-  } catch (error) { console.error(error); throw error; }
+
+    console.log(`✅ Added ${finalPoints} points (base: ${points})`);
+    return { success: true, points: finalPoints };
+  } catch (err) {
+    console.error('❌ Add points error:', err);
+    return { success: false, points: 0 };
+  }
 }
 
-// ================== НАЧИСЛЕНИЕ БАЛЛОВ ==================
+/**
+ * Начисление локоинов
+ */
+async function addLokoins(amount) {
+  if (!currentUserProfile) return { success: false };
 
-async function addPointsToCurrentUser(points, gameId = null) {
-  const user = auth.currentUser;
-  if (!user) return { success: false };
   try {
-    const userRef = db.collection('users').doc(user.uid);
-    const doc = await userRef.get();
-    if (!doc.exists) return { success: false };
-    const data = doc.data();
-    let multiplier = 1;
-    if (hasActiveEffect('double_xp')) multiplier = 2;
-    const actualPoints = points * multiplier;
+    const newBalance = (currentUserProfile.data.lokoin_balance || 0) + amount;
+    
+    const { data, error } = await supabase
+      .from('users')
+      .update({ 
+        data: { 
+          ...currentUserProfile.data, 
+          lokoin_balance: newBalance 
+        },
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', currentUserProfile.id)
+      .select()
+      .single();
 
-    const oldPoints = data.points || 0;
-    const newPoints = oldPoints + actualPoints;
-    const oldLokoin = Math.floor(oldPoints / 10);
-    const newLokoin = Math.floor(newPoints / 10);
-    const delta = newLokoin - oldLokoin;
-    const currentLokoinBalance = data.lokoin_balance || 0;
-    const newLokoinBalance = currentLokoinBalance + delta;
-    const updateData = { points: newPoints };
-    if (gameId) {
-      const completedGames = data.completedGames || [];
-      if (!completedGames.includes(gameId)) {
-        completedGames.push(gameId);
-        updateData.completedGames = completedGames;
+    if (error) throw error;
+
+    currentUserProfile = data;
+    profileCacheTime = Date.now();
+    
+    if (typeof updateProfileUI === 'function') {
+      updateProfileUI(currentUserProfile);
+    }
+
+    // Уведомление
+    if (typeof addLokoinNotification === 'function') {
+      addLokoinNotification(amount);
+    }
+
+    console.log(`✅ Added ${amount} Lokoins`);
+    return { success: true, balance: newBalance };
+  } catch (err) {
+    console.error('❌ Add Lokoins error:', err);
+    return { success: false, balance: 0 };
+  }
+}
+
+/**
+ * Ежедневный вход
+ */
+async function processDailyLogin() {
+  if (!currentUserProfile) return;
+
+  const today = new Date().toDateString();
+  const lastDate = currentUserProfile.data.dailyLogin?.lastDate;
+
+  if (lastDate === today) {
+    console.log('ℹ️ Daily login already claimed today');
+    return;
+  }
+
+  try {
+    const newCount = (currentUserProfile.data.dailyLogin.count || 0) + 1;
+    const reward = Math.min(10 * newCount, 100); // Бонус растет до 100
+
+    const updatedData = {
+      ...currentUserProfile.data,
+      points: (currentUserProfile.data.points || 0) + reward,
+      dailyLogin: {
+        count: newCount,
+        lastDate: today
       }
-      const gameHistory = data.gameHistory || [];
-      gameHistory.push({ game: gameId, points: actualPoints, timestamp: Date.now() });
-      updateData.gameHistory = gameHistory;
+    };
+
+    const { data, error } = await supabase
+      .from('users')
+      .update({ 
+        data: updatedData,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', currentUserProfile.id)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    currentUserProfile = data;
+    profileCacheTime = Date.now();
+    
+    if (typeof updateProfileUI === 'function') {
+      updateProfileUI(currentUserProfile);
     }
-    if (delta > 0) updateData.lokoin_balance = newLokoinBalance;
-    updateData.lastActive = firebase.firestore.FieldValue.serverTimestamp();
-    await userRef.update(updateData);
-    if (delta > 0 && typeof addLokoinNotification === 'function') {
-      addLokoinNotification(user.uid, delta).catch(e => console.error(e));
-    }
-    const current = getCurrentUser();
-    if (current) {
-      current.points = newPoints;
-      if (delta > 0) current.lokoin_balance = newLokoinBalance;
-      if (updateData.completedGames) current.completedGames = updateData.completedGames;
-      if (updateData.gameHistory) current.gameHistory = updateData.gameHistory;
-      setCurrentUser(current);
-    }
-    return { success: true, points: actualPoints };
-  } catch (error) { console.error(error); return { success: false }; }
+
+    showNotification(`Ежедневный бонус: +${reward} очков!`, 'success');
+    console.log(`✅ Daily login: Day ${newCount}, Reward ${reward}`);
+  } catch (err) {
+    console.error('❌ Daily login error:', err);
+  }
 }
 
-// ================== СИНХРОНИЗАЦИЯ ==================
+/**
+ * Обновление последней активности
+ */
+async function updateLastActive() {
+  if (!currentUserProfile) return;
 
-async function syncEasterEggsToFirestore(easterEggs) {
-  const user = auth.currentUser;
-  if (!user) return;
   try {
-    await db.collection('users').doc(user.uid).update({ easterEggsFound: easterEggs });
-    const c = getCurrentUser();
-    if (c) { c.easterEggsFound = easterEggs; setCurrentUser(c); }
-  } catch (e) { console.error(e); }
-}
-
-async function syncAchievementsToFirestore(achievements) {
-  const user = auth.currentUser;
-  if (!user) return;
-  try {
-    await db.collection('users').doc(user.uid).update({ achievements: achievements });
-    const c = getCurrentUser();
-    if (c) { c.achievements = achievements; setCurrentUser(c); }
-  } catch (e) { console.error(e); }
-}
-
-async function syncGameStats(gameId, stats) {
-  const user = auth.currentUser;
-  if (!user) return;
-  try {
-    const userRef = db.collection('users').doc(user.uid);
-    const doc = await userRef.get();
-    if (!doc.exists) return;
-    const data = doc.data();
-    const gameStats = data.gameStats || {};
-    const currentStats = gameStats[gameId] || {};
-    const merged = { ...currentStats };
-
-    if (stats.totalClicks !== undefined) merged.totalClicks = Math.max(currentStats.totalClicks || 0, stats.totalClicks);
-    if (stats.maxScore !== undefined) merged.maxScore = Math.max(currentStats.maxScore || 0, stats.maxScore);
-    if (stats.bestMoves !== undefined) merged.bestMoves = currentStats.bestMoves ? Math.min(currentStats.bestMoves, stats.bestMoves) : stats.bestMoves;
-    if (stats.bestTime !== undefined) merged.bestTime = currentStats.bestTime ? Math.min(currentStats.bestTime, stats.bestTime) : stats.bestTime;
-    if (stats.maxTile !== undefined) merged.maxTile = Math.max(currentStats.maxTile || 0, stats.maxTile);
-    if (stats.maxLines !== undefined) merged.maxLines = Math.max(currentStats.maxLines || 0, stats.maxLines);
-    if (stats.maxLevel !== undefined) merged.maxLevel = Math.max(currentStats.maxLevel || 0, stats.maxLevel);
-
-    if (stats.selfEaten) merged.selfEaten = true;
-    if (stats.wallCrash) merged.wallCrash = true;
-    if (stats.openedFirst) merged.openedFirst = true;
-    if (stats.completed) merged.completed = true;
-    if (stats.loss) merged.loss = true;
-    if (stats.tetrisCleared) merged.tetrisCleared = true;
-    if (stats.sniperGame) merged.sniperGame = true;
-    if (stats.unsinkableGame) merged.unsinkableGame = true;
-    if (stats.sunk4Deck) merged.sunk4Deck = true;
-    if (stats.beatHardAI) merged.beatHardAI = true;
-
-    gameStats[gameId] = merged;
-    await userRef.update({ gameStats });
-    const c = getCurrentUser();
-    if (c) { if (!c.gameStats) c.gameStats = {}; c.gameStats[gameId] = merged; setCurrentUser(c); }
-    return true;
-  } catch (e) { console.error(e); return false; }
-}
-
-// ================== ВСПОМОГАТЕЛЬНЫЕ ==================
-
-async function updateAuthUI(firebaseUser) {
-  const statusEl = document.getElementById('auth-status');
-  if (!statusEl) return;
-  if (firebaseUser) {
-    let current = getCurrentUser();
-    if (!current || !current.username) {
-      try {
-        const doc = await db.collection('users').doc(firebaseUser.uid).get();
-        if (doc.exists) {
-          const data = doc.data();
-          current = {
-            uid: firebaseUser.uid,
-            email: firebaseUser.email,
-            username: data.username || firebaseUser.displayName || firebaseUser.email,
-            department: data.department || '',
-            points: data.points || 0,
-            lokoin_balance: data.lokoin_balance || 0,
-            purchasedItems: data.purchasedItems || [],
-            role: data.role || 'user',
-            description: data.description || '',
-            achievements: data.achievements || [],
-            easterEggsFound: data.easterEggsFound || [],
-            completedGames: data.completedGames || [],
-            disabled: data.disabled || false,
-            dailyLogin: data.dailyLogin || {},
-            activeEffects: data.activeEffects || {}
-          };
-          setCurrentUser(current);
+    await supabase
+      .from('users')
+      .update({ 
+        data: { 
+          ...currentUserProfile.data, 
+          lastActive: new Date().toISOString() 
         }
-      } catch (e) { console.error('updateAuthUI load error:', e); }
-    }
-    const displayName = current?.username || firebaseUser.displayName || firebaseUser.email;
-    statusEl.innerHTML = `👤 <span class="auth-greeting">${displayName}</span> | <a href="#" id="logout-link">Выйти</a>`;
-    document.getElementById('logout-link')?.addEventListener('click', e => { e.preventDefault(); firebaseLogout(); });
-    statusEl.style.display = '';
-  } else {
-    const currentPage = window.location.pathname + window.location.search;
-    statusEl.innerHTML = `<a href="login.html?redirect=${encodeURIComponent(currentPage)}">Войти</a>`;
-    statusEl.style.display = '';
+      })
+      .eq('id', currentUserProfile.id);
+      
+    // Не обновляем кэш, чтобы не триггерить UI лишний раз
+  } catch (err) {
+    console.error('❌ Update last active error:', err);
   }
 }
 
-function syncUserToLocal(userData) { setCurrentUser(userData); }
+/**
+ * Синхронизация пасхалок
+ */
+async function syncEasterEggsToFirestore(eggId) {
+  if (!currentUserProfile) return;
 
-async function updateLastActive(uid) {
-  if (!uid) return;
   try {
-    const userRef = db.collection('users').doc(uid);
-    const doc = await userRef.get();
-    if (doc.exists) {
-      await userRef.update({ lastActive: Date.now() });
-    }
-  } catch (e) {
-    // Игнорируем
+    const eggs = currentUserProfile.data.easterEggsFound || [];
+    if (eggs.includes(eggId)) return; // Уже найдена
+
+    const updatedEggs = [...eggs, eggId];
+    
+    const { error } = await supabase
+      .from('users')
+      .update({ 
+        data: { 
+          ...currentUserProfile.data, 
+          easterEggsFound: updatedEggs 
+        }
+      })
+      .eq('id', currentUserProfile.id);
+
+    if (error) throw error;
+    
+    console.log(`✅ Easter egg synced: ${eggId}`);
+  } catch (err) {
+    console.error('❌ Sync easter egg error:', err);
   }
+}
+
+/**
+ * Синхронизация достижений
+ */
+async function syncAchievementsToFirestore(achievementId) {
+  if (!currentUserProfile) return;
+
+  try {
+    const achievements = currentUserProfile.data.achievements || [];
+    if (achievements.includes(achievementId)) return;
+
+    const updatedAchievements = [...achievements, achievementId];
+    
+    const { error } = await supabase
+      .from('users')
+      .update({ 
+        data: { 
+          ...currentUserProfile.data, 
+          achievements: updatedAchievements 
+        }
+      })
+      .eq('id', currentUserProfile.id);
+
+    if (error) throw error;
+    
+    console.log(`✅ Achievement synced: ${achievementId}`);
+  } catch (err) {
+    console.error('❌ Sync achievement error:', err);
+  }
+}
+
+/**
+ * Синхронизация игровой статистики
+ */
+async function syncGameStats(gameType, result) {
+  if (!currentUserProfile) return;
+
+  try {
+    const stats = currentUserProfile.data.gameStats || { totalGames: 0, wins: 0, losses: 0 };
+    stats.totalGames++;
+    if (result === 'win') stats.wins++;
+    else if (result === 'loss') stats.losses++;
+
+    // Специфичная статистика по играм
+    const specificStats = currentUserProfile.data[`${gameType}Stats`] || { wins: 0, losses: 0 };
+    if (result === 'win') specificStats.wins++;
+    else if (result === 'loss') specificStats.losses++;
+
+    const { error } = await supabase
+      .from('users')
+      .update({ 
+        data: { 
+          ...currentUserProfile.data, 
+          gameStats: stats,
+          [`${gameType}Stats`]: specificStats
+        }
+      })
+      .eq('id', currentUserProfile.id);
+
+    if (error) throw error;
+    
+    console.log(`✅ Game stats synced: ${gameType} - ${result}`);
+  } catch (err) {
+    console.error('❌ Sync game stats error:', err);
+  }
+}
+
+/**
+ * Фоновые задачи
+ */
+let activityInterval;
+
+function startBackgroundTasks() {
+  // Обновление активности каждые 2 минуты
+  activityInterval = setInterval(updateLastActive, 2 * 60 * 1000);
+  
+  // Проверка ежедневного входа через 5 сек после загрузки
+  setTimeout(processDailyLogin, 5000);
+}
+
+function stopBackgroundTasks() {
+  if (activityInterval) clearInterval(activityInterval);
+}
+
+// Экспорт функций для использования в других модулях
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = {
+    initAuth,
+    firebaseRegister,
+    firebaseLogin,
+    firebaseLogout,
+    firebaseUpdateProfile,
+    addPointsToCurrentUser,
+    addLokoins,
+    processDailyLogin,
+    updateLastActive,
+    syncEasterEggsToFirestore,
+    syncAchievementsToFirestore,
+    syncGameStats,
+    getCurrentUserProfile: () => currentUserProfile
+  };
 }
