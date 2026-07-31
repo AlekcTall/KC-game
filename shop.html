@@ -1,97 +1,366 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Магазин | KC Games</title>
-    
-    <!-- Стили -->
-    <link rel="stylesheet" href="styles/main.css">
-    <link rel="stylesheet" href="styles/shop.css">
-    
-    <!-- Иконки -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Магазин – Геймификация КЦ</title>
+  <link rel="stylesheet" href="css/style.css">
+  <style>
+    .shop-categories { display: flex; gap: 0.5rem; margin-bottom: 1.5rem; flex-wrap: wrap; }
+    .shop-category-btn { padding: 0.5rem 1rem; border: 1px solid #d0d8e0; border-radius: 20px; background: white; cursor: pointer; font-size: 0.9rem; transition: all 0.2s; }
+    .shop-category-btn.active { background: var(--color-primary); color: white; border-color: var(--color-primary); }
+    .shop-items-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 1.5rem; margin-top: 1rem; }
+    .shop-card { background: white; border-radius: 12px; padding: 1.5rem; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.05); transition: transform 0.2s, box-shadow 0.2s; display: flex; flex-direction: column; }
+    .shop-card:hover { transform: translateY(-3px); box-shadow: 0 6px 16px rgba(0,0,0,0.08); }
+    .shop-card__icon { font-size: 2.5rem; margin-bottom: 0.5rem; }
+    .shop-card__title { font-weight: 600; margin-bottom: 0.3rem; color: var(--color-header); }
+    .shop-card__desc { font-size: 0.85rem; color: #666; margin-bottom: 1rem; flex: 1; }
+    .shop-card__price { font-weight: 700; color: var(--color-accent); margin-bottom: 1rem; }
+    .shop-card__stock { font-size: 0.8rem; color: #e74c3c; margin-bottom: 0.5rem; }
+    .shop-card__duration { font-size: 0.8rem; color: #888; margin-bottom: 0.5rem; }
+    .shop-card__timer { font-size: 0.8rem; color: #e67e22; font-weight: 600; margin-bottom: 0.5rem; }
+    .btn-buy { width: 100%; }
+    .modal { max-width: 400px; text-align: center; }
+    .modal-icon { font-size: 3rem; margin-bottom: 0.5rem; }
+    .skeleton-card { background: white; border-radius: 12px; padding: 1.5rem; text-align: center; animation: shimmer 1.5s infinite; }
+    .skeleton-icon { width: 2.5rem; height: 2.5rem; border-radius: 50%; background: #e0e0e0; margin: 0 auto 0.5rem; }
+    .skeleton-title { height: 1rem; width: 60%; background: #e0e0e0; margin: 0 auto 0.5rem; border-radius: 4px; }
+    .skeleton-text { height: 0.8rem; width: 80%; background: #e0e0e0; margin: 0 auto 0.5rem; border-radius: 4px; }
+    .skeleton-price { height: 1rem; width: 40%; background: #e0e0e0; margin: 0.5rem auto; border-radius: 4px; }
+    @keyframes shimmer { 0% { opacity: 0.6; } 50% { opacity: 1; } 100% { opacity: 0.6; } }
+    .shop-error { text-align: center; padding: 2rem; color: #e74c3c; }
+  </style>
 </head>
-<body class="dark-theme">
+<body>
+  <header class="header"><div class="container header__inner"><a href="index.html" class="logo">КЦ-Игры</a><button class="burger" id="burger-btn" aria-label="Меню">☰</button><nav class="nav" id="main-nav"><ul class="nav__list"><li><a href="index.html" class="nav__link">Главная</a></li><li><a href="games.html" class="nav__link">Игры</a></li><li><a href="leaderboard.html" class="nav__link">Рейтинг</a></li><li><a href="shop.html" class="nav__link active">Магазин</a></li><li><a href="profile.html" class="nav__link">Профиль</a></li><li><a href="admin.html" class="nav__link">Админ</a></li></ul></nav><div id="auth-status" class="auth-status"></div></div></header>
+  <main class="main"><div class="container">
+    <h2>🛒 Магазин</h2>
+    <div class="shop-categories" id="category-filters"></div>
+    <div id="shop-items-grid" class="shop-items-grid"></div>
+  </div></main>
+  <footer class="footer"><div class="container"><p>© 2026 ваши амбассадоры</p></div></footer>
 
-    <!-- Навигация -->
-    <nav class="navbar">
-        <div class="container nav-container">
-            <a href="index.html" class="logo">KC Games</a>
-            <div class="nav-links">
-                <a href="index.html">Главная</a>
-                <a href="games.html">Игры</a>
-                <a href="shop.html" class="active">Магазин</a>
-                <a href="profile.html">Профиль</a>
-                <a href="leaderboard.html">Рейтинг</a>
-            </div>
-            <div class="user-info">
-                <span id="nav-balance" class="balance-badge">0 💰</span>
-                <span id="nav-points" class="points-badge">0 XP</span>
-                <button id="logout-btn" class="btn-logout"><i class="fas fa-sign-out-alt"></i></button>
-            </div>
-        </div>
-    </nav>
-
-    <!-- Основной контент -->
-    <main class="container shop-container">
-        <header class="page-header">
-            <h1><i class="fas fa-store"></i> Магазин предметов</h1>
-            <p>Покупайте улучшения, аватарки и валюту за Локоины</p>
-        </header>
-
-        <!-- Фильтры -->
-        <div class="shop-filters">
-            <button class="filter-btn active" data-category="all">Все</button>
-            <button class="filter-btn" data-category="effect">Эффекты</button>
-            <button class="filter-btn" data-category="avatar">Аватарки</button>
-            <button class="filter-btn" data-category="currency">Валюта</button>
-            <button class="filter-btn" data-category="background">Фоны</button>
-            <button class="filter-btn" data-category="service">Услуги</button>
-        </div>
-
-        <!-- Сетка товаров -->
-        <div id="shop-items-grid" class="items-grid">
-            <!-- Товары загружаются через JS -->
-            <div class="loading-spinner">
-                <i class="fas fa-spinner fa-spin"></i> Загрузка товаров...
-            </div>
-        </div>
-    </main>
-
-    <!-- Модальное окно покупки -->
-    <div id="purchase-modal" class="modal">
-        <div class="modal-content">
-            <span class="close-modal">&times;</span>
-            <h2 id="modal-title">Название товара</h2>
-            <div class="modal-body">
-                <img id="modal-icon" src="" alt="Icon" class="modal-icon">
-                <p id="modal-description">Описание товара</p>
-                <div class="modal-price">Цена: <span id="modal-price">0</span> 💰</div>
-                
-                <div id="purchase-form">
-                    <button id="confirm-purchase-btn" class="btn-buy">Купить</button>
-                </div>
-                <div id="purchase-status" class="status-message"></div>
-            </div>
-        </div>
+  <!-- Модальное окно подтверждения покупки -->
+  <div class="modal-overlay" id="purchase-modal" style="display:none;">
+    <div class="modal">
+      <span class="modal-close" id="modal-close">&times;</span>
+      <div class="modal-icon" id="modal-icon"></div>
+      <h3 id="modal-title"></h3>
+      <p id="modal-desc"></p>
+      <p><strong>Цена:</strong> <span id="modal-price"></span> лок.</p>
+      <p id="modal-duration" style="font-size:0.9rem;color:#888;"></p>
+      <button class="btn" id="confirm-purchase-btn">Купить</button>
+      <p class="auth-message" id="purchase-message"></p>
     </div>
+  </div>
 
-    <!-- Скрипты -->
-    <!-- 1. Firebase (только Auth) -->
-    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js"></script>
-    <script src="js/firebase-config.js"></script>
+  <!-- Supabase SDK и наши модули -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="js/supabase-config.js"></script>
+  <script src="js/auth.js"></script>
+  <script src="js/storage.js"></script>
+  <script src="js/achievements.js"></script>
+  <script src="js/notifications.js"></script>
+  <script src="js/effects-engine.js"></script>
+  <script src="js/easter-eggs.js"></script>
+  <script src="js/feedback.js"></script>
+  <script src="js/main.js"></script>
 
-    <!-- 2. Supabase Client -->
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="js/supabase-client.js"></script>
+  <script>
+    (function() {
+      const grid = document.getElementById('shop-items-grid');
+      const categoryContainer = document.getElementById('category-filters');
+      const modal = document.getElementById('purchase-modal');
+      const modalClose = document.getElementById('modal-close');
+      const modalIcon = document.getElementById('modal-icon');
+      const modalTitle = document.getElementById('modal-title');
+      const modalDesc = document.getElementById('modal-desc');
+      const modalPrice = document.getElementById('modal-price');
+      const modalDuration = document.getElementById('modal-duration');
+      const confirmBtn = document.getElementById('confirm-purchase-btn');
+      const purchaseMsg = document.getElementById('purchase-message');
 
-    <!-- 3. Логика магазина -->
-    <script src="js/shop.js"></script>
-    
-    <!-- 4. Общая логика (Auth UI) -->
-    <script src="js/auth.js"></script>
+      let allItems = [];
+      let currentUserData = null;
+      let selectedItem = null;
 
+      const CACHE_KEY = 'krugames_shop_cache';
+      const CACHE_TTL = 10 * 60 * 1000;
+
+      // Рендер скелетонов
+      function renderSkeletons() {
+        grid.innerHTML = Array.from({ length: 8 }, () => `
+          <div class="skeleton-card">
+            <div class="skeleton-icon"></div>
+            <div class="skeleton-title"></div>
+            <div class="skeleton-text"></div>
+            <div class="skeleton-price"></div>
+          </div>
+        `).join('');
+      }
+
+      // Загрузка товаров из Supabase
+      async function loadShopItems() {
+        const cached = sessionStorage.getItem(CACHE_KEY);
+        if (cached) {
+          try {
+            const parsed = JSON.parse(cached);
+            if (Date.now() - parsed.timestamp < CACHE_TTL) {
+              allItems = parsed.items;
+              renderCategories();
+              renderItems('all');
+              return;
+            }
+          } catch (e) {}
+        }
+        renderSkeletons();
+
+        try {
+          const { data, error } = await supabase
+            .from('shop_items')
+            .select('*')
+            .order('category');
+
+          if (error) throw error;
+          allItems = data || [];
+          sessionStorage.setItem(CACHE_KEY, JSON.stringify({ timestamp: Date.now(), items: allItems }));
+          renderCategories();
+          renderItems('all');
+        } catch (e) {
+          console.error('Ошибка загрузки товаров:', e);
+          grid.innerHTML = '<p class="shop-error">Не удалось загрузить товары.</p>';
+        }
+      }
+
+      // Категории
+      function renderCategories() {
+        const categories = [...new Set(allItems.map(i => i.category).filter(Boolean))];
+        categoryContainer.innerHTML = '<button class="shop-category-btn active" data-category="all">Все</button>';
+        categories.forEach(cat => {
+          const btn = document.createElement('button');
+          btn.className = 'shop-category-btn';
+          btn.textContent = cat;
+          btn.dataset.category = cat;
+          btn.addEventListener('click', () => {
+            categoryContainer.querySelectorAll('.shop-category-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            renderItems(cat);
+          });
+          categoryContainer.appendChild(btn);
+        });
+        // Обработчик для кнопки "Все"
+        categoryContainer.querySelector('[data-category="all"]').addEventListener('click', () => {
+          categoryContainer.querySelectorAll('.shop-category-btn').forEach(b => b.classList.remove('active'));
+          categoryContainer.querySelector('[data-category="all"]').classList.add('active');
+          renderItems('all');
+        });
+      }
+
+      // Отрисовка товаров выбранной категории
+      function renderItems(category) {
+        let filtered = category === 'all' ? allItems : allItems.filter(i => i.category === category);
+        filtered = filtered.filter(i => !i.hidden);
+
+        if (!filtered.length) {
+          grid.innerHTML = '<p class="no-results">Товаров не найдено.</p>';
+          return;
+        }
+
+        const purchased = currentUserData?.purchasedItems || [];
+        const activeEffects = currentUserData?.activeEffects || {};
+        const now = Date.now();
+
+        grid.innerHTML = filtered.map(item => {
+          const owned = item.unique && purchased.includes(item.id);
+          let stockText = '';
+          if (item.stock !== null && item.stock !== undefined) {
+            stockText = `<div class="shop-card__stock">Осталось: ${item.stock} шт.</div>`;
+          }
+          let durationText = '';
+          if (item.duration > 0) {
+            const hours = Math.floor(item.duration / 60);
+            const mins = item.duration % 60;
+            durationText = `<div class="shop-card__duration">Длительность: ${hours > 0 ? hours + ' ч ' : ''}${mins > 0 ? mins + ' мин' : ''}</div>`;
+          } else if (item.duration === 0) {
+            durationText = '<div class="shop-card__duration">Навсегда</div>';
+          }
+
+          let timerHtml = '';
+          if (item.effect_type && activeEffects[item.effect_type]) {
+            const effect = activeEffects[item.effect_type];
+            const expiresAt = effect.expiresAt || 0;
+            if (expiresAt > now) {
+              const remaining = Math.ceil((expiresAt - now) / 60000);
+              timerHtml = `<div class="shop-card__timer">🕒 Активен: ${remaining} мин</div>`;
+            }
+          }
+
+          return `
+            <div class="shop-card" data-item-id="${item.id}">
+              <div class="shop-card__icon">${item.icon || '🛒'}</div>
+              <div class="shop-card__title">${item.name}</div>
+              <div class="shop-card__desc">${item.description || ''}</div>
+              <div class="shop-card__price">${item.price} 💰</div>
+              ${durationText}
+              ${stockText}
+              ${timerHtml}
+              <button class="btn btn-buy" ${owned ? 'disabled' : ''} data-id="${item.id}">
+                ${owned ? 'Куплено' : 'Купить'}
+              </button>
+            </div>
+          `;
+        }).join('');
+
+        // Обработчики кнопок "Купить"
+        grid.querySelectorAll('.btn-buy').forEach(btn => {
+          if (btn.disabled) return;
+          btn.addEventListener('click', (e) => {
+            const itemId = e.target.dataset.id;
+            selectedItem = allItems.find(i => i.id === itemId);
+            if (selectedItem) openPurchaseModal(selectedItem);
+          });
+        });
+      }
+
+      // Открыть модальное окно покупки
+      function openPurchaseModal(item) {
+        modalIcon.textContent = item.icon || '🛒';
+        modalTitle.textContent = item.name;
+        modalDesc.textContent = item.description || '';
+        modalPrice.textContent = item.price;
+        modalDuration.textContent = item.duration > 0 ? `Длительность: ${item.duration} мин` : 'Навсегда';
+        purchaseMsg.textContent = '';
+        confirmBtn.disabled = false;
+        modal.style.display = 'flex';
+      }
+
+      // Закрыть модальное окно
+      function closeModal() {
+        modal.style.display = 'none';
+        selectedItem = null;
+      }
+      modalClose.addEventListener('click', closeModal);
+      modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
+
+      // Подтверждение покупки
+      confirmBtn.addEventListener('click', async () => {
+        if (!selectedItem || !currentUserData) return;
+        confirmBtn.disabled = true;
+        purchaseMsg.textContent = 'Обработка...';
+        purchaseMsg.className = 'auth-message';
+
+        try {
+          const userId = currentUserData.id;
+          const price = selectedItem.price;
+
+          // Проверка баланса
+          if (currentUserData.lokoin_balance < price) {
+            throw new Error('Недостаточно локоинов.');
+          }
+
+          // 1. Списываем локоины и добавляем товар в purchasedItems
+          const newBalance = currentUserData.lokoin_balance - price;
+          const purchased = [...(currentUserData.purchasedItems || []), selectedItem.id];
+          const newData = { ...currentUserData._rawData };
+          newData.lokoin_balance = newBalance;
+          newData.purchasedItems = purchased;
+
+          // Если есть эффект, активируем его
+          if (selectedItem.effect_type) {
+            const effects = newData.activeEffects || {};
+            const durationMs = (selectedItem.duration || 60) * 60000;
+            effects[selectedItem.effect_type] = {
+              activatedAt: Date.now(),
+              expiresAt: Date.now() + durationMs,
+              params: selectedItem.effect_params || {}
+            };
+            newData.activeEffects = effects;
+          }
+
+          // 2. Обновляем пользователя в БД
+          const { error: updateError } = await supabase
+            .from('users')
+            .update({ data: newData, updated_at: new Date().toISOString() })
+            .eq('id', userId);
+
+          if (updateError) throw updateError;
+
+          // 3. Создаём запись о покупке (для истории/админа)
+          await supabase.from('purchase_requests').insert([{
+            user_id: userId,
+            item_id: selectedItem.id,
+            item_name: selectedItem.name,
+            price: price,
+            status: 'approved', // сразу подтверждена, можно 'pending' для модерации
+            created_at: new Date().toISOString()
+          }]);
+
+          // 4. Обновляем локальный кеш
+          currentUserData.lokoin_balance = newBalance;
+          currentUserData.purchasedItems = purchased;
+          currentUserData._rawData = newData;
+          currentUserData.activeEffects = newData.activeEffects;
+          setCurrentUser(currentUserData);
+          updateAuthUI(auth.currentUser);
+
+          // 5. Уведомление
+          if (typeof addNotification === 'function') {
+            await addNotification(userId, `Вы приобрели «${selectedItem.name}» за ${price} лок.`, 'purchase', 'shop.html');
+          }
+          if (typeof addPurchaseNotification === 'function') {
+            await addPurchaseNotification(userId, selectedItem.name, price, newBalance);
+          }
+
+          // 6. Пасхалка "Первый покупатель"
+          if (purchased.length === 1 && typeof checkFirstPurchase === 'function') {
+            await checkFirstPurchase();
+          }
+
+          purchaseMsg.textContent = '✅ Покупка успешна!';
+          purchaseMsg.className = 'auth-message success';
+
+          // Перерисовываем список товаров
+          renderItems(categoryContainer.querySelector('.active').dataset.category);
+
+          setTimeout(closeModal, 1500);
+        } catch (error) {
+          console.error('Ошибка покупки:', error);
+          purchaseMsg.textContent = error.message || 'Ошибка покупки.';
+          purchaseMsg.className = 'auth-message error';
+          confirmBtn.disabled = false;
+        }
+      });
+
+      // Инициализация при загрузке
+      document.addEventListener('DOMContentLoaded', async () => {
+        // Ждём авторизации
+        if (typeof onAuthStateChange === 'function') {
+          onAuthStateChange(async (event, session) => {
+            if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
+              const { data: { user } } = await supabase.auth.getUser();
+              if (user) {
+                // Загружаем данные пользователя
+                const { data: row } = await supabase
+                  .from('users')
+                  .select('id, email, data')
+                  .eq('id', user.id)
+                  .single();
+                if (row) {
+                  currentUserData = unpackUserData(row);
+                  setCurrentUser(currentUserData);
+                  updateAuthUI(user);
+                }
+              }
+              loadShopItems();
+            } else {
+              grid.innerHTML = '<p style="text-align:center; padding:2rem;">Войдите, чтобы просматривать магазин. <a href="login.html?redirect=shop.html">Войти</a></p>';
+            }
+          });
+        } else {
+          grid.innerHTML = '<p>Ошибка загрузки системы авторизации.</p>';
+        }
+      });
+    })();
+  </script>
 </body>
 </html>
