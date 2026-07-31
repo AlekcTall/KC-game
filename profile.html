@@ -6,7 +6,7 @@
   <title>Профиль – Геймификация КЦ</title>
   <link rel="stylesheet" href="css/style.css">
   <style>
-    /* Все стили из твоего актуального кода (без изменений) */
+    /* Все стили сохранены */
     .section-title { margin-top:2rem; border-bottom:2px solid #f0f0f0; padding-bottom:0.5rem; }
     .history-table { width:100%; border-collapse:collapse; margin-top:1rem; }
     .history-table th,.history-table td { padding:0.5rem; border-bottom:1px solid #eee; text-align:left; }
@@ -571,10 +571,14 @@
 
         if (typeof onAuthStateChange === 'function') {
           onAuthStateChange(async (event, session) => {
-            if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
-              const user = session?.user;
-              if (!user) return;
+            const user = session?.user;
+            if (!user) {
+              // Пользователь не авторизован — показываем приглашение
+              container.innerHTML = `<div class="login-prompt"><h3>🔒 Вы не авторизованы</h3><p>Войдите в профиль, чтобы отслеживать баллы, достижения и участвовать в ивентах.</p><a href="login.html?redirect=profile.html" class="btn">Войти</a></div>`;
+              return;
+            }
 
+            if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
               const cached = getCachedProfile();
               if (cached) {
                 renderProfile(cached.user, cached.awards, true);
@@ -583,8 +587,6 @@
                 renderFullSkeleton(container);
                 loadFreshProfile(user, container, false);
               }
-            } else {
-              container.innerHTML = `<div class="login-prompt"><h3>🔒 Вы не авторизованы</h3><p>Войдите в профиль, чтобы отслеживать баллы, достижения и участвовать в ивентах.</p><a href="login.html?redirect=profile.html" class="btn">Войти</a></div>`;
             }
           });
         } else {
