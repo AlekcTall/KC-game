@@ -76,12 +76,10 @@
 
   <footer class="footer"><div class="container"><p>© 2026 ваши амбассадоры</p></div></footer>
 
-  <!-- Firebase SDK -->
-  <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-auth-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore-compat.js"></script>
-  <script src="js/firebase-config.js"></script>
-  <script src="js/firebase-auth.js"></script>
+  <!-- Supabase SDK и модули -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="js/supabase-config.js"></script>
+  <script src="js/auth.js"></script>
   <script src="js/storage.js"></script>
   <script src="js/achievements.js"></script>
   <script src="js/easter-eggs.js"></script>
@@ -114,20 +112,35 @@
       document.addEventListener('DOMContentLoaded', async () => {
         const container = document.getElementById('admin-container');
 
-        auth.onAuthStateChanged(async fbUser => {
-          if (!fbUser) { container.innerHTML = '<p>Вы не авторизованы.</p>'; return; }
-          try {
-            const d = await db.collection('users').doc(fbUser.uid).get();
-            if (!d.exists || d.data().role !== 'admin') {
-              container.innerHTML = '<p>Доступ запрещён.</p>';
+        if (typeof onAuthStateChange === 'function') {
+          onAuthStateChange(async (event, session) => {
+            if (!session?.user) {
+              container.innerHTML = '<p>Вы не авторизованы.</p>';
               return;
             }
-            renderDashboard();
-            loadStats();
-            loadGames();
-            loadMaintenanceSettings();
-          } catch (e) { container.innerHTML = `<p>Ошибка: ${e.message}</p>`; }
-        });
+            try {
+              const { data: row, error } = await supabase
+                .from('users')
+                .select('data')
+                .eq('id', session.user.id)
+                .single();
+
+              if (error || !row || (row.data?.role !== 'admin')) {
+                container.innerHTML = '<p>Доступ запрещён.</p>';
+                return;
+              }
+
+              renderDashboard();
+              loadStats();
+              loadGames();
+              loadMaintenanceSettings();
+            } catch (e) {
+              container.innerHTML = `<p>Ошибка: ${e.message}</p>`;
+            }
+          });
+        } else {
+          container.innerHTML = '<p>Ошибка загрузки системы авторизации.</p>';
+        }
 
         function renderDashboard() {
           container.innerHTML = `
@@ -191,30 +204,33 @@
                   url = document.getElementById('game-url').value.trim(),
                   hidden = document.getElementById('game-hidden').checked;
             if (!id || !title || !desc || !url) { showToast('Заполните все поля', 'error'); return; }
-            await db.collection('games').doc(id).set({ title, description: desc, icon, url, hidden: hidden || false });
+            const { error } = await supabase.from('games').upsert([{ id, title, description: desc, icon, url, hidden: hidden || false }]);
+            if (error) { showToast('Ошибка сохранения', 'error'); return; }
             showToast('Сохранена', 'success');
             document.getElementById('add-game-form').reset();
             loadGames();
           });
 
-          // Экспорт CSV с пагинацией
+          // Экспорт CSV с пагинацией через Supabase
           document.getElementById('export-csv-btn').addEventListener('click', async () => {
-            if (!confirm('Экспорт всех пользователей может занять время и потратить квоту Firebase (до 50 000 чтений). Продолжить?')) return;
+            if (!confirm('Экспорт всех пользователей может занять время. Продолжить?')) return;
             try {
               const rows = [['UID','Имя','Email','Отдел','Баллы','Локоины','Роль','Заблокирован']];
-              let lastDoc = null;
-              let hasMore = true;
+              let from = 0, to = 499, hasMore = true;
               while (hasMore) {
-                let query = db.collection('users').orderBy('email').limit(500);
-                if (lastDoc) query = query.startAfter(lastDoc);
-                const snap = await query.get();
-                if (snap.empty) break;
-                snap.forEach(doc => {
-                  const u = doc.data();
-                  rows.push([doc.id, u.username||'', u.email||'', u.department||'', u.points||0, u.lokoin_balance||0, u.role||'user', u.disabled?'Да':'Нет']);
+                const { data, error } = await supabase
+                  .from('users')
+                  .select('id, email, data')
+                  .order('email')
+                  .range(from, to);
+                if (error) throw error;
+                if (!data || data.length === 0) break;
+                data.forEach(u => {
+                  const d = u.data || {};
+                  rows.push([u.id, d.username||'', u.email||'', d.department||'', d.points||0, d.lokoin_balance||0, d.role||'user', d.disabled?'Да':'Нет']);
                 });
-                lastDoc = snap.docs[snap.docs.length-1];
-                if (snap.size < 500) hasMore = false;
+                if (data.length < 500) hasMore = false;
+                from += 500; to += 500;
               }
               let csv = '\uFEFF' + rows.map(r => r.map(v => `"${v}"`).join(',')).join('\n');
               const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
@@ -225,7 +241,7 @@
               a.click();
               URL.revokeObjectURL(url);
               showToast('Экспорт готов', 'success');
-            } catch (err) { showToast('Ошибка', 'error'); }
+            } catch (err) { showToast('Ошибка экспорта', 'error'); }
           });
 
           // Закрытие модалки редактирования
@@ -241,14 +257,14 @@
               url: document.getElementById('edit-game-url').value.trim(),
               hidden: document.getElementById('edit-game-hidden').checked
             };
-            try {
-              await db.collection('games').doc(id).update(data);
-              showToast('Игра обновлена', 'success');
-              document.getElementById('edit-game-modal').style.display = 'none';
-              loadGames();
-            } catch (err) {
-              document.getElementById('edit-game-message').textContent = 'Ошибка: ' + err.message;
+            const { error } = await supabase.from('games').update(data).eq('id', id);
+            if (error) {
+              document.getElementById('edit-game-message').textContent = 'Ошибка: ' + error.message;
+              return;
             }
+            showToast('Игра обновлена', 'success');
+            document.getElementById('edit-game-modal').style.display = 'none';
+            loadGames();
           });
 
           // Сохранение настроек обслуживания
@@ -256,7 +272,7 @@
             const enabled = document.getElementById('maintenance-enabled').checked;
             const message = document.getElementById('maintenance-message').value.trim();
             try {
-              await db.collection('settings').doc('maintenance').set({ enabled, message }, { merge: true });
+              await supabase.from('settings').upsert({ key: 'maintenance', value: { enabled, message } });
               document.getElementById('maintenance-status').textContent = 'Настройки сохранены.';
               showToast('Режим обслуживания обновлён', 'success');
             } catch (err) {
@@ -266,11 +282,10 @@
 
           // Сброс кеша с подтверждением
           document.getElementById('reset-cache-btn').addEventListener('click', async () => {
-            if (!confirm('Вы уверены, что хотите сбросить кэш у ВСЕХ пользователей? Их данные (профиль, рейтинг, игры) будут перезагружены при следующем заходе.')) return;
+            if (!confirm('Вы уверены, что хотите сбросить кэш у ВСЕХ пользователей?')) return;
             try {
-              await db.collection('settings').doc('cacheVersion').set({
-                version: Date.now()
-              }, { merge: true });
+              const { error } = await supabase.from('settings').upsert({ key: 'cacheVersion', value: String(Date.now()) });
+              if (error) throw error;
               document.getElementById('cache-reset-status').textContent = '✅ Версия кеша обновлена. Кэш всех пользователей будет сброшен при следующем заходе.';
               showToast('Кэш сброшен для всех пользователей', 'success');
             } catch (err) {
@@ -281,11 +296,16 @@
 
         async function loadMaintenanceSettings() {
           try {
-            const doc = await db.collection('settings').doc('maintenance').get();
-            if (doc.exists) {
-              const data = doc.data();
-              document.getElementById('maintenance-enabled').checked = data.enabled || false;
-              document.getElementById('maintenance-message').value = data.message || '';
+            const { data, error } = await supabase
+              .from('settings')
+              .select('value')
+              .eq('key', 'maintenance')
+              .single();
+            if (error) return;
+            if (data && data.value) {
+              const m = typeof data.value === 'string' ? JSON.parse(data.value) : data.value;
+              document.getElementById('maintenance-enabled').checked = m.enabled || false;
+              document.getElementById('maintenance-message').value = m.message || '';
             }
           } catch (e) { console.error(e); }
         }
@@ -304,12 +324,18 @@
           try {
             const now = new Date();
             const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-            const snap = await db.collection('users').get();
+            // Получаем всех пользователей с их данными для статистики
+            const { data: users, error } = await supabase
+              .from('users')
+              .select('data');
+
+            if (error) throw error;
+
             let total = 0, activeToday = 0, totalPoints = 0;
             const gameCounts = { clicker: 0, snake: 0, memory: 0, '2048': 0, minesweeper: 0 };
 
-            snap.forEach(doc => {
-              const d = doc.data();
+            (users || []).forEach(u => {
+              const d = u.data || {};
               total++;
               totalPoints += d.points || 0;
               const history = d.gameHistory || [];
@@ -359,9 +385,11 @@
           }
 
           try {
-            const snap = await db.collection('games').get();
-            gamesList = [];
-            snap.forEach(d => gamesList.push({ id: d.id, ...d.data() }));
+            const { data, error } = await supabase
+              .from('games')
+              .select('*');
+            if (error) throw error;
+            gamesList = data || [];
             setCached(CACHE_GAMES_KEY, gamesList);
             renderGamesList();
           } catch (e) {
@@ -395,7 +423,7 @@
           document.querySelectorAll('.remove-game-btn').forEach(btn => {
             btn.addEventListener('click', async e => {
               if (confirm('Удалить игру?')) {
-                await db.collection('games').doc(e.target.dataset.gameId).delete();
+                await supabase.from('games').delete().eq('id', e.target.dataset.gameId);
                 showToast('Удалена', 'success');
                 loadGames();
               }
