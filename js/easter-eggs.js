@@ -102,7 +102,10 @@ async function activateEasterEgg(eggId, message) {
     if (error || !row) return;
 
     const userData = row.data || {};
-    const easterEggs = userData.easterEggsFound || [];
+    let easterEggs = userData.easterEggsFound || [];
+    // Защита: если не массив – заменяем на пустой массив
+    if (!Array.isArray(easterEggs)) easterEggs = [];
+
     if (easterEggs.includes(eggId)) {
       showToast('Вы уже нашли эту пасхалку!', 'info');
       return;
@@ -161,7 +164,8 @@ async function checkNightGuest() {
 
 function checkConspirator() {
   const user = getCurrentUser();
-  if (user && user.easterEggsFound && user.easterEggsFound.includes('conspirator')) return;
+  const easterEggs = user?.easterEggsFound;
+  if (user && Array.isArray(easterEggs) && easterEggs.includes('conspirator')) return;
 
   let devtoolsOpen = false;
   const threshold = 160;
@@ -205,7 +209,8 @@ function initLibrarian() {
 
 async function checkDarkThemePurchase() {
   const user = getCurrentUser();
-  if (user && user.purchasedItems && user.purchasedItems.includes('dark_theme')) {
+  const purchasedItems = user?.purchasedItems;
+  if (user && Array.isArray(purchasedItems) && purchasedItems.includes('dark_theme')) {
     await activateEasterEgg('dark_side', 'Вы перешли на тёмную сторону!');
   }
 }
@@ -216,7 +221,8 @@ async function checkSilence() {
 
 async function checkCollector() {
   const user = getCurrentUser();
-  if (user && user.achievements && user.achievements.length >= 10) {
+  const achievements = user?.achievements;
+  if (user && Array.isArray(achievements) && achievements.length >= 10) {
     await activateEasterEgg('collector', 'Вы собрали 10 достижений!');
   }
 }
@@ -233,7 +239,8 @@ async function checkMeteorism() {
 
 async function checkFirstPurchase() {
   const user = getCurrentUser();
-  if (user && user.purchasedItems && user.purchasedItems.length === 1) {
+  const purchasedItems = user?.purchasedItems;
+  if (user && Array.isArray(purchasedItems) && purchasedItems.length === 1) {
     await activateEasterEgg('first_purchase', 'Вы совершили первую покупку!');
   }
 }
