@@ -172,9 +172,10 @@
       }
 
       function buildStatsHTML(history) {
-        if (!history || history.length === 0) return '<p class="no-data">Нет данных для статистики.</p>';
+        const arr = Array.isArray(history) ? history : [];
+        if (!arr.length) return '<p class="no-data">Нет данных для статистики.</p>';
         const d = {}, g = {};
-        history.forEach(e => {
+        arr.forEach(e => {
           const dt = new Date(e.timestamp).toISOString().slice(0, 10);
           d[dt] = (d[dt] || 0) + e.points;
           const gn = e.game === 'clicker' ? '🖱️ Кликер' : e.game === 'memory' ? '🧠 Найди пару' : e.game === 'snake' ? '🐍 Змейка' : e.game;
@@ -195,8 +196,9 @@
       }
 
       function buildDailyCalendar(dailyLogin) {
-        const lh = dailyLogin?.loginHistory || [],
-              s = dailyLogin?.streak || 0,
+        const loginHistory = dailyLogin?.loginHistory;
+        const lh = Array.isArray(loginHistory) ? loginHistory : [];
+        const s = dailyLogin?.streak || 0,
               lo = dailyLogin?.longestStreak || 0,
               to = dailyLogin?.totalLogins || 0;
         const days = [], n = new Date();
@@ -322,14 +324,14 @@
         if (!container) return;
 
         const achCfg = getAchievementsConfig();
-        const purchased = user.purchasedItems || [];
+        const purchased = Array.isArray(user.purchasedItems) ? user.purchasedItems : [];
         const hasTheme = purchased.includes('dark_theme');
         // Проверка подтверждения email через сессию
         const { data: { user: authUser } } = await supabase.auth.getUser();
         const emailVerified = authUser?.email_confirmed_at ? true : false;
         const dailyLogin = user.dailyLogin || {};
-        const gameHistory = user.gameHistory || [];
-        const achievements = user.achievements || [];
+        const gameHistory = Array.isArray(user.gameHistory) ? user.gameHistory : [];
+        const achievements = Array.isArray(user.achievements) ? user.achievements : [];
         const hasGoldFrame = purchased.includes('gold_frame');
         const hasAnimatedAvatar = purchased.includes('animated_avatar');
         const hasCustomStatus = purchased.includes('custom_status');
@@ -340,7 +342,7 @@
         else if (hasGoldFrame && showGoldFrame) avatarClass = 'gold-frame';
         else if (hasAnimatedAvatar && showAnimatedAvatar) avatarClass = 'animated-avatar';
         const customStatus = user.customStatus || '';
-        const ownedAvatars = user.ownedAvatars || [];
+        const ownedAvatars = Array.isArray(user.ownedAvatars) ? user.ownedAvatars : [];
         const avatarHtml = typeof renderAvatarDiv === 'function' ? renderAvatarDiv(user, avatarClass) : `<div class="avatar-circle ${avatarClass}" style="background-color:${getColorFromUid(user.id)}">${getInitials(user.username)}</div>`;
 
         const activeEffects = typeof getActiveEffectsInfo === 'function' ? getActiveEffectsInfo(user) : [];
