@@ -58,16 +58,23 @@ function initFeedback() {
     submitBtn.disabled = true;
     submitBtn.textContent = 'Отправка...';
     try {
-      // Добавляем userId, если пользователь авторизован
-      const userId = auth.currentUser ? auth.currentUser.uid : null;
-      await db.collection('feedback').add({
-        name: name || 'Аноним',
-        topic,
-        message,
-        userId: userId || null,
-        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-        status: 'new'
-      });
+      // Получаем текущего пользователя через Supabase Auth (если вошёл)
+      const { data: { user } } = await supabase.auth.getUser();
+      const userId = user ? user.id : null;
+
+      // Вставляем обращение в таблицу feedback
+      const { error } = await supabase
+        .from('feedback')
+        .insert([{
+          name: name || 'Аноним',
+          topic,
+          message,
+          user_id: userId,
+          status: 'new'
+        }]);
+
+      if (error) throw error;
+
       document.getElementById('feedback-message').textContent = '✅ Спасибо! Ваше сообщение отправлено.';
       document.getElementById('feedback-form').reset();
       setTimeout(closeFeedbackModal, 1500);
