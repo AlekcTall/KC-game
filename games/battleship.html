@@ -5,19 +5,19 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Морской Бой | KC Games</title>
     <link rel="stylesheet" href="../styles/main.css">
-    <link rel="stylesheet" href="../styles/games.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link rel="stylesheet" href="../styles/game.css">
     <style>
         /* Стили для доски (упрощенно) */
         .game-board { display: grid; grid-template-columns: repeat(10, 30px); gap: 2px; margin: 20px auto; max-width: 350px; }
-        .cell { width: 30px; height: 30px; background: #a0d2eb; border: 1px solid #555; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 20px; }
-        .cell.ship { background: #4a90e2; }
-        .cell.hit { background: #e74c3c; color: white; }
+        .cell { width: 30px; height: 30px; background: #3498db; border: 1px solid #2980b9; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 20px; }
+        .cell.hit { background: #e74c3c; }
         .cell.miss { background: #ecf0f1; }
-        .cell:hover { opacity: 0.8; }
-        .status-bar { text-align: center; font-size: 18px; margin: 10px; font-weight: bold; }
-        .btn-game { padding: 10px 20px; font-size: 16px; cursor: pointer; background: #2ecc71; color: white; border: none; border-radius: 5px; }
-        .hidden { display: none; }
+        .cell.ship { background: #2c3e50; }
+        .status-panel { text-align: center; margin: 20px; font-size: 1.2em; font-weight: bold; }
+        .btn { padding: 10px 20px; background: #27ae60; color: white; border: none; cursor: pointer; border-radius: 5px; font-size: 16px; }
+        .btn:disabled { background: #95a5a6; }
+        #game-setup, #game-area { display: none; }
+        #game-setup.active, #game-area.active { display: block; }
     </style>
 </head>
 <body class="dark-theme">
@@ -28,35 +28,41 @@
             <div class="nav-links">
                 <a href="../index.html">Главная</a>
                 <a href="../games.html">Игры</a>
-                <a href="battleship.html" class="active">Морской Бой</a>
+                <a href="../shop.html">Магазин</a>
             </div>
         </div>
     </nav>
 
     <main class="container game-container">
-        <h1><i class="fas fa-ship"></i> Морской Бой</h1>
+        <h1>🚢 Морской Бой</h1>
         
-        <!-- Меню -->
-        <div id="game-menu">
-            <button id="btn-create-game" class="btn-game">Создать игру</button>
-            <button id="btn-join-game" class="btn-game">Найти игру</button>
-            <div id="game-list" class="hidden">
-                <h3>Доступные игры:</h3>
-                <ul id="games-list-ul"></ul>
-            </div>
+        <!-- Экран меню -->
+        <div id="game-setup" class="active">
+            <p>Сразись с другим игроком онлайн!</p>
+            <button id="btn-create-game" class="btn">Создать игру</button>
+            <button id="btn-find-game" class="btn">Найти соперника</button>
+            <div id="waiting-msg" style="display:none; margin-top:20px;">Поиск игры... <br> <small>Ожидаем соперника...</small></div>
         </div>
 
-        <!-- Игровое поле -->
-        <div id="game-area" class="hidden">
-            <div class="status-bar" id="game-status">Ожидание соперника...</div>
+        <!-- Экран игры -->
+        <div id="game-area">
+            <div class="status-panel" id="game-status">Загрузка...</div>
             
-            <h3>Ваше поле</h3>
-            <div id="my-board" class="game-board"></div>
-            
-            <h3>Поле противника</h3>
-            <div id="enemy-board" class="game-board"></div>
-            
-            <button id="btn-leave-game" class="btn-game" style="background:#e74c3c; margin-top:20px;">Выйти</button>
+            <div class="boards-wrapper" style="display:flex; justify-content:center; gap:40px; flex-wrap:wrap;">
+                <!-- Доска соперника (куда стреляем) -->
+                <div>
+                    <h3>Доска противника</h3>
+                    <div id="enemy-board" class="game-board"></div>
+                </div>
+                
+                <!-- Наша доска -->
+                <div>
+                    <h3>Наш флот</h3>
+                    <div id="my-board" class="game-board"></div>
+                </div>
+            </div>
+
+            <button id="btn-leave" class="btn" style="background:#c0392b; margin-top:20px;">Выйти</button>
         </div>
     </main>
 
@@ -73,179 +79,215 @@
         /**
          * BATTLESHIP GAME LOGIC (Supabase Realtime)
          */
-        
-        let isInitialized = false;
         let currentGameId = null;
-        let myChannel = null;
-        let myShips = [];
-        let enemyMoves = [];
-        let myMoves = [];
-        let isMyTurn = false;
-        let gameStatus = 'waiting'; // waiting, playing, finished
+        let myUid = null;
+        let channel = null;
+        let isInitialized = false; // Защита от повторной инициализации
 
         document.addEventListener('DOMContentLoaded', async () => {
-            if (isInitialized) return;
-            isInitialized = true;
+            // Ждем авторизации
+            await new Promise(resolve => {
+                const unsub = firebase.auth().onAuthStateChanged(user => {
+                    if (user) {
+                        myUid = user.uid;
+                        unsub();
+                        resolve();
+                    }
+                });
+                setTimeout(resolve, 2000); // Fallback
+            });
 
-            const user = firebase.auth().currentUser;
-            if (!user) {
-                alert('Сначала войдите в систему!');
+            if (!myUid) {
+                alert('Сначала войдите в аккаунт!');
                 window.location.href = '../index.html';
                 return;
             }
 
-            // Кнопки меню
-            document.getElementById('btn-create-game').addEventListener('click', createGame);
-            document.getElementById('btn-join-game').addEventListener('click', toggleGameList);
-            document.getElementById('btn-leave-game').addEventListener('click', leaveGame);
-
-            // Загрузка списка игр (для присоединения)
-            loadAvailableGames();
+            initEventListeners();
         });
+
+        function initEventListeners() {
+            document.getElementById('btn-create-game').onclick = createGame;
+            document.getElementById('btn-find-game').onclick = findGame;
+            document.getElementById('btn-leave').onclick = leaveGame;
+        }
 
         // 1. Создание игры
         async function createGame() {
-            const user = firebase.auth().currentUser;
-            const gameId = 'battle_' + Date.now();
+            const gameId = 'battle_' + Date.now() + '_' + myUid.substring(0,5);
             
             const newGame = {
                 id: gameId,
-                status: 'waiting',
+                status: 'waiting', // waiting, playing, finished
                 turn: null,
                 winner: null,
                 created_at: new Date(),
                 data: {
-                    players: { [user.uid]: { ready: false, ships: [] } },
-                    moves: []
+                    players: { [myUid]: { ready: false, ships: [] } }, // Ships генерируются позже
+                    moves: [],
+                    boardSize: 10
                 }
             };
 
             const { error } = await supabase.from('battles').insert([newGame]);
             if (error) {
-                console.error('Ошибка создания:', error);
-                alert('Не удалось создать игру');
+                alert('Ошибка создания игры: ' + error.message);
                 return;
             }
 
             currentGameId = gameId;
-            myShips = generateShips(); // Генерация кораблей (упрощено)
-            
-            // Обновляем свою запись с кораблями
-            await updateGameShips(gameId, user.uid, myShips);
-
-            initGameUI();
-            subscribeToGame(gameId);
+            startGameLoop(gameId);
         }
 
-        // 2. Присоединение к игре
-        async function joinGame(gameId) {
-            const user = firebase.auth().currentUser;
-            const { data: game } = await supabase.from('battles').select('*').eq('id', gameId).single();
+        // 2. Поиск игры
+        async function findGame() {
+            document.getElementById('waiting-msg').style.display = 'block';
             
-            if (!game || game.status !== 'waiting') return alert('Игра недоступна');
+            // Ищем игру со статусом 'waiting'
+            const { data, error } = await supabase
+                .from('battles')
+                .select('*')
+                .eq('status', 'waiting')
+                .order('created_at', { ascending: true })
+                .limit(1)
+                .single();
 
-            // Добавляем второго игрока
-            const updatedPlayers = { ...game.data.players, [user.uid]: { ready: false, ships: [] } };
-            
-            const { error } = await supabase.from('battles')
+            if (error || !data) {
+                alert('Нет доступных игр. Создайте свою!');
+                document.getElementById('waiting-msg').style.display = 'none';
+                return;
+            }
+
+            // Присоединяемся
+            const players = data.data.players || {};
+            players[myUid] = { ready: false, ships: [] };
+
+            const { error: updateError } = await supabase
+                .from('battles')
                 .update({ 
                     status: 'playing',
-                    turn: Object.keys(updatedPlayers)[0], // Ход первому
-                    data: { ...game.data, players: updatedPlayers }
+                    turn: Object.keys(players)[0], // Первый игрок ходит
+                    data: { ...data.data, players }
                 })
-                .eq('id', gameId);
+                .eq('id', data.id);
 
-            if (error) return alert('Ошибка входа');
+            if (updateError) {
+                alert('Ошибка присоединения: ' + updateError.message);
+                return;
+            }
 
-            currentGameId = gameId;
-            myShips = generateShips();
-            await updateGameShips(gameId, user.uid, myShips);
-            
-            initGameUI();
-            subscribeToGame(gameId);
+            currentGameId = data.id;
+            startGameLoop(data.id);
         }
 
-        // 3. Real-time подписка (Вместо onSnapshot)
-        function subscribeToGame(gameId) {
-            // Отписываемся от старых каналов если есть
-            if (myChannel) supabase.removeChannel(myChannel);
+        // 3. Запуск цикла игры (Realtime)
+        function startGameLoop(gameId) {
+            if (isInitialized) return;
+            isInitialized = true;
 
-            myChannel = supabase
+            document.getElementById('game-setup').classList.remove('active');
+            document.getElementById('game-area').classList.add('active');
+
+            // Подписка на изменения в таблице battles
+            channel = supabase
                 .channel(`battles:${gameId}`)
-                .on('postgres_changes', 
-                    { event: 'UPDATE', schema: 'public', table: 'battles', filter: `id=eq.${gameId}` }, 
-                    (payload) => {
-                        handleGameUpdate(payload.new);
-                    }
+                .on(
+                    'postgres_changes',
+                    {
+                        event: '*', // Любое изменение (INSERT, UPDATE, DELETE)
+                        schema: 'public',
+                        table: 'battles',
+                        filter: `id=eq.${gameId}`
+                    },
+                    handleGameUpdate
                 )
-                .subscribe();
+                .subscribe(status => {
+                    if (status === 'SUBSCRIBED') {
+                        console.log('Подключено к игре:', gameId);
+                        renderBoards(); // Первичный рендер
+                    }
+                });
         }
 
-        // Обработка обновлений из БД
-        function handleGameUpdate(gameData) {
-            const user = firebase.auth().currentUser;
-            const data = gameData.data;
-            
-            // Обновляем статус
-            gameStatus = gameData.status;
-            document.getElementById('game-status').textContent = 
-                gameStatus === 'waiting' ? 'Ожидание...' : 
-                gameStatus === 'finished' ? `Игра окончена! Победитель: ${data.winner === user.uid ? 'ВЫ' : 'Соперник'}` :
-                (data.turn === user.uid ? 'ВАШ ХОД!' : 'Ход соперника...');
+        // 4. Обработка обновлений от сервера
+        async function handleGameUpdate(payload) {
+            const game = payload.new; // Полное состояние игры
+            const gameState = game.data;
+            const players = gameState.players || {};
+            const myData = players[myUid] || {};
 
-            // Если появились ходы соперника - рисуем их
-            if (data.moves) {
-                renderEnemyMoves(data.moves);
-            }
-
-            if (gameStatus === 'finished') {
-                setTimeout(() => {
-                    if(myChannel) supabase.removeChannel(myChannel);
-                    alert(gameData.winner === user.uid ? 'Победа!' : 'Поражение!');
-                    location.reload();
-                }, 2000);
+            // Обновление статуса
+            const statusEl = document.getElementById('game-status');
+            if (game.status === 'waiting') {
+                statusEl.textContent = 'Ожидание соперника...';
+            } else if (game.status === 'finished') {
+                statusEl.textContent = game.winner === myUid ? '🏆 ПОБЕДА!' : '💀 Поражение';
+                unsubscribeChannel();
+            } else {
+                // Ход
+                const isMyTurn = game.turn === myUid;
+                statusEl.textContent = isMyTurn ? '✅ Ваш ход!' : '⏳ Ход соперника...';
+                
+                // Отрисовка досок
+                renderBoards(gameState);
             }
         }
 
-        // 4. Логика хода
-        function makeMove(x, y) {
-            if (gameStatus !== 'playing') return;
+        // 5. Рендер досок (Упрощенно)
+        function renderBoards(gameState) {
+            if (!gameState) return;
+            const myBoardEl = document.getElementById('my-board');
+            const enemyBoardEl = document.getElementById('enemy-board');
             
-            const user = firebase.auth().currentUser;
+            // Здесь должна быть логика отрисовки 10x10 клеток
+            // Для примера просто заполним заглушками
+            if (myBoardEl.children.length === 0) {
+                for(let i=0; i<100; i++) {
+                    myBoardEl.innerHTML += '<div class="cell ship">🚢</div>'; // Мои корабли
+                    enemyBoardEl.innerHTML += '<div class="cell" onclick="makeMove('+i+')"></div>'; // Клетки врага
+                }
+            }
+            // В реальной версии тут нужно парсить gameState.moves и красить клетки в hit/miss
+        }
+
+        // 6. Сделать ход
+        window.makeMove = async (cellIndex) => {
+            if (!currentGameId) return;
+            
+            // Получаем свежее состояние
             const { data: game } = await supabase.from('battles').select('*').eq('id', currentGameId).single();
-            
-            if (game.turn !== user.uid) return alert('Не ваш ход!');
+            if (game.turn !== myUid) {
+                alert('Не ваш ход!');
+                return;
+            }
 
-            // Проверка: не ходили ли сюда раньше
-            // ... логика проверки ...
-
-            const move = { x, y, player: user.uid, timestamp: Date.now() };
-            
-            // Добавляем ход в массив
+            const move = { by: myUid, target: cellIndex, time: Date.now() };
             const newMoves = [...(game.data.moves || []), move];
+
+            // Передаем ход (упрощенно: просто меняем turn на другого UID)
+            const otherPlayer = Object.keys(game.data.players).find(uid => uid !== myUid);
             
-            // Передача хода
-            const players = Object.keys(game.data.players);
-            const nextPlayer = players.find(p => p !== user.uid);
+            await supabase
+                .from('battles')
+                .update({
+                    turn: otherPlayer,
+                    data: { ...game.data, moves: newMoves }
+                })
+                .eq('id', currentGameId);
+        };
 
-            supabase.from('battles').update({
-                turn: nextPlayer,
-                data: { ...game.data, moves: newMoves }
-            }).eq('id', currentGameId);
+        function leaveGame() {
+            unsubscribeChannel();
+            window.location.href = '../games.html';
         }
 
-        // Утилиты (заглушки для примера)
-        function generateShips() { return []; } // Тут логика расстановки
-        function updateGameShips(gid, uid, ships) { /* обновление JSONB */ }
-        function initGameUI() { 
-            document.getElementById('game-menu').classList.add('hidden'); 
-            document.getElementById('game-area').classList.remove('hidden'); 
+        function unsubscribeChannel() {
+            if (channel) {
+                supabase.removeChannel(channel);
+                channel = null;
+            }
+            isInitialized = false;
         }
-        function loadAvailableGames() { /* запрос к battles где status=waiting */ }
-        function toggleGameList() { /* показать список */ }
-        function leaveGame() { location.reload(); }
-        function renderEnemyMoves(moves) { /* отрисовка попаданий */ }
-
     </script>
 </body>
 </html>
