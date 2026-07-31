@@ -96,19 +96,19 @@
         <a href="../games.html" class="ms-back">← Вернуться к играм</a>
     </div>
 
-    <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-auth-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore-compat.js"></script>
-    <script src="../js/firebase-config.js"></script>
-    <script src="../js/firebase-auth.js"></script>
+    <!-- Supabase SDK и модули -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="../js/supabase-config.js"></script>
+    <script src="../js/auth.js"></script>
     <script src="../js/storage.js"></script>
     <script src="../js/achievements.js"></script>
     <script src="../js/notifications.js"></script>
     <script src="../js/easter-eggs.js"></script>
     <script src="../js/main.js"></script>
+
     <script>
         (function() {
-            if (typeof auth === 'undefined' || typeof db === 'undefined') {
+            if (typeof supabase === 'undefined') {
                 document.body.innerHTML = '<p style="text-align:center; padding:3rem;">Ошибка загрузки компонентов. Пожалуйста, обновите страницу.</p>';
                 return;
             }
@@ -140,7 +140,6 @@
             const CELL_SIZE = LOGICAL_WIDTH / COLS;
             const SAFE_CELLS = COLS * ROWS - MINES_TOTAL;
 
-            // Установка физических размеров canvas с учётом DPR
             canvas.width = LOGICAL_WIDTH * DPR;
             canvas.height = LOGICAL_HEIGHT * DPR;
             canvas.style.width = LOGICAL_WIDTH + 'px';
@@ -242,10 +241,6 @@
                     for (let c = 0; c < COLS; c++) {
                         if (!forbidden.has(r * COLS + c)) candidates.push({ r, c });
                     }
-                }
-                if (candidates.length < MINES_TOTAL) {
-                    // fallback: оставляем как есть, но не должно случаться
-                    console.warn('Мало места для мин, уменьшаем количество');
                 }
                 for (let i = candidates.length - 1; i > 0; i--) {
                     const j = Math.floor(Math.random() * (i + 1));
@@ -362,7 +357,7 @@
             }
 
             async function syncWin() {
-                if (typeof auth === 'undefined' || !auth.currentUser) return;
+                if (!currentUid) return;
                 try {
                     sessionStorage.removeItem('minesweeper_losses');
                     const result = typeof addPointsToCurrentUser === 'function' ? await addPointsToCurrentUser(3, 'minesweeper') : null;
@@ -377,7 +372,7 @@
             }
 
             async function syncLoss() {
-                if (typeof auth === 'undefined' || !auth.currentUser) return;
+                if (!currentUid) return;
                 try {
                     if (typeof syncGameStats === 'function') await syncGameStats('minesweeper', { loss: true });
                     if (typeof checkMeteorism === 'function') await checkMeteorism();
@@ -406,7 +401,6 @@
             }
 
             function restartGame() {
-                // удаляем оверлей, если остался
                 const overlay = document.querySelector('.game-over-overlay');
                 if (overlay) overlay.remove();
 
@@ -422,7 +416,6 @@
                 drawBoard();
             }
 
-            // Отрисовка с объёмом
             function drawClosedCell(x, y) {
                 const w = CELL_SIZE - 2, h = CELL_SIZE - 2;
                 const sx = x + 1, sy = y + 1;
@@ -551,24 +544,32 @@
                 }
             });
 
-            // Загрузка рекордов
-            if (typeof auth !== 'undefined') {
-                auth.onAuthStateChanged(user => {
-                    if (user) loadBestAndTop();
-                    else updateTopVisibility();
+            // Авторизация и загрузка рекордов
+            if (typeof onAuthStateChange === 'function') {
+                onAuthStateChange((event, session) => {
+                    if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
+                        currentUid = session?.user?.id || null;
+                        loadBestAndTop();
+                    } else {
+                        currentUid = null;
+                        updateTopVisibility();
+                    }
                 });
+            } else {
+                updateTopVisibility();
             }
 
             async function loadBestAndTop() {
-                if (typeof auth === 'undefined' || !auth.currentUser) return;
-                currentUid = auth.currentUser.uid;
+                if (!currentUid) return;
                 try {
-                    if (typeof db !== 'undefined' && db) {
-                        const doc = await db.collection('users').doc(currentUid).get();
-                        if (doc.exists) {
-                            const stats = doc.data().gameStats?.minesweeper;
-                            if (stats?.bestTime) bestTime = stats.bestTime;
-                        }
+                    const { data: row, error } = await supabase
+                        .from('users')
+                        .select('data')
+                        .eq('id', currentUid)
+                        .single();
+                    if (!error && row) {
+                        const stats = row.data?.gameStats?.minesweeper;
+                        if (stats?.bestTime) bestTime = stats.bestTime;
                     }
                 } catch (e) {}
                 updateTopVisibility();
@@ -577,30 +578,36 @@
             }
 
             function updateTopVisibility() {
-                document.getElementById('auth-warning').style.display = auth.currentUser ? 'none' : 'block';
-                document.getElementById('top-table').style.display = auth.currentUser ? '' : 'none';
+                document.getElementById('auth-warning').style.display = currentUid ? 'none' : 'block';
+                document.getElementById('top-table').style.display = currentUid ? '' : 'none';
             }
 
             async function updateTop() {
-                if (typeof auth === 'undefined' || !auth.currentUser || typeof db === 'undefined' || !db) return;
+                if (!currentUid) return;
                 const tbody = document.querySelector('#top-table tbody');
                 if (!tbody) return;
                 try {
-                    const snap = await db.collection('users').get();
-                    const players = [];
-                    snap.forEach(doc => {
-                        const d = doc.data();
-                        if (d.role === 'admin') return;
-                        const t = d.gameStats?.minesweeper?.bestTime;
-                        if (t && t > 0) players.push({ uid: doc.id, username: d.username || 'Аноним', time: t });
-                    });
-                    players.sort((a, b) => a.time - b.time);
-                    const top10 = players.slice(0, 10);
-                    tbody.innerHTML = top10.map((p, i) => {
+                    const { data, error } = await supabase
+                        .from('users')
+                        .select('id, data')
+                        .neq('data->>role', 'admin')
+                        .not('data->gameStats->minesweeper->bestTime', 'is', null)
+                        .order('data->gameStats->minesweeper->bestTime', { ascending: true })
+                        .limit(10);
+
+                    if (error) throw error;
+
+                    const players = (data || []).map(u => ({
+                        uid: u.id,
+                        username: u.data?.username || 'Аноним',
+                        time: u.data?.gameStats?.minesweeper?.bestTime || 0
+                    }));
+
+                    tbody.innerHTML = players.map((p, i) => {
                         const me = p.uid === currentUid ? ' class="me"' : '';
                         return `<tr${me}><td>${i+1}</td><td>${p.username}</td><td>${formatTime(p.time)}</td></tr>`;
                     }).join('');
-                    if (!top10.length) tbody.innerHTML = '<tr><td colspan="3">Пока нет рекордов</td></tr>';
+                    if (!players.length) tbody.innerHTML = '<tr><td colspan="3">Пока нет рекордов</td></tr>';
                 } catch (e) {}
             }
 
