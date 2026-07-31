@@ -31,11 +31,10 @@
     <div id="quiz-content" style="display:none;"></div>
   </div>
 
-  <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-auth-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore-compat.js"></script>
-  <script src="../js/firebase-config.js"></script>
-  <script src="../js/firebase-auth.js"></script>
+  <!-- Supabase SDK и модули -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="../js/supabase-config.js"></script>
+  <script src="../js/auth.js"></script>
   <script src="../js/storage.js"></script>
   <script src="../js/achievements.js"></script>
   <script src="../js/notifications.js"></script>
@@ -54,10 +53,9 @@
       const loadingMsg = document.getElementById('loading-msg');
       const quizContent = document.getElementById('quiz-content');
 
-      let eventData, questions, userProgress, timerInterval, questionTimer, questionTimeout;
-      const QUESTION_TIME = 30; // по умолчанию 30 секунд на вопрос
+      let eventData, questions, userProgress, timerInterval;
+      const QUESTION_TIME = 30;
 
-      // Функция перемешивания массива (Фишер-Йетс)
       function shuffle(arr) {
         const a = [...arr];
         for (let i = a.length - 1; i > 0; i--) {
@@ -67,31 +65,50 @@
         return a;
       }
 
-      // Инициализация после авторизации
-      auth.onAuthStateChanged(async user => {
-        if (!user) {
-          loadingMsg.textContent = 'Войдите, чтобы участвовать.';
-          return;
-        }
-        await loadEvent();
-      });
+      // Авторизация через onAuthStateChange
+      if (typeof onAuthStateChange === 'function') {
+        onAuthStateChange(async (event, session) => {
+          if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
+            if (session?.user) {
+              await loadEvent();
+            }
+          } else {
+            loadingMsg.textContent = 'Войдите, чтобы участвовать.';
+          }
+        });
+      } else {
+        loadingMsg.textContent = 'Ошибка загрузки системы авторизации.';
+      }
 
       async function loadEvent() {
-        const doc = await db.collection('events').doc(eventId).get();
-        if (!doc.exists) {
+        const { data: doc, error } = await supabase
+          .from('events')
+          .select('*')
+          .eq('id', eventId)
+          .single();
+
+        if (error || !doc) {
           loadingMsg.textContent = 'Ивент не найден.';
           return;
         }
-        eventData = { id: doc.id, ...doc.data() };
+        eventData = doc;
         if (eventData.status !== 'active') {
           loadingMsg.textContent = 'Ивент не активен.';
           return;
         }
 
-        // Загружаем вопросы из подколлекции
-        const qSnap = await db.collection('events').doc(eventId).collection('questions').get();
-        questions = [];
-        qSnap.forEach(d => questions.push({ id: d.id, ...d.data() }));
+        // Загружаем вопросы из таблицы event_questions
+        const { data: questionsData, error: questionsError } = await supabase
+          .from('event_questions')
+          .select('*')
+          .eq('event_id', eventId)
+          .order('order_index');
+
+        if (questionsError) {
+          loadingMsg.textContent = 'Ошибка загрузки вопросов.';
+          return;
+        }
+        questions = questionsData || [];
 
         if (!questions.length) {
           loadingMsg.textContent = 'Вопросы ещё не добавлены.';
@@ -99,12 +116,15 @@
         }
 
         // Получаем или создаём прогресс пользователя
-        const participants = eventData.participants || {};
-        let progress = participants[auth.currentUser.uid];
+        const evData = eventData.data || {};
+        const participants = evData.participants || {};
+        const { data: { user } } = await supabase.auth.getUser();
+        const userId = user.id;
+
+        let progress = participants[userId];
         if (!progress) {
-          // Генерируем порядок вопросов
           let order = questions.map(q => q.id);
-          if (eventData.settings?.randomOrder !== false) {
+          if (evData.settings?.randomOrder !== false) {
             order = shuffle(order);
           }
           progress = {
@@ -112,10 +132,11 @@
             answers: {},
             score: 0,
             currentIndex: 0,
-            started: firebase.firestore.FieldValue.serverTimestamp()
+            started: new Date().toISOString()
           };
-          participants[auth.currentUser.uid] = progress;
-          await db.collection('events').doc(eventId).update({ participants });
+          participants[userId] = progress;
+          const updatedData = { ...evData, participants };
+          await supabase.from('events').update({ data: updatedData }).eq('id', eventId);
         }
 
         userProgress = progress;
@@ -134,27 +155,26 @@
         const qid = userProgress.order[userProgress.currentIndex];
         const question = questions.find(q => q.id === qid);
         if (!question) {
-          // Пропускаем отсутствующие вопросы
           userProgress.currentIndex++;
           updateProgress();
           renderCurrentQuestion();
           return;
         }
 
-        const options = [...question.options]; // копируем массив вариантов
-        // Если включено перемешивание вариантов
-        if (eventData.settings?.shuffleOptions !== false) {
+        const options = [...question.options];
+        const evData = eventData.data || {};
+        if (evData.settings?.shuffleOptions !== false) {
           shuffle(options);
         }
 
-        const timeLimit = question.timeLimit || eventData.settings?.defaultTimeLimit || QUESTION_TIME;
+        const timeLimit = question.time_limit || evData.settings?.defaultTimeLimit || QUESTION_TIME;
 
         quizContent.innerHTML = `
           <div class="quiz-header">
             <span class="quiz-progress">Вопрос ${userProgress.currentIndex + 1} из ${userProgress.order.length}</span>
             <span class="quiz-timer" id="question-timer">${timeLimit}с</span>
           </div>
-          <div class="quiz-question">${question.text}</div>
+          <div class="quiz-question">${question.question}</div>
           <div class="quiz-options" id="options-container">
             ${options.map((opt, idx) => `
               <button class="quiz-option" data-option="${idx}" data-text="${opt.replace(/"/g, '&quot;')}">${opt}</button>
@@ -166,7 +186,6 @@
           </div>
         `;
 
-        // Таймер
         let remaining = timeLimit;
         const timerEl = document.getElementById('question-timer');
         timerInterval = setInterval(() => {
@@ -179,10 +198,9 @@
           }
         }, 1000);
 
-        // Обработка выбора варианта
         document.querySelectorAll('.quiz-option').forEach(btn => {
           btn.addEventListener('click', () => {
-            if (userProgress.answers[qid]) return; // уже отвечено
+            if (userProgress.answers[qid]) return;
             clearInterval(timerInterval);
             const selectedIdx = parseInt(btn.dataset.option);
             const selectedText = btn.dataset.text;
@@ -201,7 +219,7 @@
         const qid = userProgress.order[userProgress.currentIndex];
         const question = questions.find(q => q.id === qid);
         if (question) {
-          const correctIdx = question.correct;
+          const correctIdx = question.correct_index;
           highlightCorrectAnswer(correctIdx);
           document.getElementById('quiz-feedback').innerHTML = '<span style="color:#e74c3c;">⏰ Время вышло!</span>';
           document.querySelectorAll('.quiz-option').forEach(b => b.disabled = true);
@@ -210,20 +228,18 @@
       }
 
       async function handleAnswer(qid, selectedIdx, selectedText, question) {
-        const correctIdx = question.correct;
+        const correctIdx = question.correct_index;
         const isCorrect = selectedIdx === correctIdx;
-        const timeTaken = (question.timeLimit || QUESTION_TIME) - parseInt(document.getElementById('question-timer').textContent);
+        const timeTaken = (question.time_limit || QUESTION_TIME) - parseInt(document.getElementById('question-timer').textContent);
 
-        // Сохраняем ответ
         userProgress.answers[qid] = {
           answer: selectedIdx,
           correct: isCorrect,
           time: timeTaken
         };
 
-        // Начисляем баллы (базово 10 за правильный, + бонус за скорость)
         if (isCorrect) {
-          const speedBonus = Math.max(0, Math.floor((question.timeLimit || QUESTION_TIME) - timeTaken) / 2);
+          const speedBonus = Math.max(0, Math.floor((question.time_limit || QUESTION_TIME) - timeTaken) / 2);
           const earnedPoints = 10 + speedBonus;
           userProgress.score = (userProgress.score || 0) + earnedPoints;
           if (typeof addPointsToCurrentUser === 'function') {
@@ -231,7 +247,6 @@
           }
         }
 
-        // Визуальная обратная связь
         highlightCorrectAnswer(correctIdx);
         if (!isCorrect) {
           document.querySelector(`.quiz-option[data-option="${selectedIdx}"]`).classList.add('wrong');
@@ -251,9 +266,12 @@
       }
 
       async function updateProgress() {
-        const participants = eventData.participants || {};
-        participants[auth.currentUser.uid] = userProgress;
-        await db.collection('events').doc(eventId).update({ participants });
+        const evData = eventData.data || {};
+        const participants = evData.participants || {};
+        const { data: { user } } = await supabase.auth.getUser();
+        participants[user.id] = userProgress;
+        const updatedData = { ...evData, participants };
+        await supabase.from('events').update({ data: updatedData }).eq('id', eventId);
       }
 
       function showFinalResults() {
