@@ -69,11 +69,11 @@
   <div class="modal-overlay" id="award-detail-modal" style="display:none;"><div class="modal award-modal-content"><span class="modal-close" id="award-detail-close">&times;</span><div class="award-modal-icon" id="award-detail-icon"></div><div class="award-modal-title" id="award-detail-title"></div><div class="award-modal-desc" id="award-detail-desc"></div><div class="award-modal-comment" id="award-detail-comment"></div></div></div>
 
   <footer class="footer"><div class="container"><p>© 2026 ваши амбассадоры</p></div></footer>
-  <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-auth-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore-compat.js"></script>
-  <script src="js/firebase-config.js"></script>
-  <script src="js/firebase-auth.js"></script>
+
+  <!-- Supabase SDK и модули -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="js/supabase-config.js"></script>
+  <script src="js/auth.js"></script>
   <script src="js/storage.js"></script>
   <script src="js/achievements.js"></script>
   <script src="js/notifications.js"></script>
@@ -108,19 +108,34 @@
         </div>`;
       }
 
+      // Загрузка наград через user_awarded с JOIN к awards
       async function loadUserAwards(uid) {
         try {
-          const s = await db.collection('users').doc(uid).collection('awarded').get();
-          if (s.empty) return [];
-          const a = [];
-          for (const doc of s.docs) {
-            const ad = doc.data();
-            const adoc = await db.collection('awards').doc(ad.awardId).get();
-            if (adoc.exists) a.push({ ...adoc.data(), id: adoc.id, comment: ad.comment, awardedAt: ad.awardedAt });
-          }
-          a.sort((x, y) => (y.awardedAt?.seconds || 0) - (x.awardedAt?.seconds || 0));
-          return a;
-        } catch (e) { return []; }
+          const { data, error } = await supabase
+            .from('user_awarded')
+            .select('id, awarded_at, comment, given_by, award_id, awards (id, name, description, icon, lokoin_reward)')
+            .eq('user_id', uid);
+          if (error) throw error;
+          if (!data || data.length === 0) return [];
+          const awards = data.map(entry => {
+            const award = entry.awards || {};
+            return {
+              id: entry.award_id,
+              name: award.name || '',
+              description: award.description || '',
+              icon: award.icon || '',
+              lokoin_reward: award.lokoin_reward || 0,
+              comment: entry.comment,
+              awardedAt: entry.awarded_at ? { seconds: new Date(entry.awarded_at).getTime() / 1000 } : null,
+              given_by: entry.given_by
+            };
+          });
+          awards.sort((x, y) => (y.awardedAt?.seconds || 0) - (x.awardedAt?.seconds || 0));
+          return awards;
+        } catch (e) {
+          console.error('Ошибка загрузки наград:', e);
+          return [];
+        }
       }
 
       function getCachedProfile(uid) {
@@ -169,7 +184,7 @@
         </div>`;
       }
 
-      function renderProfile(userData, userAwards, skipAwardsLoad = false) {
+      function renderProfile(userData, userAwards) {
         const container = document.getElementById('public-profile-container');
         if (!container) return;
 
@@ -188,10 +203,9 @@
         else if (hasAnimatedAvatar && showAnimatedAvatar) avatarClass = 'animated-avatar';
         const customStatus = userData.customStatus || '';
 
-        // ИСПРАВЛЕНО: передаём весь объект userData
         const avatarHtml = (typeof renderAvatarDiv === 'function')
           ? renderAvatarDiv(userData, avatarClass)
-          : `<div class="avatar-circle ${avatarClass}" style="background-color:${getColorFromUid(userData.uid)}">${getInitials(userData.username)}</div>`;
+          : `<div class="avatar-circle ${avatarClass}" style="background-color:${getColorFromUid(userData.id)}">${getInitials(userData.username)}</div>`;
 
         container.innerHTML = `<div class="public-profile-box">
           <div class="profile-header">${avatarHtml}<div><h2>${userData.username}</h2><span class="badge badge-${userData.role}">${userData.role}</span>${customStatus ? `<div class="custom-status-text">«${customStatus}»</div>` : ''}${userData.department ? `<p class="profile-department"><strong>Отдел:</strong> ${userData.department}</p>` : ''}</div></div>
@@ -205,7 +219,7 @@
           <div class="achievements-grid">${achCfg.map(ach => {
             const unl = unlockedAch.includes(ach.id);
             const hid = ach.hidden && !unl;
-            return `<div class="achievement-item ${unl ? 'unlocked' : 'locked'}" data-ach-id="${ach.id}"><span class="ach-icon">${hid ? '❓' : ach.icon}</span><span class="ach-name">${hid ? '???' : ach.name}</span>${!hid && !unl ? `<span class="ach-hint">${ach.description}</span>` : ''}</div>`;
+            return `<div class="achievement-item ${unl ? 'unlocked' : 'locked'}" data-ach-id="${ach.id}"><span class="ach-icon">${hid ? '❓' : ach.icon}</span><span class="ach-name">${hid ? '???' : ach.name}</span></div>`;
           }).join('')}</div>
           <h3 class="section-title">История игр</h3><div id="history-container">${gameHistory.length === 0 ? '<p class="no-data">Пока не сыграно ни одной игры.</p>' : `<table class="history-table"><thead><tr><th>Игра</th><th>Баллы</th><th>Дата</th></tr></thead><tbody id="history-body"></tbody></table><div id="more-container" style="text-align:center;"></div>`}</div>
           <h3 class="section-title">Статистика</h3><div id="stats-container">${buildStatsHTML(gameHistory)}</div>
@@ -256,13 +270,9 @@
           }
           renderRows();
         }
-
-        const statsCont = document.getElementById('stats-container');
-        if (statsCont && gameHistory.length === 0) {
-          statsCont.innerHTML = '<p class="no-data">Нет данных для статистики.</p>';
-        }
       }
 
+      // Модальные окна достижений и наград
       const achModal = document.getElementById('ach-modal'),
             achModalClose = document.getElementById('ach-modal-close'),
             achModalIcon = document.getElementById('ach-modal-icon'),
@@ -302,35 +312,44 @@
       document.addEventListener('DOMContentLoaded', () => {
         const container = document.getElementById('public-profile-container');
 
-        auth.onAuthStateChanged(async (user) => {
-          if (!user) {
-            container.innerHTML = `<p>Войдите в профиль, чтобы увидеть данные игрока. <a href="login.html?redirect=public-profile.html${window.location.search}">Войти</a></p>`;
-            return;
-          }
+        if (typeof onAuthStateChange === 'function') {
+          onAuthStateChange(async (event, session) => {
+            if (!session?.user) {
+              container.innerHTML = `<p>Войдите в профиль, чтобы увидеть данные игрока. <a href="login.html?redirect=public-profile.html${window.location.search}">Войти</a></p>`;
+              return;
+            }
 
-          const params = new URLSearchParams(window.location.search);
-          const userId = params.get('id');
-          if (!userId) { container.innerHTML = '<p>Пользователь не указан.</p>'; return; }
+            const params = new URLSearchParams(window.location.search);
+            const userId = params.get('id');
+            if (!userId) { container.innerHTML = '<p>Пользователь не указан.</p>'; return; }
 
-          const cachedProfile = getCachedProfile(userId);
-          if (cachedProfile) {
-            renderProfile(cachedProfile.userData, cachedProfile.userAwards, false);
-            refreshProfile(userId, container, true);
-          } else {
-            renderSkeleton(container);
-            refreshProfile(userId, container, false);
-          }
-        });
+            const cachedProfile = getCachedProfile(userId);
+            if (cachedProfile) {
+              renderProfile(cachedProfile.userData, cachedProfile.userAwards);
+              refreshProfile(userId, container, true);
+            } else {
+              renderSkeleton(container);
+              refreshProfile(userId, container, false);
+            }
+          });
+        } else {
+          container.innerHTML = '<p>Ошибка загрузки системы авторизации.</p>';
+        }
 
         async function refreshProfile(userId, container, isCached) {
           try {
-            const doc = await db.collection('users').doc(userId).get();
-            if (!doc.exists) { 
+            const { data: row, error } = await supabase
+              .from('users')
+              .select('id, email, data')
+              .eq('id', userId)
+              .single();
+
+            if (error || !row) {
               if (!isCached) container.innerHTML = '<p>Пользователь не найден.</p>';
-              return; 
+              return;
             }
-            const userData = doc.data();
-            userData.uid = doc.id;
+
+            const userData = unpackUserData(row);
 
             let awards = undefined;
             loadUserAwards(userId).then(a => {
@@ -356,7 +375,7 @@
               awards = null;
             });
 
-            renderProfile(userData, awards, false);
+            renderProfile(userData, awards);
 
             setTimeout(async () => {
               const freshAwards = await loadUserAwards(userId);
