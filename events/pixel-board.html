@@ -39,11 +39,10 @@
     <a href="../index.html" class="pixel-back">← На главную</a>
   </div>
 
-  <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-auth-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore-compat.js"></script>
-  <script src="../js/firebase-config.js"></script>
-  <script src="../js/firebase-auth.js"></script>
+  <!-- Supabase SDK и модули -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="../js/supabase-config.js"></script>
+  <script src="../js/auth.js"></script>
   <script src="../js/storage.js"></script>
   <script src="../js/achievements.js"></script>
   <script src="../js/notifications.js"></script>
@@ -55,69 +54,272 @@
     const params = new URLSearchParams(window.location.search); const eventId = params.get('id');
     if (!eventId) { document.body.innerHTML = '<p>Ивент не указан. Вернитесь на главную.</p>'; throw new Error('eventId missing'); }
     const canvas = document.getElementById('pixel-canvas'), ctx = canvas.getContext('2d'), canvasContainer = document.getElementById('canvas-container'), tooltip = document.getElementById('cell-tooltip'), paletteEl = document.getElementById('palette'), timerBar = document.getElementById('timer-bar'), totalPixelsEl = document.getElementById('total-pixels'), uniquePaintersEl = document.getElementById('unique-painters'), cooldownBar = document.getElementById('cooldown-bar'), topPaintersEl = document.getElementById('top-painters'), finishedBoardContainer = document.getElementById('finished-board-container');
-    let eventData = null, unsubscribeEvent = null, boardData = {}, selectedColor = '#000000', lastPlaceTime = 0, cooldownTimer = null, painterStats = {};
+    let eventData = null, eventChannel = null, boardData = {}, selectedColor = '#000000', lastPlaceTime = 0, cooldownTimer = null, painterStats = {};
     const DEFAULT_PALETTE = ['#FFFFFF', '#C0C0C0', '#808080', '#000000', '#FF0000', '#800000', '#FFFF00', '#808000', '#00FF00', '#008000', '#00FFFF', '#008080', '#0000FF', '#000080', '#FF00FF', '#800080', '#FFA500', '#A52A2A', '#FFC0CB', '#FFD700'];
     const DEFAULT_WIDTH = 64, DEFAULT_HEIGHT = 64, PIXEL_SIZE = 10;
 
-    async function init() { auth.onAuthStateChanged(async user => { if (!user) { document.body.innerHTML = '<p>Войдите, чтобы участвовать.</p>'; return; } await loadEvent(); }); }
+    async function init() {
+      if (typeof onAuthStateChange === 'function') {
+        onAuthStateChange(async (event, session) => {
+          if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
+            if (session?.user) await loadEvent();
+          } else {
+            document.body.innerHTML = '<p>Войдите, чтобы участвовать.</p>';
+          }
+        });
+      } else {
+        document.body.innerHTML = '<p>Ошибка загрузки системы авторизации.</p>';
+      }
+    }
+
     async function loadEvent() {
-      const doc = await db.collection('events').doc(eventId).get(); if (!doc.exists) { document.body.innerHTML = '<p>Ивент не найден.</p>'; return; }
-      eventData = { id: doc.id, ...doc.data() };
+      const { data: doc, error } = await supabase
+        .from('events')
+        .select('*')
+        .eq('id', eventId)
+        .single();
+
+      if (error || !doc) { document.body.innerHTML = '<p>Ивент не найден.</p>'; return; }
+      eventData = doc;
       if (eventData.status === 'finished') { renderFinishedState(); return; }
       if (eventData.status !== 'active') { document.body.innerHTML = '<p>Ивент не активен.</p>'; return; }
-      const settings = eventData.settings || {}; const w = settings.width || DEFAULT_WIDTH, h = settings.height || DEFAULT_HEIGHT, palette = settings.palette || DEFAULT_PALETTE;
-      boardData = eventData.boardData || {}; painterStats = eventData.painterStats || {};
+
+      const evData = eventData.data || {};
+      const settings = evData.settings || {};
+      const w = settings.width || DEFAULT_WIDTH, h = settings.height || DEFAULT_HEIGHT, palette = settings.palette || DEFAULT_PALETTE;
+      boardData = evData.boardData || {};
+      painterStats = evData.painterStats || {};
       canvas.width = w * PIXEL_SIZE; canvas.height = h * PIXEL_SIZE;
       buildPalette(palette); drawBoard(); updateStats(); setupRealtime();
     }
-    function buildPalette(palette) { paletteEl.innerHTML = palette.map(c => `<div class="palette-color${c === selectedColor ? ' selected' : ''}" style="background-color:${c};" data-color="${c}"></div>`).join(''); paletteEl.querySelectorAll('.palette-color').forEach(el => el.addEventListener('click', () => { selectedColor = el.dataset.color; paletteEl.querySelectorAll('.palette-color').forEach(e => e.classList.remove('selected')); el.classList.add('selected'); })); }
-    function drawBoard() { const w = eventData.settings?.width || DEFAULT_WIDTH, h = eventData.settings?.height || DEFAULT_HEIGHT; ctx.fillStyle = '#FFFFFF'; ctx.fillRect(0, 0, canvas.width, canvas.height); for (const [key, cell] of Object.entries(boardData)) { const [c, r] = key.split('_').map(Number); ctx.fillStyle = cell.color; ctx.fillRect(c * PIXEL_SIZE, r * PIXEL_SIZE, PIXEL_SIZE, PIXEL_SIZE); } ctx.strokeStyle = '#e0e0e0'; ctx.lineWidth = 0.5; for (let i = 0; i <= w; i++) { ctx.beginPath(); ctx.moveTo(i * PIXEL_SIZE, 0); ctx.lineTo(i * PIXEL_SIZE, h * PIXEL_SIZE); ctx.stroke(); } for (let j = 0; j <= h; j++) { ctx.beginPath(); ctx.moveTo(0, j * PIXEL_SIZE); ctx.lineTo(w * PIXEL_SIZE, j * PIXEL_SIZE); ctx.stroke(); } }
-    function setupRealtime() { if (unsubscribeEvent) unsubscribeEvent(); unsubscribeEvent = db.collection('events').doc(eventId).onSnapshot(doc => { if (!doc.exists) return; const d = doc.data(); eventData = { id: doc.id, ...d }; if (d.status === 'finished') { renderFinishedState(); return; } boardData = d.boardData || {}; painterStats = d.painterStats || {}; drawBoard(); updateStats(); }); }
+
+    function buildPalette(palette) {
+      paletteEl.innerHTML = palette.map(c => `<div class="palette-color${c === selectedColor ? ' selected' : ''}" style="background-color:${c};" data-color="${c}"></div>`).join('');
+      paletteEl.querySelectorAll('.palette-color').forEach(el => el.addEventListener('click', () => {
+        selectedColor = el.dataset.color;
+        paletteEl.querySelectorAll('.palette-color').forEach(e => e.classList.remove('selected'));
+        el.classList.add('selected');
+      }));
+    }
+
+    function drawBoard() {
+      const settings = eventData.data?.settings || {};
+      const w = settings.width || DEFAULT_WIDTH, h = settings.height || DEFAULT_HEIGHT;
+      ctx.fillStyle = '#FFFFFF'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+      for (const [key, cell] of Object.entries(boardData)) {
+        const [c, r] = key.split('_').map(Number);
+        ctx.fillStyle = cell.color; ctx.fillRect(c * PIXEL_SIZE, r * PIXEL_SIZE, PIXEL_SIZE, PIXEL_SIZE);
+      }
+      ctx.strokeStyle = '#e0e0e0'; ctx.lineWidth = 0.5;
+      for (let i = 0; i <= w; i++) {
+        ctx.beginPath(); ctx.moveTo(i * PIXEL_SIZE, 0); ctx.lineTo(i * PIXEL_SIZE, h * PIXEL_SIZE); ctx.stroke();
+      }
+      for (let j = 0; j <= h; j++) {
+        ctx.beginPath(); ctx.moveTo(0, j * PIXEL_SIZE); ctx.lineTo(w * PIXEL_SIZE, j * PIXEL_SIZE); ctx.stroke();
+      }
+    }
+
+    function setupRealtime() {
+      if (eventChannel) supabase.removeChannel(eventChannel);
+      eventChannel = supabase
+        .channel(`pixel_event_${eventId}`)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'events', filter: `id=eq.${eventId}` }, (payload) => {
+          const d = payload.new;
+          eventData = d;
+          if (d.status === 'finished') {
+            renderFinishedState();
+            return;
+          }
+          const evData = d.data || {};
+          boardData = evData.boardData || {};
+          painterStats = evData.painterStats || {};
+          drawBoard();
+          updateStats();
+        })
+        .subscribe();
+    }
+
     function updateStats() {
-      totalPixelsEl.textContent = Object.keys(boardData).length; uniquePaintersEl.textContent = Object.keys(painterStats).length;
-      let cooldown = eventData.settings?.cooldown || 30;
+      totalPixelsEl.textContent = Object.keys(boardData).length;
+      uniquePaintersEl.textContent = Object.keys(painterStats).length;
+      const settings = eventData.data?.settings || {};
+      let cooldown = settings.cooldown || 30;
       if (typeof hasActiveEffect === 'function' && hasActiveEffect('fast_cooldown_24h')) cooldown = Math.floor(cooldown / 2);
       const remaining = Math.max(0, (lastPlaceTime + cooldown * 1000 - Date.now()) / 1000);
-      if (remaining > 0 && lastPlaceTime > 0) { cooldownBar.textContent = `⏳ Кулдаун: ${remaining.toFixed(1)} сек. | 💰 Пропустить за ${eventData.settings?.lokoinSkipCost || 2} лок.`; cooldownBar.innerHTML += ' <button class="btn btn-small" id="skip-cooldown-btn">Пропустить</button>'; setTimeout(() => { const b = document.getElementById('skip-cooldown-btn'); if (b) b.addEventListener('click', skipCooldown); }, 100); }
-      else { cooldownBar.textContent = '✅ Можно рисовать! Выберите цвет и кликните на клетку.'; if (cooldownTimer) { clearInterval(cooldownTimer); cooldownTimer = null; } }
+      if (remaining > 0 && lastPlaceTime > 0) {
+        cooldownBar.innerHTML = `⏳ Кулдаун: ${remaining.toFixed(1)} сек. | 💰 Пропустить за ${settings.lokoinSkipCost || 2} лок. <button class="btn btn-small" id="skip-cooldown-btn">Пропустить</button>`;
+        setTimeout(() => {
+          const b = document.getElementById('skip-cooldown-btn');
+          if (b) b.addEventListener('click', skipCooldown);
+        }, 100);
+      } else {
+        cooldownBar.textContent = '✅ Можно рисовать! Выберите цвет и кликните на клетку.';
+        if (cooldownTimer) { clearInterval(cooldownTimer); cooldownTimer = null; }
+      }
       renderTopPainters(); updateTimer();
     }
-    function updateTimer() { if (eventData.endTime) { const diff = eventData.endTime.seconds * 1000 - Date.now(); timerBar.textContent = diff > 0 ? `До конца: ${Math.floor(diff/86400000)} дн. ${Math.floor((diff%86400000)/3600000)} ч. ${Math.floor((diff%3600000)/60000)} мин.` : 'Ивент завершён'; } }
-    async function renderTopPainters() { const ranked = Object.entries(painterStats).sort((a, b) => b[1] - a[1]).slice(0, 10); if (!ranked.length) { topPaintersEl.innerHTML = ''; return; } const nameMap = {}; for (const [uid] of ranked) { if (!nameMap[uid]) { const u = await db.collection('users').doc(uid).get(); const d = u.data() || {}; nameMap[uid] = d.role === 'admin' ? null : (d.username || 'Аноним'); } } const filtered = ranked.filter(([uid]) => nameMap[uid] !== null); if (!filtered.length) { topPaintersEl.innerHTML = ''; return; } let html = '<h4>🏆 Топ художников</h4><table><tr><th>#</th><th>Игрок</th><th>Пикселей</th></tr>'; filtered.forEach(([uid, c], i) => { html += `<tr><td>${i+1}</td><td>${nameMap[uid]}</td><td>${c}</td></tr>`; }); html += '</table>'; topPaintersEl.innerHTML = html; }
-    async function skipCooldown() { const cost = eventData.settings?.lokoinSkipCost || 2; if (!confirm(`Потратить ${cost} лок.?`)) return; const bal = (await db.collection('users').doc(auth.currentUser.uid).get()).data().lokoin_balance || 0; if (bal < cost) { showToast('Недостаточно.', 'error'); return; } await db.collection('users').doc(auth.currentUser.uid).update({ lokoin_balance: firebase.firestore.FieldValue.increment(-cost) }); lastPlaceTime = 0; updateStats(); showToast('Кулдаун снят!', 'success'); }
 
-    canvas.addEventListener('click', e => {
-      const rect = canvas.getBoundingClientRect(); const sx = canvas.width / rect.width, sy = canvas.height / rect.height;
-      const col = Math.floor((e.clientX - rect.left) * sx / PIXEL_SIZE), row = Math.floor((e.clientY - rect.top) * sy / PIXEL_SIZE);
-      if (col < 0 || row < 0 || col >= (eventData.settings?.width || DEFAULT_WIDTH) || row >= (eventData.settings?.height || DEFAULT_HEIGHT)) return;
-      let cooldown = eventData.settings?.cooldown || 30;
+    function updateTimer() {
+      if (eventData.end_time) {
+        const diff = new Date(eventData.end_time).getTime() - Date.now();
+        timerBar.textContent = diff > 0 ? `До конца: ${Math.floor(diff/86400000)} дн. ${Math.floor((diff%86400000)/3600000)} ч. ${Math.floor((diff%3600000)/60000)} мин.` : 'Ивент завершён';
+      }
+    }
+
+    async function renderTopPainters() {
+      const ranked = Object.entries(painterStats).sort((a, b) => b[1] - a[1]).slice(0, 10);
+      if (!ranked.length) { topPaintersEl.innerHTML = ''; return; }
+      const nameMap = {};
+      for (const [uid] of ranked) {
+        if (!nameMap[uid]) {
+          const { data: userRow } = await supabase.from('users').select('data').eq('id', uid).single();
+          const d = userRow?.data || {};
+          nameMap[uid] = d.role === 'admin' ? null : (d.username || 'Аноним');
+        }
+      }
+      const filtered = ranked.filter(([uid]) => nameMap[uid] !== null);
+      if (!filtered.length) { topPaintersEl.innerHTML = ''; return; }
+      let html = '<h4>🏆 Топ художников</h4><table><tr><th>#</th><th>Игрок</th><th>Пикселей</th></tr>';
+      filtered.forEach(([uid, c], i) => { html += `<tr><td>${i+1}</td><td>${nameMap[uid]}</td><td>${c}</td></tr>`; });
+      html += '</table>';
+      topPaintersEl.innerHTML = html;
+    }
+
+    async function skipCooldown() {
+      const settings = eventData.data?.settings || {};
+      const cost = settings.lokoinSkipCost || 2;
+      if (!confirm(`Потратить ${cost} лок.?`)) return;
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const { data: userRow } = await supabase.from('users').select('data').eq('id', user.id).single();
+      const bal = userRow?.data?.lokoin_balance || 0;
+      if (bal < cost) { showToast('Недостаточно.', 'error'); return; }
+      const newData = { ...userRow.data, lokoin_balance: bal - cost };
+      await supabase.from('users').update({ data: newData, updated_at: new Date().toISOString() }).eq('id', user.id);
+      lastPlaceTime = 0;
+      updateStats();
+      showToast('Кулдаун снят!', 'success');
+    }
+
+    canvas.addEventListener('click', async (e) => {
+      const settings = eventData.data?.settings || {};
+      const rect = canvas.getBoundingClientRect();
+      const sx = canvas.width / rect.width, sy = canvas.height / rect.height;
+      const col = Math.floor((e.clientX - rect.left) * sx / PIXEL_SIZE);
+      const row = Math.floor((e.clientY - rect.top) * sy / PIXEL_SIZE);
+      const w = settings.width || DEFAULT_WIDTH, h = settings.height || DEFAULT_HEIGHT;
+      if (col < 0 || row < 0 || col >= w || row >= h) return;
+      let cooldown = settings.cooldown || 30;
       if (typeof hasActiveEffect === 'function' && hasActiveEffect('fast_cooldown_24h')) cooldown = Math.floor(cooldown / 2);
-      if (Date.now() - lastPlaceTime < cooldown * 1000) { showToast(`Подождите ${((lastPlaceTime + cooldown * 1000 - Date.now())/1000).toFixed(1)} сек.`, 'error'); return; }
-      placePixel(col, row);
+      if (Date.now() - lastPlaceTime < cooldown * 1000) {
+        showToast(`Подождите ${((lastPlaceTime + cooldown * 1000 - Date.now())/1000).toFixed(1)} сек.`, 'error');
+        return;
+      }
+      await placePixel(col, row);
     });
-    canvas.addEventListener('mousemove', e => {
-      const rect = canvas.getBoundingClientRect(); const sx = canvas.width / rect.width, sy = canvas.height / rect.height;
-      const col = Math.floor((e.clientX - rect.left) * sx / PIXEL_SIZE), row = Math.floor((e.clientY - rect.top) * sy / PIXEL_SIZE);
+
+    canvas.addEventListener('mousemove', (e) => {
+      const rect = canvas.getBoundingClientRect();
+      const sx = canvas.width / rect.width, sy = canvas.height / rect.height;
+      const col = Math.floor((e.clientX - rect.left) * sx / PIXEL_SIZE);
+      const row = Math.floor((e.clientY - rect.top) * sy / PIXEL_SIZE);
       const cell = boardData[`${col}_${row}`];
-      if (cell) { tooltip.style.display = 'block'; tooltip.style.left = (e.clientX - canvasContainer.getBoundingClientRect().left + 15) + 'px'; tooltip.style.top = (e.clientY - canvasContainer.getBoundingClientRect().top - 30) + 'px'; tooltip.textContent = `${cell.username || 'Аноним'} | ${cell.timestamp ? new Date(cell.timestamp).toLocaleString('ru-RU') : ''}`; }
-      else tooltip.style.display = 'none';
+      if (cell) {
+        tooltip.style.display = 'block';
+        tooltip.style.left = (e.clientX - canvasContainer.getBoundingClientRect().left + 15) + 'px';
+        tooltip.style.top = (e.clientY - canvasContainer.getBoundingClientRect().top - 30) + 'px';
+        tooltip.textContent = `${cell.username || 'Аноним'} | ${cell.timestamp ? new Date(cell.timestamp).toLocaleString('ru-RU') : ''}`;
+      } else {
+        tooltip.style.display = 'none';
+      }
     });
+
     canvas.addEventListener('mouseleave', () => { tooltip.style.display = 'none'; });
 
     async function placePixel(col, row) {
-      if (!auth.currentUser) return; const key = `${col}_${row}`; const userId = auth.currentUser.uid; const uname = (await db.collection('users').doc(userId).get()).data()?.username || 'Аноним'; const ref = db.collection('events').doc(eventId);
-      try {
-        const doc = await ref.get(); const cb = doc.data().boardData || {}, cs = doc.data().painterStats || {}, st = doc.data().statistics || { totalPixels: 0, uniqueParticipants: 0 };
-        cb[key] = { color: selectedColor, userId, username: uname, timestamp: new Date().toISOString() }; cs[userId] = (cs[userId] || 0) + 1; st.totalPixels = Object.keys(cb).length; st.uniqueParticipants = Object.keys(cs).length;
-        await ref.update({ boardData: cb, painterStats: cs, statistics: st });
-        lastPlaceTime = Date.now(); showToast('Пиксель закрашен! +1 балл', 'success'); await addPointsToCurrentUser(1, 'pixel_board');
-        updateStats(); if (!cooldownTimer) cooldownTimer = setInterval(updateStats, 1000);
-      } catch (err) { showToast('Не удалось закрасить.', 'error'); }
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const key = `${col}_${row}`;
+      const { data: userRow } = await supabase.from('users').select('data').eq('id', user.id).single();
+      const username = userRow?.data?.username || 'Аноним';
+
+      // Получаем текущее состояние ивента
+      const { data: currentEvent, error: fetchError } = await supabase
+        .from('events')
+        .select('*')
+        .eq('id', eventId)
+        .single();
+
+      if (fetchError || !currentEvent) return;
+
+      const evData = currentEvent.data || {};
+      const cb = evData.boardData || {};
+      const cs = evData.painterStats || {};
+      const st = evData.statistics || { totalPixels: 0, uniqueParticipants: 0 };
+
+      cb[key] = { color: selectedColor, userId: user.id, username, timestamp: new Date().toISOString() };
+      cs[user.id] = (cs[user.id] || 0) + 1;
+      st.totalPixels = Object.keys(cb).length;
+      st.uniqueParticipants = Object.keys(cs).length;
+
+      const updatedData = { ...evData, boardData: cb, painterStats: cs, statistics: st };
+
+      const { error: updateError } = await supabase
+        .from('events')
+        .update({ data: updatedData })
+        .eq('id', eventId);
+
+      if (updateError) {
+        showToast('Не удалось закрасить.', 'error');
+        return;
+      }
+
+      lastPlaceTime = Date.now();
+      showToast('Пиксель закрашен! +1 балл', 'success');
+      await addPointsToCurrentUser(1, 'pixel_board');
+      updateStats();
+      if (!cooldownTimer) cooldownTimer = setInterval(updateStats, 1000);
     }
 
-    function renderFinishedState() { const fs = eventData.finalStats || {}, st = eventData.statistics || {}; let html = `<h2>🎨 Ивент завершён!</h2><h3>${eventData.title}</h3><p>Всего пикселей: <strong>${fs.totalPixels || st.totalPixels || 0}</strong> | Художников: <strong>${fs.uniqueParticipants || st.uniqueParticipants || 0}</strong></p>`; if (fs.imageData) html += `<div class="finished-board"><h4>🖼️ Финальная доска</h4><img src="${fs.imageData}" alt="Доска"><br><a href="${fs.imageData}" download="pixel-board-${eventId}.png" class="btn" style="margin-top:0.5rem;">📥 Скачать PNG</a></div>`; else { html += '<div class="finished-board"><p>Генерация...</p></div>'; setTimeout(generateAndSaveImage, 100); } html += '<a href="../index.html" class="pixel-back">← На главную</a>'; document.querySelector('.pixel-page').innerHTML = html; }
-    async function generateAndSaveImage() { const bd = eventData.boardData || {}; const w = eventData.settings?.width || DEFAULT_WIDTH, h = eventData.settings?.height || DEFAULT_HEIGHT; const tc = document.createElement('canvas'); tc.width = w; tc.height = h; const tctx = tc.getContext('2d'); tctx.fillStyle = '#FFFFFF'; tctx.fillRect(0, 0, w, h); for (const [key, cell] of Object.entries(bd)) { const [c, r] = key.split('_').map(Number); tctx.fillStyle = cell.color; tctx.fillRect(c, r, 1, 1); } const idata = tc.toDataURL('image/png'); await db.collection('events').doc(eventId).update({ 'finalStats.imageData': idata }); eventData.finalStats = { ...eventData.finalStats, imageData: idata }; renderFinishedState(); }
-    window.addEventListener('beforeunload', () => { if (unsubscribeEvent) unsubscribeEvent(); if (cooldownTimer) clearInterval(cooldownTimer); });
+    function renderFinishedState() {
+      const evData = eventData.data || {};
+      const fs = evData.finalStats || {};
+      const st = evData.statistics || {};
+      let html = `<h2>🎨 Ивент завершён!</h2><h3>${eventData.title}</h3><p>Всего пикселей: <strong>${fs.totalPixels || st.totalPixels || 0}</strong> | Художников: <strong>${fs.uniqueParticipants || st.uniqueParticipants || 0}</strong></p>`;
+      if (fs.imageData) {
+        html += `<div class="finished-board"><h4>🖼️ Финальная доска</h4><img src="${fs.imageData}" alt="Доска"><br><a href="${fs.imageData}" download="pixel-board-${eventId}.png" class="btn" style="margin-top:0.5rem;">📥 Скачать PNG</a></div>`;
+      } else {
+        html += '<div class="finished-board"><p>Генерация...</p></div>';
+        setTimeout(generateAndSaveImage, 100);
+      }
+      html += '<a href="../index.html" class="pixel-back">← На главную</a>';
+      document.querySelector('.pixel-page').innerHTML = html;
+    }
+
+    async function generateAndSaveImage() {
+      const evData = eventData.data || {};
+      const bd = evData.boardData || {};
+      const settings = evData.settings || {};
+      const w = settings.width || DEFAULT_WIDTH, h = settings.height || DEFAULT_HEIGHT;
+      const tc = document.createElement('canvas');
+      tc.width = w; tc.height = h;
+      const tctx = tc.getContext('2d');
+      tctx.fillStyle = '#FFFFFF'; tctx.fillRect(0, 0, w, h);
+      for (const [key, cell] of Object.entries(bd)) {
+        const [c, r] = key.split('_').map(Number);
+        tctx.fillStyle = cell.color; tctx.fillRect(c, r, 1, 1);
+      }
+      const idata = tc.toDataURL('image/png');
+      const updatedData = { ...evData, finalStats: { ...(evData.finalStats || {}), imageData: idata } };
+      await supabase.from('events').update({ data: updatedData }).eq('id', eventId);
+      eventData.data = updatedData;
+      renderFinishedState();
+    }
+
+    window.addEventListener('beforeunload', () => {
+      if (eventChannel) supabase.removeChannel(eventChannel);
+      if (cooldownTimer) clearInterval(cooldownTimer);
+    });
     init();
   </script>
 </body>
