@@ -23,14 +23,13 @@
       box-shadow: 0 10px 30px rgba(0,0,0,0.08); 
       backdrop-filter: blur(10px);
       position: relative;
-      overflow: hidden; /* Чтобы всплывающий текст не вылезал за границы */
+      overflow: hidden;
     }
 
     .clicker-header { margin-bottom: 1.5rem; }
     .clicker-header h2 { margin: 0; color: #1e293b; font-size: 1.8rem; }
     .clicker-header p { color: #64748b; margin-top: 0.5rem; font-size: 0.95rem; }
 
-    /* Прогресс-бар */
     .progress-container {
       background: #e2e8f0;
       border-radius: 99px;
@@ -61,7 +60,7 @@
       font-weight: 800; 
       margin: 0.5rem 0; 
       color: #1e293b; 
-      font-variant-numeric: tabular-nums; /* Чтобы цифры не прыгали */
+      font-variant-numeric: tabular-nums;
       transition: transform 0.1s;
     }
     .clicker-score.pulse { 
@@ -69,7 +68,6 @@
       color: #f5576c;
     }
 
-    /* 3D Кнопка */
     .clicker-btn { 
       background: linear-gradient(180deg, #ff758c 0%, #ff7eb3 100%); 
       color: white; 
@@ -94,7 +92,6 @@
       box-shadow: var(--button-active-shadow); 
     }
 
-    /* Всплывающий текст (Floating Text) */
     .floating-text {
       position: absolute;
       font-weight: 800;
@@ -120,7 +117,6 @@
       100% { transform: scale(1); }
     }
 
-    /* Таблица и прочее */
     .leaderboard-clicker { margin-top: 2.5rem; text-align: left; background: #f8fafc; padding: 1rem; border-radius: 16px; }
     .leaderboard-clicker h3 { text-align: center; margin-bottom: 1rem; font-size: 1.1rem; color: #334155; }
     .leaderboard-clicker table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
@@ -132,7 +128,6 @@
     .clicker-back { display: inline-flex; align-items: center; gap: 0.5rem; margin-top: 1.5rem; color: #64748b; text-decoration: none; font-weight: 500; transition: color 0.2s; }
     .clicker-back:hover { color: #f5576c; }
 
-    /* Toast (уведомления) */
     #toast-container { position: fixed; top: 1rem; right: 1rem; z-index: 9999; display: flex; flex-direction: column; gap: 0.5rem; pointer-events: none; }
     .toast { padding: 0.8rem 1.2rem; border-radius: 12px; color: #fff; font-weight: 600; font-size: 0.95rem; box-shadow: 0 4px 12px rgba(0,0,0,0.15); opacity: 0; transform: translateX(100%); transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); pointer-events: auto; max-width: 350px; backdrop-filter: blur(4px); }
     .toast--visible { opacity: 1; transform: translateX(0); }
@@ -155,7 +150,6 @@
 
     <div class="clicker-score" id="score">0</div>
     
-    <!-- Прогресс до следующей награды -->
     <div class="progress-container">
       <div class="progress-bar" id="progress-bar"></div>
     </div>
@@ -176,11 +170,10 @@
     <a href="../games.html" class="clicker-back">← Вернуться к играм</a>
   </div>
 
-  <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-auth-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore-compat.js"></script>
-  <script src="../js/firebase-config.js"></script>
-  <script src="../js/firebase-auth.js"></script>
+  <!-- Supabase SDK и модули -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="../js/supabase-config.js"></script>
+  <script src="../js/auth.js"></script>
   <script src="../js/storage.js"></script>
   <script src="../js/achievements.js"></script>
   <script src="../js/notifications.js"></script>
@@ -191,7 +184,6 @@
       if (typeof initEasterEggs === 'function') initEasterEggs();
     });
 
-    // --- Утилиты ---
     function showToast(msg, type = 'info') { 
       let c = document.getElementById('toast-container'); 
       if (!c) { c = document.createElement('div'); c.id = 'toast-container'; document.body.appendChild(c); } 
@@ -199,7 +191,6 @@
       t.className = `toast toast--${type}`; 
       t.textContent = msg; 
       c.appendChild(t); 
-      // Форсируем reflow для анимации
       t.offsetHeight; 
       t.classList.add('toast--visible'); 
       setTimeout(() => { 
@@ -212,7 +203,6 @@
       const el = document.createElement('div');
       el.className = `floating-text ${isBonus ? 'bonus' : ''}`;
       el.textContent = text;
-      // Небольшой случайный разброс по X, чтобы текст не накладывался идеально друг на друга
       const randomX = (Math.random() - 0.5) * 40;
       el.style.left = `${x + randomX}px`;
       el.style.top = `${y - 20}px`;
@@ -220,12 +210,11 @@
       setTimeout(() => { if (el.parentNode) el.remove(); }, 800);
     }
 
-    // --- Состояние игры ---
     const CLICKS_PER_REWARD = 20;
     const POINTS_PER_REWARD = 1;
     
-    let totalClicks = 0;        // Общее количество за всё время (для рекорда)
-    let clicksSinceReward = 0;  // Прогресс до следующей награды (0 to 19)
+    let totalClicks = 0;
+    let clicksSinceReward = 0;
     let currentUid = null;
 
     const scoreEl = document.getElementById('score');
@@ -234,7 +223,6 @@
     const clickBtn = document.getElementById('click-btn');
     const msgEl = document.getElementById('message');
 
-    // --- Инициализация ---
     function updateProgressUI() {
       scoreEl.textContent = totalClicks.toLocaleString();
       const percentage = (clicksSinceReward / CLICKS_PER_REWARD) * 100;
@@ -242,41 +230,47 @@
       progressText.textContent = `${clicksSinceReward} / ${CLICKS_PER_REWARD} до награды`;
     }
 
-    if (typeof auth !== 'undefined') {
-      auth.onAuthStateChanged(user => {
-        if (user) {
-          loadBest();
+    if (typeof onAuthStateChange === 'function') {
+      onAuthStateChange((event, session) => {
+        if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
+          if (session?.user) {
+            currentUid = session.user.id;
+            loadBest();
+          }
         } else {
           updateTopVisibility();
-          updateProgressUI(); // Показываем 0, если не вошел
+          updateProgressUI();
         }
       });
     } else {
-      console.warn('Firebase не загружен. Демо-режим.');
+      console.warn('Система авторизации не загружена. Демо-режим.');
       updateProgressUI();
     }
 
     async function loadBest() {
-      const cu = typeof getCurrentUser === 'function' ? getCurrentUser() : null;
-      if (cu) currentUid = cu.uid || cu.id;
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
 
-      // Пытаемся загрузить из локального состояния или Firebase
+      // Пробуем загрузить из кеша или Supabase
       let loadedClicks = 0;
+      const cu = typeof getCurrentUser === 'function' ? getCurrentUser() : null;
       if (cu?.gameStats?.clicker?.totalClicks) {
         loadedClicks = cu.gameStats.clicker.totalClicks;
       }
       
-      if (typeof auth !== 'undefined' && auth.currentUser && typeof db !== 'undefined') {
-        try {
-          const d = await db.collection('users').doc(auth.currentUser.uid).get(); 
-          if (d.exists && d.data().gameStats?.clicker?.totalClicks) { 
-            loadedClicks = d.data().gameStats.clicker.totalClicks; 
-          }
-        } catch (e) { console.error('Ошибка загрузки:', e); }
-      }
+      try {
+        const { data: row, error } = await supabase
+          .from('users')
+          .select('data')
+          .eq('id', user.id)
+          .single();
+        if (!error && row && row.data?.gameStats?.clicker?.totalClicks) {
+          loadedClicks = row.data.gameStats.clicker.totalClicks;
+        }
+      } catch (e) { console.error('Ошибка загрузки:', e); }
 
       totalClicks = loadedClicks;
-      clicksSinceReward = totalClicks % CLICKS_PER_REWARD; // Восстанавливаем прогресс
+      clicksSinceReward = totalClicks % CLICKS_PER_REWARD;
       updateProgressUI();
       updateTopVisibility();
       updateTop();
@@ -285,9 +279,7 @@
     function updateTopVisibility() {
       const table = document.getElementById('top-table');
       const warning = document.getElementById('auth-warning');
-      const isAuth = typeof auth !== 'undefined' && auth.currentUser;
-      
-      if (!isAuth) {
+      if (!currentUid) {
         if (table) table.style.display = 'none';
         if (warning) warning.style.display = 'block';
       } else {
@@ -298,48 +290,48 @@
 
     async function updateTop() {
       const tbody = document.querySelector('#top-table tbody'); 
-      if (!tbody || typeof auth === 'undefined' || !auth.currentUser || typeof db === 'undefined') return;
+      if (!tbody || !currentUid) return;
       
       try {
-        const snap = await db.collection('users').get();
-        const players = [];
-        snap.forEach(doc => {
-          const d = doc.data();
-          if (d.role === 'admin') return;
-          const cl = d.gameStats?.clicker?.totalClicks || 0;
-          if (cl > 0) players.push({ uid: doc.id, username: d.username || 'Аноним', clicks: cl });
-        });
-        players.sort((a, b) => b.clicks - a.clicks); 
-        const top10 = players.slice(0, 10);
-        
-        tbody.innerHTML = top10.map((p, i) => {
+        // Получаем топ-10 по кликам через JSONB
+        const { data: users, error } = await supabase
+          .from('users')
+          .select('id, data')
+          .neq('data->>role', 'admin')
+          .not('data->gameStats->clicker->totalClicks', 'is', null)
+          .order('data->gameStats->clicker->totalClicks', { ascending: false })
+          .limit(10);
+
+        if (error) throw error;
+
+        const players = (users || []).map(u => ({
+          uid: u.id,
+          username: u.data?.username || 'Аноним',
+          clicks: u.data?.gameStats?.clicker?.totalClicks || 0
+        }));
+
+        tbody.innerHTML = players.map((p, i) => {
           const me = (currentUid && p.uid === currentUid) ? ' class="me"' : '';
           return `<tr${me}><td>${i + 1}</td><td>${p.username}</td><td>${p.clicks.toLocaleString()}</td></tr>`;
         }).join('') || '<tr><td colspan="3">Пока нет рекордов</td></tr>';
       } catch (e) { console.error(e); }
     }
 
-    // --- Основная логика клика ---
-    clickBtn.addEventListener('pointerdown', async (e) => { // pointerdown работает и для мыши, и для тача быстрее чем click
-      e.preventDefault(); // Предотвращаем зум и стандартное поведение
+    clickBtn.addEventListener('pointerdown', async (e) => {
+      e.preventDefault();
       clickBtn.blur(); 
 
-      // 1. Обновляем счетчики
       totalClicks++;
       clicksSinceReward++;
       
-      // 2. Визуальная отдача
       spawnFloatingText(e.clientX, e.clientY, '+1');
       
-      // 3. Проверка на награду
       if (clicksSinceReward >= CLICKS_PER_REWARD) {
-        clicksSinceReward = 0; // Сброс прогресса
+        clicksSinceReward = 0;
         scoreEl.classList.add('pulse');
         setTimeout(() => scoreEl.classList.remove('pulse'), 300);
         
-        // Начисление баллов
-        const cu = typeof getCurrentUser === 'function' ? getCurrentUser() : null;
-        if (cu && cu.uid && typeof auth !== 'undefined' && auth.currentUser) {
+        if (currentUid) {
           try {
             if (typeof addPointsToCurrentUser === 'function') {
               const result = await addPointsToCurrentUser(POINTS_PER_REWARD, 'clicker');
@@ -368,14 +360,11 @@
         }
       }
 
-      // 4. Обновляем UI
       updateProgressUI();
     });
 
-    // Сохранение при закрытии (на всякий случай, хотя основные сохранения идут по факту награды)
     window.addEventListener('beforeunload', () => { 
-      if (typeof auth !== 'undefined' && auth.currentUser && typeof syncGameStats === 'function') { 
-        // Используем sendBeacon для надежности при закрытии вкладки, если функция поддерживает, или просто sync
+      if (currentUid && typeof syncGameStats === 'function') { 
         syncGameStats('clicker', { totalClicks: totalClicks }); 
       } 
     });
