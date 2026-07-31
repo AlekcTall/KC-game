@@ -73,12 +73,10 @@
 
   <footer class="footer"><div class="container"><p>© 2026 ваши амбассадоры</p></div></footer>
 
-  <!-- Firebase SDK -->
-  <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-auth-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore-compat.js"></script>
-  <script src="js/firebase-config.js"></script>
-  <script src="js/firebase-auth.js"></script>
+  <!-- Supabase SDK и модули -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="js/supabase-config.js"></script>
+  <script src="js/auth.js"></script>
   <script src="js/storage.js"></script>
   <script src="js/achievements.js"></script>
   <script src="js/easter-eggs.js"></script>
@@ -110,17 +108,28 @@
       document.addEventListener('DOMContentLoaded', async () => {
         const container = document.getElementById('admin-container');
 
-        auth.onAuthStateChanged(async fbUser => {
-          if (!fbUser) { container.innerHTML = '<p>Вы не авторизованы.</p>'; return; }
-          try {
-            const d = await db.collection('users').doc(fbUser.uid).get();
-            if (!d.exists || d.data().role !== 'admin') {
-              container.innerHTML = '<p>Доступ запрещён.</p>';
+        if (typeof onAuthStateChange === 'function') {
+          onAuthStateChange(async (event, session) => {
+            if (!session?.user) {
+              container.innerHTML = '<p>Вы не авторизованы.</p>';
               return;
             }
-            renderPage();
-          } catch (e) { container.innerHTML = `<p>Ошибка: ${e.message}</p>`; }
-        });
+            try {
+              const { data: row, error } = await supabase
+                .from('users')
+                .select('data')
+                .eq('id', session.user.id)
+                .single();
+              if (error || !row || (row.data?.role !== 'admin')) {
+                container.innerHTML = '<p>Доступ запрещён.</p>';
+                return;
+              }
+              renderPage();
+            } catch (e) { container.innerHTML = `<p>Ошибка: ${e.message}</p>`; }
+          });
+        } else {
+          container.innerHTML = '<p>Ошибка загрузки системы авторизации.</p>';
+        }
 
         function renderPage() {
           container.innerHTML = `
@@ -150,18 +159,38 @@
           }
 
           try {
-            const snap = await db.collection('feedback').orderBy('createdAt', 'desc').get();
-            allFeedback = [];
-            snap.forEach(d => {
-              const x = d.data();
-              allFeedback.push({
-                id: d.id,
-                ...x,
-                createdAt: x.createdAt ? x.createdAt.toDate() : null,
-                status: x.status || 'new',
-                replies: x.replies || []
-              });
-            });
+            const { data: feedbackData, error } = await supabase
+              .from('feedback')
+              .select('*')
+              .order('created_at', { ascending: false });
+
+            if (error) throw error;
+
+            allFeedback = feedbackData || [];
+
+            // Загружаем все ответы для отображаемых обращений одним запросом
+            if (allFeedback.length > 0) {
+              const ids = allFeedback.map(f => f.id);
+              const { data: repliesData, error: repliesError } = await supabase
+                .from('feedback_replies')
+                .select('*')
+                .in('feedback_id', ids)
+                .order('created_at', { ascending: true });
+
+              if (!repliesError) {
+                const repliesMap = {};
+                (repliesData || []).forEach(r => {
+                  if (!repliesMap[r.feedback_id]) repliesMap[r.feedback_id] = [];
+                  repliesMap[r.feedback_id].push(r);
+                });
+                allFeedback.forEach(f => {
+                  f.replies = repliesMap[f.id] || [];
+                });
+              } else {
+                allFeedback.forEach(f => f.replies = []);
+              }
+            }
+
             setCachedFeedback(allFeedback);
             renderFeedbackList();
           } catch (e) {
@@ -179,7 +208,7 @@
 
           let html = `<div class="feedback-list">`;
           allFeedback.forEach(f => {
-            const dateStr = f.createdAt ? f.createdAt.toLocaleString('ru-RU') : '—';
+            const dateStr = f.created_at ? new Date(f.created_at).toLocaleString('ru-RU') : '—';
             const statusClass = f.status === 'new' ? 'status-new' : (f.status === 'progress' ? 'status-progress' : 'status-closed');
             const statusText = f.status === 'new' ? '🆕 Новое' : (f.status === 'progress' ? '✍️ В работе' : '✅ Закрыто');
 
@@ -187,10 +216,10 @@
             if (f.replies && f.replies.length > 0) {
               repliesHtml = '<div class="replies-list">';
               f.replies.forEach(r => {
-                const replyDate = r.timestamp ? new Date(r.timestamp.seconds * 1000).toLocaleString('ru-RU') : '';
+                const replyDate = r.created_at ? new Date(r.created_at).toLocaleString('ru-RU') : '';
                 repliesHtml += `
                   <div class="reply-item">
-                    <span class="reply-author">${r.isAdmin ? 'Администратор' : (f.name || 'Пользователь')}:</span>
+                    <span class="reply-author">${r.is_admin ? 'Администратор' : (f.name || 'Пользователь')}:</span>
                     <span class="reply-text">${r.message}</span>
                     <span class="reply-date">${replyDate}</span>
                   </div>
@@ -207,7 +236,7 @@
                     <span class="status-badge ${statusClass}">${statusText}</span>
                   </div>
                   <div>
-                    <small>ID: ${f.userId || '—'}</small>
+                    <small>ID: ${f.user_id || '—'}</small>
                   </div>
                 </div>
                 <div class="feedback-item-body">
@@ -215,7 +244,7 @@
                 </div>
                 ${repliesHtml}
                 <div class="feedback-item-actions">
-                  <button class="btn btn-small reply-feedback-btn" data-fb-id="${f.id}" data-fb-user="${f.userId || ''}" data-fb-topic="${f.topic}">💬 Ответить</button>
+                  <button class="btn btn-small reply-feedback-btn" data-fb-id="${f.id}" data-fb-user="${f.user_id || ''}" data-fb-topic="${f.topic}">💬 Ответить</button>
                   ${f.status !== 'progress' ? `<button class="btn btn-small progress-feedback-btn" data-fb-id="${f.id}">✍️ В работу</button>` : ''}
                   ${f.status !== 'closed' ? `<button class="btn btn-small close-feedback-btn" data-fb-id="${f.id}">✅ Закрыть</button>` : ''}
                   <button class="btn btn-small btn-danger delete-feedback-btn" data-fb-id="${f.id}">🗑️ Удалить</button>
@@ -226,11 +255,11 @@
           html += '</div>';
           listContainer.innerHTML = html;
 
-          // Обработчики с диагностикой
+          // Обработчики
           document.querySelectorAll('.delete-feedback-btn').forEach(btn => {
             btn.addEventListener('click', async e => {
               if (confirm('Удалить обращение?')) {
-                await db.collection('feedback').doc(e.target.dataset.fbId).delete();
+                await supabase.from('feedback').delete().eq('id', e.target.dataset.fbId);
                 showToast('Удалено', 'success');
                 loadFeedback();
               }
@@ -245,25 +274,17 @@
 
           document.querySelectorAll('.progress-feedback-btn').forEach(btn => {
             btn.addEventListener('click', async () => {
-              try {
-                await db.collection('feedback').doc(btn.dataset.fbId).update({ status: 'progress' });
-                showToast('Статус изменён на «В работе»', 'success');
-                loadFeedback();
-              } catch (err) {
-                alert('Ошибка при обновлении статуса: ' + err.message);
-              }
+              await supabase.from('feedback').update({ status: 'progress' }).eq('id', btn.dataset.fbId);
+              showToast('Статус изменён на «В работе»', 'success');
+              loadFeedback();
             });
           });
 
           document.querySelectorAll('.close-feedback-btn').forEach(btn => {
             btn.addEventListener('click', async () => {
-              try {
-                await db.collection('feedback').doc(btn.dataset.fbId).update({ status: 'closed' });
-                showToast('Обращение закрыто', 'success');
-                loadFeedback();
-              } catch (err) {
-                alert('Ошибка при закрытии: ' + err.message);
-              }
+              await supabase.from('feedback').update({ status: 'closed' }).eq('id', btn.dataset.fbId);
+              showToast('Обращение закрыто', 'success');
+              loadFeedback();
             });
           });
         }
@@ -281,17 +302,21 @@
               return;
             }
             try {
-              await db.collection('feedback').doc(fbId).collection('replies').add({
-                message: message,
-                isAdmin: true,
-                timestamp: firebase.firestore.FieldValue.serverTimestamp()
-              });
+              // Добавляем ответ
+              await supabase.from('feedback_replies').insert([{
+                feedback_id: fbId,
+                message,
+                is_admin: true,
+                created_at: new Date().toISOString()
+              }]);
 
-              const fbDoc = await db.collection('feedback').doc(fbId).get();
-              if (fbDoc.exists && fbDoc.data().status === 'new') {
-                await db.collection('feedback').doc(fbId).update({ status: 'progress' });
+              // Если обращение было новым, переводим в работу
+              const { data: fbDoc } = await supabase.from('feedback').select('status').eq('id', fbId).single();
+              if (fbDoc && fbDoc.status === 'new') {
+                await supabase.from('feedback').update({ status: 'progress' }).eq('id', fbId);
               }
 
+              // Уведомление пользователю (если есть user_id)
               if (userId && typeof addNotification === 'function') {
                 await addNotification(userId, `📬 Ответ на ваше обращение «${topic}»: ${message}`, 'feedback', 'profile.html');
               }
