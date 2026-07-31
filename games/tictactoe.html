@@ -2,264 +2,887 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Крестики-нолики | KC Games</title>
-    <link rel="stylesheet" href="../styles/main.css">
-    <link rel="stylesheet" href="../styles/games.css">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Крестики-нолики – КЦ Игры</title>
+    <link rel="stylesheet" href="../css/style.css">
+    <style>
+        .tictactoe-game {
+            max-width: 600px;
+            margin: 2rem auto;
+            text-align: center;
+            background: white;
+            padding: 2rem;
+            border-radius: var(--border-radius);
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+        }
+        .board-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 4px;
+            background: #333;
+            border-radius: 8px;
+            overflow: hidden;
+            margin: 1.5rem auto;
+            width: fit-content;
+        }
+        .cell {
+            width: 100px;
+            height: 100px;
+            background: #fff;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 3rem;
+            font-weight: bold;
+            transition: background 0.2s;
+            color: #333;
+            user-select: none;
+        }
+        .cell.x { color: #3498db; }
+        .cell.o { color: #e74c3c; }
+        .cell.disabled { cursor: default; }
+        .cell.winning { background: #d4edda; }
+        .status-message {
+            font-weight: bold;
+            margin: 0.5rem 0;
+            font-size: 1.1rem;
+        }
+        .player-info {
+            display: flex;
+            justify-content: center;
+            gap: 2rem;
+            margin: 1rem 0;
+        }
+        .player-badge {
+            padding: 0.5rem 1rem;
+            border-radius: 8px;
+            font-weight: 600;
+        }
+        .player-badge.active {
+            background: #3498db;
+            color: white;
+        }
+        .player-badge.inactive {
+            background: #f0f0f0;
+            color: #999;
+        }
+        .lobby-panel {
+            max-width: 550px;
+            margin: 1rem auto;
+            padding: 1.5rem;
+            background: #f9f9fb;
+            border-radius: 12px;
+        }
+        .difficulty-select {
+            display: flex;
+            gap: 0.5rem;
+            justify-content: center;
+            flex-wrap: wrap;
+            margin: 1rem 0;
+        }
+        .difficulty-btn {
+            padding: 0.5rem 1rem;
+            border: 2px solid #d0d8e0;
+            border-radius: 8px;
+            background: white;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-align: left;
+            min-width: 180px;
+        }
+        .difficulty-btn:hover {
+            border-color: #3498db;
+            background: #f0f6ff;
+        }
+        .difficulty-btn.selected {
+            border-color: #3498db;
+            background: #e6f0ff;
+        }
+        .difficulty-btn .level {
+            font-weight: 700;
+            font-size: 1.1rem;
+        }
+        .difficulty-btn .desc {
+            font-size: 0.8rem;
+            color: #666;
+            display: block;
+            margin-top: 0.2rem;
+        }
+        .open-games-table, .rating-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 1rem;
+            font-size: 0.9rem;
+        }
+        .open-games-table th, .open-games-table td,
+        .rating-table th, .rating-table td {
+            padding: 0.5rem;
+            border-bottom: 1px solid #eee;
+            text-align: left;
+        }
+        .open-games-table th, .rating-table th { background: #f5f5f5; }
+        .tabs {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 1.5rem;
+            border-bottom: 2px solid #eee;
+            padding-bottom: 0.5rem;
+        }
+        .tab {
+            background: none;
+            border: none;
+            padding: 0.5rem 1rem;
+            font-size: 1rem;
+            cursor: pointer;
+            border-radius: 4px 4px 0 0;
+        }
+        .tab.active { background: var(--color-primary); color: white; }
+        .back-link {
+            display: inline-block;
+            margin-top: 1rem;
+            color: var(--color-primary);
+            text-decoration: none;
+        }
+        .game-id-display {
+            background: #f9fafb;
+            padding: 0.5rem 1rem;
+            border-radius: 8px;
+            margin: 0.5rem 0;
+            font-size: 0.9rem;
+        }
+        @media (max-width: 400px) {
+            .cell { width: 80px; height: 80px; font-size: 2.5rem; }
+        }
+    </style>
 </head>
-<body class="dark-theme">
-    <nav class="navbar">
-        <div class="container nav-container">
-            <a href="../index.html" class="logo">KC Games</a>
-            <div class="nav-links">
-                <a href="../index.html">Главная</a>
-                <a href="../games.html">Игры</a>
-                <a href="../shop.html">Магазин</a>
-                <a href="../profile.html">Профиль</a>
-            </div>
-        </div>
-    </nav>
+<body>
+<div class="tictactoe-game" id="game-container">
+    <h2>❌⭕ Крестики-нолики</h2>
+    <div class="tabs">
+        <button class="tab active" data-tab="game">Игра</button>
+        <button class="tab" data-tab="rating-pvp">Рейтинг PvP</button>
+        <button class="tab" data-tab="rating-pve">Рейтинг PvE</button>
+    </div>
+    <div id="tab-content"></div>
+    <a href="../games.html" class="back-link">← Вернуться к играм</a>
+</div>
 
-    <main class="container game-container">
-        <h1>Крестики-нолики</h1>
-        
-        <div id="game-menu" class="game-menu">
-            <button id="create-game-btn" class="btn-primary">Создать игру</button>
-            <div id="games-list" class="games-list">
-                <p>Поиск доступных игр...</p>
-            </div>
-        </div>
+<!-- Supabase SDK и модули -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="../js/supabase-config.js"></script>
+<script src="../js/auth.js"></script>
+<script src="../js/storage.js"></script>
+<script src="../js/achievements.js"></script>
+<script src="../js/notifications.js"></script>
+<script src="../js/easter-eggs.js"></script>
+<script src="../js/main.js"></script>
 
-        <div id="game-board" class="game-board" style="display:none;">
-            <div class="game-info">
-                <span id="game-status">Ожидание соперника...</span>
-                <button id="leave-game-btn" class="btn-secondary">Выйти</button>
-            </div>
-            <div class="board-grid" id="board-grid">
-                <!-- Ячейки 3x3 -->
-            </div>
-        </div>
-    </main>
+<script>
+    (function() {
+        const gameContainer = document.getElementById('tab-content');
+        let currentUser = null, gameId = null, gameData = null;
+        let board = ['','','','','','','','',''];
+        let mySymbol = 'X', enemySymbol = 'O';
+        let isAI = false, aiLevel = 'medium';
+        let gameChannel = null, openGamesChannel = null;
+        let winningLine = null;
+        let moveInProgress = false;
 
-    <!-- Скрипты -->
-    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js"></script>
-    <script src="../js/firebase-config.js"></script>
-    
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="../js/supabase-client.js"></script>
-    <script src="../js/auth.js"></script>
+        const WIN_LINES = [
+            [0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]
+        ];
 
-    <script>
-        // === ЛОГИКА ИГРЫ (TicTacToe) ===
-        let currentGameId = null;
-        let mySymbol = 'X';
-        let isMyTurn = false;
-        let channel = null;
-        let isInitialized = false;
-
-        const boardGrid = document.getElementById('board-grid');
-        const gameMenu = document.getElementById('game-menu');
-        const gameBoard = document.getElementById('game-board');
-        const gamesList = document.getElementById('games-list');
-        const statusEl = document.getElementById('game-status');
-
-        document.addEventListener('DOMContentLoaded', () => {
-            if (isInitialized) return;
-            isInitialized = true;
-
-            const user = firebase.auth().currentUser;
-            if (!user) {
-                alert('Войдите в аккаунт для игры!');
-                window.location.href = '../index.html';
-                return;
-            }
-
-            document.getElementById('create-game-btn').addEventListener('click', createGame);
-            document.getElementById('leave-game-btn').addEventListener('click', leaveGame);
-            
-            loadAvailableGames();
-        });
-
-        // Создание игры
-        async function createGame() {
-            const user = firebase.auth().currentUser;
-            const gameId = 'ttt_' + Date.now();
-            
-            const newGame = {
-                id: gameId,
-                status: 'waiting',
-                turn: null,
-                winner: null,
-                created_at: new Date(),
-                data: {
-                    players: { [user.uid]: { symbol: 'X', joinedAt: new Date() } },
-                    board: Array(9).fill(null),
-                    creator: user.uid
+        // Авторизация
+        if (typeof onAuthStateChange === 'function') {
+            onAuthStateChange(async (event, session) => {
+                if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
+                    if (session?.user) {
+                        currentUser = session.user;
+                        const resumed = await autoResumeGame();
+                        if (!resumed) switchTab('game');
+                    }
+                } else {
+                    currentUser = null;
+                    gameContainer.innerHTML = '<p>Войдите, чтобы играть. <a href="../login.html?redirect=games/tictactoe.html">Войти</a></p>';
                 }
-            };
-
-            const { error } = await supabase.from('tictactoe_games').insert([newGame]);
-            if (error) {
-                alert('Ошибка создания игры: ' + error.message);
-                return;
-            }
-
-            joinGame(gameId, user.uid);
+            });
+        } else {
+            gameContainer.innerHTML = '<p>Войдите, чтобы играть. <a href="../login.html?redirect=games/tictactoe.html">Войти</a></p>';
         }
 
-        // Загрузка списка игр
-        async function loadAvailableGames() {
+        document.querySelectorAll('.tab').forEach(tab => {
+            tab.addEventListener('click', () => {
+                document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                tab.classList.add('active');
+                switchTab(tab.dataset.tab);
+            });
+        });
+
+        function switchTab(tab) {
+            if (tab === 'game') showLobby();
+            else if (tab === 'rating-pvp') showRating('pvp');
+            else if (tab === 'rating-pve') showRating('pve');
+        }
+
+        function showToast(msg, type = 'info') {
+            if (typeof window.showToast === 'function') window.showToast(msg, type);
+            else console.log(msg);
+        }
+
+        // ========== ЛОББИ ==========
+        function showLobby() {
+            unsubscribeFromOpenGames();
+            unsubscribeFromGame();
+            gameId = null; gameData = null;
+            board = ['','','','','','','','',''];
+            winningLine = null;
+            moveInProgress = false;
+
+            gameContainer.innerHTML = `
+                <div class="lobby-panel">
+                    <h3>Крестики-нолики</h3>
+                    <p>Сыграйте с коллегой или компьютером!</p>
+                    <button class="btn" id="create-pvp-btn">Играть с другом</button>
+                    <div style="margin-top:1rem;">
+                        <p><strong>Игра с компьютером</strong></p>
+                        <div class="difficulty-select" id="difficulty-select">
+                            <button class="difficulty-btn" data-level="easy">
+                                <span class="level">🤖 Лёгкий</span>
+                                <span class="desc">Случайные ходы, подходит для новичков</span>
+                            </button>
+                            <button class="difficulty-btn selected" data-level="medium">
+                                <span class="level">🧠 Средний</span>
+                                <span class="desc">Блокирует ваши линии, играет осмысленно</span>
+                            </button>
+                            <button class="difficulty-btn" data-level="hard">
+                                <span class="level">👑 Сложный</span>
+                                <span class="desc">Минимакс, практически невозможно победить</span>
+                            </button>
+                        </div>
+                        <button class="btn" id="play-ai-btn">Играть с компьютером</button>
+                    </div>
+                    <div style="margin-top:1rem;">
+                        <input type="text" id="join-game-id" placeholder="ID игры" style="padding:0.5rem; width:200px;">
+                        <button class="btn" id="join-game-btn">Присоединиться</button>
+                    </div>
+                    <h4 style="margin-top:1.5rem;">Открытые игры</h4>
+                    <div id="open-games-list"><p>Загрузка...</p></div>
+                </div>
+            `;
+
+            document.getElementById('create-pvp-btn').addEventListener('click', () => createGame(false));
+            document.getElementById('play-ai-btn').addEventListener('click', () => createGame(true));
+            document.getElementById('join-game-btn').addEventListener('click', joinGame);
+
+            document.querySelectorAll('.difficulty-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    document.querySelectorAll('.difficulty-btn').forEach(b => b.classList.remove('selected'));
+                    btn.classList.add('selected');
+                    aiLevel = btn.dataset.level;
+                });
+            });
+
+            // Подписка на открытые игры
+            openGamesChannel = supabase
+                .channel('open_ttt_games')
+                .on('postgres_changes', { event: '*', schema: 'public', table: 'tictactoe_games', filter: 'status=eq.waiting' }, () => {
+                    loadOpenGames();
+                })
+                .subscribe();
+
+            loadOpenGames();
+        }
+
+        async function loadOpenGames() {
+            const list = document.getElementById('open-games-list');
+            if (!list) return;
+
             const { data, error } = await supabase
                 .from('tictactoe_games')
                 .select('*')
                 .eq('status', 'waiting')
-                .limit(5);
-            
-            if (error) return;
+                .eq('data->>isAI', 'false')
+                .order('created_at', { ascending: false })
+                .limit(10);
 
-            if (data.length === 0) {
-                gamesList.innerHTML = '<p>Нет активных игр. Создайте свою!</p>';
-            } else {
-                gamesList.innerHTML = data.map(g => `
-                    <div class="game-item">
-                        <span>Игра #${g.id.slice(-4)}</span>
-                        <button onclick="joinGame('${g.id}', '${firebase.auth().currentUser.uid}')" class="btn-small">Присоединиться</button>
-                    </div>
-                `).join('');
+            if (error) {
+                list.innerHTML = '<p>Ошибка загрузки</p>';
+                return;
+            }
+
+            if (!data || data.length === 0) {
+                list.innerHTML = '<p>Нет открытых игр.</p>';
+                return;
+            }
+
+            let html = '<table class="open-games-table"><thead><tr><th>Создатель</th><th>Создана</th><th></th></tr></thead><tbody>';
+            data.forEach(doc => {
+                const players = doc.data?.players || {};
+                const creatorId = Object.keys(players)[0];
+                const creator = players[creatorId]?.username || 'Игрок';
+                const time = doc.created_at ? new Date(doc.created_at).toLocaleTimeString('ru-RU') : '';
+                html += `<tr><td>${creator}</td><td>${time}</td><td><button class="btn btn-small join-open-btn" data-id="${doc.id}">Войти</button></td></tr>`;
+            });
+            html += '</tbody></table>';
+            list.innerHTML = html;
+            list.querySelectorAll('.join-open-btn').forEach(b => b.addEventListener('click', () => joinGameById(b.dataset.id)));
+        }
+
+        // ========== РЕЙТИНГИ ==========
+        async function showRating(mode) {
+            gameContainer.innerHTML = '<p>Загрузка рейтинга...</p>';
+            try {
+                const { data: users, error } = await supabase
+                    .from('users')
+                    .select('id, data')
+                    .neq('data->>role', 'admin');
+
+                if (error) throw error;
+
+                const players = [];
+                (users || []).forEach(u => {
+                    const d = u.data || {};
+                    const stats = d.tictactoeStats || {};
+                    const wins = mode === 'pvp' ? (stats.pvpWins || 0) : (stats.pveWins || 0);
+                    if (wins > 0) players.push({ username: d.username || 'Аноним', wins });
+                });
+
+                players.sort((a,b) => b.wins - a.wins);
+                let html = `<h3>${mode === 'pvp' ? '🏆 Лучшие игроки (PvP)' : '🤖 Лучшие игроки (PvE)'}</h3>`;
+                if (players.length) {
+                    html += '<table class="rating-table"><thead><tr><th>#</th><th>Игрок</th><th>Побед</th></tr></thead><tbody>';
+                    players.forEach((p,i) => html += `<tr><td>${i+1}</td><td>${p.username}</td><td>${p.wins}</td></tr>`);
+                    html += '</tbody></table>';
+                } else html += '<p>Пока нет победителей.</p>';
+                gameContainer.innerHTML = html;
+            } catch (e) { gameContainer.innerHTML = '<p>Ошибка загрузки рейтинга.</p>'; }
+        }
+
+        // ========== АВТО-ВОССТАНОВЛЕНИЕ ==========
+        async function autoResumeGame() {
+            if (!currentUser) return false;
+            try {
+                const { data, error } = await supabase
+                    .from('tictactoe_games')
+                    .select('*')
+                    .contains('participants', [currentUser.id])
+                    .neq('status', 'finished')
+                    .limit(1)
+                    .single();
+
+                if (error || !data) return false;
+
+                gameId = data.id;
+                gameData = data;
+                isAI = data.data?.isAI || false;
+                board = data.data?.board || ['','','','','','','','',''];
+                const players = data.data?.players || {};
+                mySymbol = players[currentUser.id]?.symbol || 'X';
+                enemySymbol = mySymbol === 'X' ? 'O' : 'X';
+                subscribeToGame();
+                return true;
+            } catch (e) { return false; }
+        }
+
+        // ========== СОЗДАНИЕ / ПРИСОЕДИНЕНИЕ ==========
+        async function createGame(aiMode = false) {
+            try {
+                isAI = aiMode;
+                mySymbol = 'X'; enemySymbol = 'O';
+                const gameId = 'ttt_' + Date.now() + '_' + currentUser.id.substring(0,5);
+
+                const gameRecord = {
+                    id: gameId,
+                    status: aiMode ? 'active' : 'waiting',
+                    data: {
+                        isAI: aiMode,
+                        aiLevel: aiMode ? aiLevel : null,
+                        participants: [currentUser.id],
+                        players: {
+                            [currentUser.id]: { username: getCurrentUser()?.username || 'Игрок', symbol: 'X' }
+                        },
+                        board: ['','','','','','','','','']
+                    },
+                    turn: aiMode ? 'X' : null,
+                    winner: null,
+                    created_at: new Date().toISOString()
+                };
+
+                if (aiMode) {
+                    gameRecord.data.players.ai = { username: 'Компьютер', symbol: 'O' };
+                    gameRecord.data.participants = [currentUser.id, 'ai'];
+                }
+
+                const { error } = await supabase.from('tictactoe_games').insert([gameRecord]);
+                if (error) throw error;
+
+                this.gameId = gameId;
+                subscribeToGame();
+                showToast(aiMode ? 'Игра с ИИ началась! Вы играете крестиками ❌' : 'Игра создана! ID: ' + gameId, 'success');
+            } catch (e) { showToast('Ошибка создания: ' + e.message, 'error'); }
+        }
+
+        async function joinGameById(id) {
+            try {
+                const { data, error } = await supabase
+                    .from('tictactoe_games')
+                    .select('*')
+                    .eq('id', id)
+                    .single();
+
+                if (error || !data) { showToast('Игра не найдена', 'error'); return; }
+
+                const gameData = data;
+                if (gameData.data?.participants?.includes(currentUser.id)) {
+                    gameId = gameData.id;
+                    isAI = gameData.data?.isAI || false;
+                    board = gameData.data?.board || ['','','','','','','','',''];
+                    const players = gameData.data?.players || {};
+                    mySymbol = players[currentUser.id]?.symbol || 'O';
+                    enemySymbol = mySymbol === 'X' ? 'O' : 'X';
+                    subscribeToGame();
+                    showToast('Игра восстановлена', 'info');
+                    return;
+                }
+
+                if (gameData.status !== 'waiting') { showToast('Игра уже началась', 'error'); return; }
+
+                const updatedData = { ...gameData.data };
+                updatedData.players[currentUser.id] = { username: getCurrentUser()?.username || 'Игрок', symbol: 'O' };
+                updatedData.participants = [...(updatedData.participants || []), currentUser.id];
+
+                const { error: updateError } = await supabase
+                    .from('tictactoe_games')
+                    .update({
+                        data: updatedData,
+                        status: 'active',
+                        turn: 'X'
+                    })
+                    .eq('id', id);
+
+                if (updateError) throw updateError;
+
+                gameId = id;
+                isAI = false;
+                mySymbol = 'O'; enemySymbol = 'X';
+                board = updatedData.board || ['','','','','','','','',''];
+                subscribeToGame();
+                showToast('Вы присоединились! Вы играете ноликами ⭕', 'success');
+            } catch (e) { showToast('Ошибка: ' + e.message, 'error'); }
+        }
+
+        function joinGame() {
+            const id = document.getElementById('join-game-id')?.value.trim();
+            if (id) joinGameById(id);
+        }
+
+        function subscribeToGame() {
+            unsubscribeFromGame();
+            gameChannel = supabase
+                .channel(`ttt_${gameId}`)
+                .on('postgres_changes', { event: '*', schema: 'public', table: 'tictactoe_games', filter: `id=eq.${gameId}` }, (payload) => {
+                    gameData = payload.new;
+                    const gd = gameData.data || {};
+                    board = gd.board || ['','','','','','','','',''];
+                    if (gd.players && gd.players[currentUser.id]) {
+                        mySymbol = gd.players[currentUser.id].symbol;
+                        enemySymbol = mySymbol === 'X' ? 'O' : 'X';
+                    }
+                    if (gameData.status === 'active' && (!gameData.turn || (gameData.turn !== 'X' && gameData.turn !== 'O'))) {
+                        recoverTurn();
+                    }
+                    winningLine = getWinningLine(board);
+                    moveInProgress = false;
+                    updateGameState();
+                })
+                .subscribe();
+        }
+
+        async function recoverTurn() {
+            const xCount = board.filter(c => c === 'X').length;
+            const oCount = board.filter(c => c === 'O').length;
+            const nextTurn = xCount > oCount ? 'O' : 'X';
+            gameData.turn = nextTurn;
+            await supabase.from('tictactoe_games').update({ turn: nextTurn }).eq('id', gameId);
+        }
+
+        function updateGameState() {
+            if (gameData.status === 'waiting') {
+                renderWaitingScreen();
+            } else if (gameData.status === 'active') {
+                renderBoard();
+            } else if (gameData.status === 'finished') {
+                renderFinishedScreen();
             }
         }
 
-        // Присоединение к игре
-        async function joinGame(gameId, userId) {
-            currentGameId = gameId;
-            
-            // Подписка на изменения (Realtime)
-            channel = supabase
-                .channel(`tictactoe-${gameId}`)
-                .on('postgres_changes', 
-                    { event: 'UPDATE', schema: 'public', table: 'tictactoe_games', filter: `id=eq.${gameId}` }, 
-                    handleGameUpdate
-                )
-                .subscribe();
+        // ========== ЭКРАН ОЖИДАНИЯ ==========
+        function renderWaitingScreen() {
+            gameContainer.innerHTML = `
+                <div class="lobby-panel">
+                    <h3>Ожидание соперника...</h3>
+                    <p>Вы играете <strong>крестиками ❌</strong></p>
+                    <div class="game-id-display">ID игры: <strong>${gameId}</strong></div>
+                    <p style="color:#888;">Поделитесь этим ID с коллегой, чтобы он присоединился.</p>
+                    <button class="btn" id="cancel-game-btn">Отменить игру</button>
+                </div>
+            `;
+            document.getElementById('cancel-game-btn').addEventListener('click', cancelGame);
+        }
 
-            // Если это не создатель, добавляем себя как второго игрока
-            const { data: game } = await supabase.from('tictactoe_games').select('*').eq('id', gameId).single();
-            const players = game.data.players;
-            
-            if (Object.keys(players).length === 1 && !players[userId]) {
-                players[userId] = { symbol: 'O', joinedAt: new Date() };
-                await supabase.from('tictactoe_games')
-                    .update({ 
-                        status: 'playing', 
-                        turn: Object.keys(players)[0], // Ход создателя (X)
-                        data: { ...game.data, players } 
+        // ========== ИГРОВОЕ ПОЛЕ ==========
+        function renderBoard() {
+            const myTurn = gameData.turn === mySymbol;
+            const isFinished = gameData.status === 'finished';
+
+            let html = `
+                <div class="player-info">
+                    <div class="player-badge ${mySymbol === 'X' ? (myTurn ? 'active' : 'inactive') : 'inactive'}">
+                        ${mySymbol === 'X' ? 'Вы (❌)' : 'Соперник (❌)'}
+                    </div>
+                    <div class="player-badge ${mySymbol === 'O' ? (myTurn ? 'active' : 'inactive') : 'inactive'}">
+                        ${mySymbol === 'O' ? 'Вы (⭕)' : 'Соперник (⭕)'}
+                    </div>
+                </div>
+            `;
+
+            html += `<div class="board-grid" id="board">`;
+            for (let i = 0; i < 9; i++) {
+                const val = board[i];
+                let cls = val === 'X' ? 'x' : (val === 'O' ? 'o' : '');
+                if (winningLine && winningLine.includes(i)) cls += ' winning';
+                const disabled = val || isFinished || !myTurn || moveInProgress || (isAI && mySymbol === 'O');
+                if (disabled) cls += ' disabled';
+                html += `<div class="cell ${cls}" data-index="${i}">${val}</div>`;
+            }
+            html += '</div>';
+
+            let status = '';
+            if (isFinished) {
+                const winner = gameData.winner;
+                if (winner === 'draw') status = 'Ничья!';
+                else if (winner === mySymbol) status = '🎉 Вы победили!';
+                else status = '😞 Вы проиграли!';
+            } else if (myTurn) {
+                status = `Ваш ход (${mySymbol === 'X' ? '❌' : '⭕'})`;
+            } else {
+                status = `Ход соперника (${enemySymbol === 'X' ? '❌' : '⭕'})`;
+            }
+
+            html += `<p class="status-message">${status}</p>`;
+            if (!isFinished && gameData.status === 'active') {
+                html += `<button class="btn btn-cancel" id="surrender-btn" style="margin-top:0.5rem;">Сдаться</button>`;
+            }
+            if (isFinished) {
+                html += `<button class="btn" id="new-game-btn">Новая игра</button>`;
+            }
+
+            gameContainer.innerHTML = html;
+
+            if (!isFinished && myTurn && !moveInProgress && !(isAI && mySymbol === 'O')) {
+                document.querySelectorAll('#board .cell:not(.disabled)').forEach(cell => {
+                    cell.addEventListener('click', () => {
+                        const index = parseInt(cell.dataset.index);
+                        makeMove(index);
+                    });
+                });
+            }
+
+            const surrenderBtn = document.getElementById('surrender-btn');
+            if (surrenderBtn) {
+                surrenderBtn.addEventListener('click', surrender);
+            }
+
+            if (isAI && gameData.turn === enemySymbol && gameData.status === 'active') {
+                setTimeout(() => aiMove(), 600);
+            }
+        }
+
+        async function makeMove(index) {
+            if (moveInProgress) return;
+            if (board[index] !== '') return;
+            if (gameData.turn !== mySymbol) return;
+
+            moveInProgress = true;
+
+            const newBoard = [...board];
+            newBoard[index] = mySymbol;
+            const winner = checkWinner(newBoard);
+            const isDraw = !winner && newBoard.every(c => c !== '');
+            const nextTurn = winner || isDraw ? null : enemySymbol;
+
+            const updatedData = { ...gameData.data, board: newBoard };
+
+            const { error } = await supabase
+                .from('tictactoe_games')
+                .update({
+                    data: updatedData,
+                    turn: nextTurn,
+                    status: (winner || isDraw) ? 'finished' : 'active',
+                    winner: winner || (isDraw ? 'draw' : null)
+                })
+                .eq('id', gameId);
+
+            if (error) {
+                showToast('Ошибка хода: ' + error.message, 'error');
+                moveInProgress = false;
+                return;
+            }
+
+            if (winner === mySymbol) {
+                await handleGameEnd(true);
+            } else if (isDraw) {
+                await handleGameEnd(false, true);
+            } else if (winner === enemySymbol) {
+                await handleGameEnd(false);
+            }
+        }
+
+        async function aiMove() {
+            if (moveInProgress) return;
+            moveInProgress = true;
+            const newBoard = [...board];
+            let move;
+            switch (aiLevel) {
+                case 'easy': move = randomMove(newBoard); break;
+                case 'medium': move = mediumAIMove(newBoard); break;
+                case 'hard': move = minimaxMove(newBoard); break;
+                default: move = randomMove(newBoard);
+            }
+            if (move !== -1) {
+                newBoard[move] = enemySymbol;
+                const winner = checkWinner(newBoard);
+                const isDraw = !winner && newBoard.every(c => c !== '');
+                const updatedData = { ...gameData.data, board: newBoard };
+
+                await supabase
+                    .from('tictactoe_games')
+                    .update({
+                        data: updatedData,
+                        turn: winner || isDraw ? null : mySymbol,
+                        status: (winner || isDraw) ? 'finished' : 'active',
+                        winner: winner || (isDraw ? 'draw' : null)
                     })
                     .eq('id', gameId);
-            }
 
-            mySymbol = players[userId]?.symbol || 'O';
-            renderGameUI(game);
-        }
-
-        // Обработка обновлений
-        function handleGameUpdate(payload) {
-            const newGame = payload.new;
-            renderGameUI(newGame);
-            
-            if (newGame.status === 'finished') {
-                setTimeout(() => {
-                    alert(newGame.winner ? (newGame.winner === firebase.auth().currentUser.uid ? 'Победа!' : 'Поражение!') : 'Ничья!');
-                    leaveGame();
-                    loadAvailableGames();
-                }, 500);
+                if (winner === enemySymbol) handleGameEnd(false);
+                else if (isDraw) handleGameEnd(false, true);
+                else if (winner === mySymbol) handleGameEnd(true);
             }
         }
 
-        // Отрисовка поля
-        function renderGameUI(game) {
-            gameMenu.style.display = 'none';
-            gameBoard.style.display = 'block';
-            
-            const board = game.data.board;
-            const isMyTurnNow = game.turn === firebase.auth().currentUser.uid;
-            isMyTurn = isMyTurnNow;
-
-            statusEl.textContent = isMyTurnNow ? "Ваш ход!" : "Ход соперника...";
-            statusEl.className = isMyTurnNow ? "status-my-turn" : "status-wait";
-
-            boardGrid.innerHTML = board.map((cell, idx) => `
-                <div class="cell ${cell ? 'taken' : ''}" onclick="makeMove(${idx})">
-                    ${cell ? cell : ''}
-                </div>
-            `).join('');
+        // ========== ЛОГИКА ИИ ==========
+        function randomMove(board) {
+            const empty = board.map((v,i) => v === '' ? i : -1).filter(i => i !== -1);
+            return empty.length ? empty[Math.floor(Math.random() * empty.length)] : -1;
         }
 
-        // Ход
-        window.makeMove = async (idx) => {
-            if (!isMyTurn) return alert("Не ваш ход!");
-            
-            const { data: game } = await supabase.from('tictactoe_games').select('*').eq('id', currentGameId).single();
-            if (game.data.board[idx]) return; // Клетка занята
-
-            const newBoard = [...game.data.board];
-            newBoard[idx] = mySymbol;
-            
-            // Проверка победы
-            const winner = checkWinner(newBoard);
-            const nextPlayer = Object.keys(game.data.players).find(p => p !== firebase.auth().currentUser.uid);
-            
-            const updateData = {
-                data: { ...game.data, board: newBoard },
-                turn: winner ? null : nextPlayer,
-                status: winner ? 'finished' : 'playing',
-                winner: winner || null
-            };
-
-            await supabase.from('tictactoe_games').update(updateData).eq('id', currentGameId);
-            
-            if (winner) {
-                // Начисление награды победителю (через RPC или прямой апдейт users)
-                if (winner === firebase.auth().currentUser.uid) {
-                    // TODO: Вызов функции начисления
+        function mediumAIMove(board) {
+            for (let i = 0; i < 9; i++) {
+                if (board[i] === '') {
+                    board[i] = enemySymbol;
+                    if (checkWinner(board) === enemySymbol) { board[i] = ''; return i; }
+                    board[i] = '';
                 }
             }
-        };
-
-        function checkWinner(board) {
-            const lines = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
-            for (let line of lines) {
-                const [a,b,c] = line;
-                if (board[a] && board[a] === board[b] && board[a] === board[c]) return board[a] === 'X' ? Object.keys(window.gameData?.players || {})[0] : Object.keys(window.gameData?.players || {})[1]; // Упрощено
+            for (let i = 0; i < 9; i++) {
+                if (board[i] === '') {
+                    board[i] = mySymbol;
+                    if (checkWinner(board) === mySymbol) { board[i] = ''; return i; }
+                    board[i] = '';
+                }
             }
-            return board.includes(null) ? null : 'draw';
+            if (board[4] === '') return 4;
+            const corners = [0,2,6,8].filter(i => board[i] === '');
+            if (corners.length) return corners[Math.floor(Math.random() * corners.length)];
+            return randomMove(board);
         }
 
-        function leaveGame() {
-            if (channel) channel.unsubscribe();
-            currentGameId = null;
-            gameBoard.style.display = 'none';
-            gameMenu.style.display = 'block';
-            loadAvailableGames();
+        function minimaxMove(board) {
+            let bestScore = -Infinity, bestMove = -1;
+            for (let i = 0; i < 9; i++) {
+                if (board[i] === '') {
+                    board[i] = enemySymbol;
+                    const score = minimax(board, 0, false, -Infinity, Infinity);
+                    board[i] = '';
+                    if (score > bestScore) { bestScore = score; bestMove = i; }
+                }
+            }
+            return bestMove;
         }
-        
-        // Глобальная переменная для хелпера проверки (костыль для checkWinner)
-        window.gameData = null;
-        function handleGameUpdate(payload) {
-             window.gameData = payload.new.data;
-             // ... остальной код из выше
-             const newGame = payload.new;
-             renderGameUI(newGame);
-             if (newGame.status === 'finished') {
-                 setTimeout(() => {
-                    const uid = firebase.auth().currentUser.uid;
-                    let msg = 'Ничья!';
-                    if (newGame.winner) msg = newGame.winner === uid ? 'Победа!' : 'Поражение!';
-                    alert(msg);
-                    leaveGame();
-                 }, 100);
-             }
+
+        function minimax(board, depth, isMaximizing, alpha, beta) {
+            const winner = checkWinner(board);
+            if (winner === enemySymbol) return 10 - depth;
+            if (winner === mySymbol) return depth - 10;
+            if (board.every(c => c !== '')) return 0;
+
+            if (isMaximizing) {
+                let maxScore = -Infinity;
+                for (let i = 0; i < 9; i++) {
+                    if (board[i] === '') {
+                        board[i] = enemySymbol;
+                        const score = minimax(board, depth + 1, false, alpha, beta);
+                        board[i] = '';
+                        maxScore = Math.max(score, maxScore);
+                        alpha = Math.max(alpha, score);
+                        if (beta <= alpha) break;
+                    }
+                }
+                return maxScore;
+            } else {
+                let minScore = Infinity;
+                for (let i = 0; i < 9; i++) {
+                    if (board[i] === '') {
+                        board[i] = mySymbol;
+                        const score = minimax(board, depth + 1, true, alpha, beta);
+                        board[i] = '';
+                        minScore = Math.min(score, minScore);
+                        beta = Math.min(beta, score);
+                        if (beta <= alpha) break;
+                    }
+                }
+                return minScore;
+            }
         }
-    </script>
+
+        function checkWinner(b) {
+            for (const [a,b1,c] of WIN_LINES) {
+                if (b[a] && b[a] === b[b1] && b[a] === b[c]) return b[a];
+            }
+            return null;
+        }
+
+        function getWinningLine(b) {
+            for (const [a,b1,c] of WIN_LINES) {
+                if (b[a] && b[a] === b[b1] && b[a] === b[c]) return [a,b1,c];
+            }
+            return null;
+        }
+
+        // ========== ЗАВЕРШЕНИЕ ==========
+        async function handleGameEnd(isWin, isDraw = false) {
+            const myUid = currentUser.id;
+            const mode = isAI ? 'pve' : 'pvp';
+
+            const { data: userRow, error } = await supabase
+                .from('users')
+                .select('data')
+                .eq('id', myUid)
+                .single();
+
+            if (error || !userRow) return;
+
+            const userData = userRow.data || {};
+            const stats = userData.tictactoeStats || {};
+
+            let newStreak = stats.currentWinStreak || 0;
+            let bestStreak = stats.bestWinStreak || 0;
+            if (isWin) {
+                newStreak++;
+                if (newStreak > bestStreak) bestStreak = newStreak;
+            } else if (!isDraw) {
+                newStreak = 0;
+            }
+
+            const newStats = {
+                ...stats,
+                currentWinStreak: newStreak,
+                bestWinStreak: bestStreak,
+                [`${mode}Wins`]: (stats[`${mode}Wins`] || 0) + (isWin ? 1 : 0),
+                [`${mode}Losses`]: (stats[`${mode}Losses`] || 0) + ((!isWin && !isDraw) ? 1 : 0),
+                [`${mode}Draws`]: (stats[`${mode}Draws`] || 0) + (isDraw ? 1 : 0)
+            };
+
+            if (isWin && isAI && aiLevel === 'hard') {
+                newStats.beatHardAI = true;
+            }
+
+            const newData = { ...userData, tictactoeStats: newStats };
+
+            await supabase
+                .from('users')
+                .update({ data: newData, updated_at: new Date().toISOString() })
+                .eq('id', myUid);
+
+            if (isWin) {
+                const points = isAI ? 3 : 5;
+                if (typeof addPointsToCurrentUser === 'function') await addPointsToCurrentUser(points, 'tictactoe');
+                showToast(`Победа! +${points} баллов`, 'success');
+            }
+            if (typeof checkAndAwardAchievements === 'function') await checkAndAwardAchievements();
+
+            unsubscribeFromGame();
+            gameId = null;
+        }
+
+        function renderFinishedScreen() {
+            let status = '';
+            const winner = gameData.winner;
+            if (winner === 'draw') status = 'Ничья!';
+            else if (winner === mySymbol) status = '🎉 Вы победили!';
+            else status = '😞 Вы проиграли!';
+
+            gameContainer.innerHTML = `
+                <h3>${status}</h3>
+                ${renderStaticBoard()}
+                <button class="btn" id="new-game-btn">Новая игра</button>
+            `;
+            document.getElementById('new-game-btn').addEventListener('click', () => {
+                unsubscribeFromGame();
+                gameId = null; gameData = null;
+                showLobby();
+            });
+        }
+
+        function renderStaticBoard() {
+            let html = '<div class="board-grid">';
+            for (let i = 0; i < 9; i++) {
+                let cls = board[i] === 'X' ? 'x' : (board[i] === 'O' ? 'o' : '');
+                if (winningLine && winningLine.includes(i)) cls += ' winning';
+                cls += ' disabled';
+                html += `<div class="cell ${cls}">${board[i]}</div>`;
+            }
+            html += '</div>';
+            return html;
+        }
+
+        // ========== ВЫХОД ИЗ ИГРЫ ==========
+        async function cancelGame() {
+            if (!gameId) return;
+            await supabase.from('tictactoe_games').update({ status: 'finished', winner: 'cancelled' }).eq('id', gameId);
+            unsubscribeFromGame();
+            gameId = null; gameData = null;
+            showLobby();
+            showToast('Игра отменена', 'info');
+        }
+
+        async function surrender() {
+            if (!gameId || !gameData) return;
+            const updatedData = { ...gameData.data, surrendered: currentUser.id };
+            await supabase.from('tictactoe_games').update({
+                data: updatedData,
+                status: 'finished',
+                winner: enemySymbol
+            }).eq('id', gameId);
+            await handleGameEnd(false, false);
+        }
+
+        // ========== ОЧИСТКА ПОДПИСОК ==========
+        function unsubscribeFromGame() {
+            if (gameChannel) { supabase.removeChannel(gameChannel); gameChannel = null; }
+        }
+
+        function unsubscribeFromOpenGames() {
+            if (openGamesChannel) { supabase.removeChannel(openGamesChannel); openGamesChannel = null; }
+        }
+
+        window.addEventListener('beforeunload', () => {
+            unsubscribeFromGame();
+            unsubscribeFromOpenGames();
+        });
+    })();
+</script>
 </body>
 </html>
