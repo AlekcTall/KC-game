@@ -1,200 +1,338 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-    <meta charset="UTF-8">
-    <title>Админка: Пользователи</title>
-    <link rel="stylesheet" href="styles/main.css">
-    <link rel="stylesheet" href="styles/admin.css">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Пользователи – Админ-панель – Геймификация КЦ</title>
+  <link rel="stylesheet" href="css/style.css">
+  <style>
+    .admin-page { max-width: 1100px; margin: 0 auto; padding: 1.5rem; }
+    .back-link { display: inline-block; margin-bottom: 1rem; color: var(--color-primary); text-decoration: none; }
+    .admin-users-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+    .admin-users-table th, .admin-users-table td { padding: 0.5rem; border-bottom: 1px solid #eee; text-align: left; }
+    .admin-users-table th { background: #f9f9f9; font-weight: 600; }
+    .btn-small { padding: 0.25rem 0.5rem; font-size: 0.8rem; margin: 0 0.1rem; }
+    .badge { display: inline-block; padding: 0.2rem 0.6rem; border-radius: 12px; font-size: 0.8rem; font-weight: 600; text-transform: uppercase; }
+    .badge-admin { background: #e74c3c; color: white; }
+    .badge-moderator { background: #f39c12; color: white; }
+    .badge-user { background: #3498db; color: white; }
+    .skeleton-row td { padding: 0.5rem; }
+    .skeleton-cell { height: 1rem; background: #e0e0e0; border-radius: 4px; animation: shimmer 1.5s infinite; }
+    @keyframes shimmer { 0% { opacity: 0.6; } 50% { opacity: 1; } 100% { opacity: 0.6; } }
+    .modal { max-width: 450px; }
+    .modal .form-group { margin-bottom: 1rem; }
+    .modal .form-group label { display: block; font-weight: 600; font-size: 0.85rem; margin-bottom: 0.3rem; }
+    .modal .form-group input, .modal .form-group select { width: 100%; padding: 0.5rem; border: 1px solid #d1d5db; border-radius: 6px; }
+    .small-text { font-size: 0.8rem; color: #888; }
+    .admin-filters { display: flex; gap: 1rem; margin-bottom: 1rem; align-items: center; }
+    .search-input { flex: 1; padding: 0.5rem; border: 1px solid #ccc; border-radius: 6px; }
+    @media (max-width: 768px) {
+      .admin-users-table { font-size: 0.8rem; }
+    }
+  </style>
 </head>
-<body class="dark-theme">
-    <nav class="navbar">
-        <div class="container">
-            <a href="index.html" class="logo">KC Admin</a>
-            <div class="nav-links">
-                <a href="admin-users.html" class="active">Пользователи</a>
-                <a href="admin-shop.html">Магазин</a>
-                <a href="admin-content.html">Контент</a>
-                <a href="index.html">На сайт</a>
-            </div>
-        </div>
-    </nav>
-
-    <main class="container admin-container">
-        <h1>👥 Управление пользователями</h1>
-        
-        <div class="admin-filters">
-            <input type="text" id="search-user" placeholder="Поиск по имени или email..." class="search-input">
-            <button id="load-users-btn" class="btn-primary">Обновить список</button>
-        </div>
-
-        <div class="table-wrapper">
-            <table class="admin-table">
-                <thead>
-                    <tr>
-                        <th>ID (UID)</th>
-                        <th>Имя</th>
-                        <th>Email</th>
-                        <th>Баланс (💰)</th>
-                        <th>Очки (XP)</th>
-                        <th>Роль</th>
-                        <th>Действия</th>
-                    </tr>
-                </thead>
-                <tbody id="users-table-body">
-                    <tr><td colspan="7" class="loading">Загрузка...</td></tr>
-                </tbody>
-            </table>
-        </div>
-    </main>
-
-    <!-- Модальное окно редактирования -->
-    <div id="edit-modal" class="modal">
-        <div class="modal-content">
-            <span class="close-modal">&times;</span>
-            <h2>Редактирование пользователя</h2>
-            <input type="hidden" id="edit-user-id">
-            <div class="form-group">
-                <label>Баланс Локоинов:</label>
-                <input type="number" id="edit-balance">
-            </div>
-            <div class="form-group">
-                <label>Очки Опыта:</label>
-                <input type="number" id="edit-points">
-            </div>
-            <div class="form-group">
-                <label>Роль:</label>
-                <select id="edit-role">
-                    <option value="user">User</option>
-                    <option value="admin">Admin</option>
-                    <option value="moderator">Moderator</option>
-                </select>
-            </div>
-            <button id="save-user-btn" class="btn-success">Сохранить</button>
-        </div>
+<body>
+  <header class="header">
+    <div class="container header__inner">
+      <a href="index.html" class="logo">КЦ-Игры</a>
+      <button class="burger" id="burger-btn" aria-label="Меню">☰</button>
+      <nav class="nav" id="main-nav">
+        <ul class="nav__list">
+          <li><a href="index.html" class="nav__link">Главная</a></li>
+          <li><a href="games.html" class="nav__link">Игры</a></li>
+          <li><a href="leaderboard.html" class="nav__link">Рейтинг</a></li>
+          <li><a href="shop.html" class="nav__link">Магазин</a></li>
+          <li><a href="profile.html" class="nav__link">Профиль</a></li>
+          <li><a href="admin.html" class="nav__link active">Админ</a></li>
+        </ul>
+      </nav>
+      <div id="auth-status" class="auth-status"></div>
     </div>
+  </header>
 
-    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js"></script>
-    <script src="js/firebase-config.js"></script>
-    
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="js/supabase-client.js"></script>
-    <script src="js/auth.js"></script>
+  <main class="main">
+    <div class="container admin-page" id="admin-container">
+      <p>Загрузка...</p>
+    </div>
+  </main>
 
-    <script>
-        // Проверка прав админа
-        async function checkAdmin() {
-            const user = firebase.auth().currentUser;
-            if (!user) { window.location.href = 'index.html'; return; }
-            
-            const { data } = await supabase.from('users').select('data').eq('id', user.uid).single();
-            if (data?.data?.role !== 'admin') {
-                alert('Доступ запрещен!');
-                window.location.href = 'index.html';
-            } else {
-                loadUsers();
-            }
+  <!-- Модальное окно редактирования -->
+  <div class="modal-overlay" id="edit-modal" style="display:none;">
+    <div class="modal" style="max-width:450px;">
+      <span class="modal-close" id="edit-modal-close">&times;</span>
+      <h3>Редактирование пользователя</h3>
+      <input type="hidden" id="edit-user-id">
+      <div class="form-group">
+        <label>Баланс Локоинов:</label>
+        <input type="number" id="edit-balance">
+      </div>
+      <div class="form-group">
+        <label>Очки Опыта:</label>
+        <input type="number" id="edit-points">
+      </div>
+      <div class="form-group">
+        <label>Роль:</label>
+        <select id="edit-role">
+          <option value="user">User</option>
+          <option value="admin">Admin</option>
+          <option value="moderator">Moderator</option>
+        </select>
+      </div>
+      <button class="btn" id="save-user-btn">Сохранить</button>
+      <p id="edit-message" class="auth-message"></p>
+    </div>
+  </div>
+
+  <footer class="footer"><div class="container"><p>© 2026 ваши амбассадоры</p></div></footer>
+
+  <!-- Supabase SDK и модули -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="js/supabase-config.js"></script>
+  <script src="js/auth.js"></script>
+  <script src="js/storage.js"></script>
+  <script src="js/achievements.js"></script>
+  <script src="js/easter-eggs.js"></script>
+  <script src="js/notifications.js"></script>
+  <script src="js/main.js"></script>
+  <script src="js/feedback.js"></script>
+
+  <script>
+    (function() {
+      const CACHE_KEY = 'krugames_admin_users';
+      const CACHE_TTL = 2 * 60 * 1000;
+      let allUsers = [];
+
+      function getCachedUsers() {
+        const cached = sessionStorage.getItem(CACHE_KEY);
+        if (cached) {
+          try {
+            const parsed = JSON.parse(cached);
+            if (Date.now() - parsed.timestamp < CACHE_TTL) return parsed.data;
+          } catch (e) {}
         }
+        return null;
+      }
 
-        // Загрузка пользователей
-        async function loadUsers() {
-            const tbody = document.getElementById('users-table-body');
-            tbody.innerHTML = '<tr><td colspan="7" class="loading">Загрузка...</td></tr>';
+      function setCachedUsers(users) {
+        sessionStorage.setItem(CACHE_KEY, JSON.stringify({ timestamp: Date.now(), data: users }));
+      }
 
+      document.addEventListener('DOMContentLoaded', async () => {
+        const container = document.getElementById('admin-container');
+
+        if (typeof onAuthStateChange === 'function') {
+          onAuthStateChange(async (event, session) => {
+            if (!session?.user) {
+              container.innerHTML = '<p>Вы не авторизованы.</p>';
+              return;
+            }
             try {
-                // Читаем только нужные поля для скорости
-                const { data, error } = await supabase
-                    .from('users')
-                    .select('id, email, data')
-                    .order('created_at', { ascending: false });
+              const { data: row, error } = await supabase
+                .from('users')
+                .select('data')
+                .eq('id', session.user.id)
+                .single();
 
-                if (error) throw error;
+              if (error || !row || (row.data?.role !== 'admin')) {
+                container.innerHTML = '<p>Доступ запрещён.</p>';
+                return;
+              }
 
-                if (data.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="7">Пользователей нет</td></tr>';
-                    return;
-                }
-
-                tbody.innerHTML = data.map(u => {
-                    const d = u.data || {};
-                    return `
-                        <tr>
-                            <td class="small-text">${u.id.substring(0,8)}...</td>
-                            <td>${d.username || '-'}</td>
-                            <td>${u.email || '-'}</td>
-                            <td>${d.lokoin_balance || 0}</td>
-                            <td>${d.points || 0}</td>
-                            <td><span class="badge ${d.role}">${d.role || 'user'}</span></td>
-                            <td>
-                                <button class="btn-sm btn-edit" onclick="openEditModal('${u.id}', ${d.lokoin_balance||0}, ${d.points||0}, '${d.role||'user'}')">✏️</button>
-                            </td>
-                        </tr>
-                    `;
-                }).join('');
-
-            } catch (err) {
-                console.error(err);
-                tbody.innerHTML = '<tr><td colspan="7" class="error">Ошибка загрузки</td></tr>';
+              renderPage();
+              loadUsers();
+            } catch (e) {
+              container.innerHTML = `<p>Ошибка: ${e.message}</p>`;
             }
+          });
+        } else {
+          container.innerHTML = '<p>Ошибка загрузки системы авторизации.</p>';
         }
 
-        // Модальное окно
-        window.openEditModal = (id, balance, points, role) => {
-            document.getElementById('edit-user-id').value = id;
-            document.getElementById('edit-balance').value = balance;
-            document.getElementById('edit-points').value = points;
-            document.getElementById('edit-role').value = role;
-            document.getElementById('edit-modal').style.display = 'block';
-        };
+        function renderPage() {
+          container.innerHTML = `
+            <a href="admin.html" class="back-link">← В админку</a>
+            <h2>👥 Управление пользователями</h2>
+            <div class="admin-filters">
+              <input type="text" id="search-user" placeholder="Поиск по имени или email..." class="search-input">
+              <button class="btn" id="reload-users-btn">Обновить</button>
+            </div>
+            <table class="admin-users-table">
+              <thead>
+                <tr>
+                  <th>UID</th>
+                  <th>Имя</th>
+                  <th>Email</th>
+                  <th>Баланс 💰</th>
+                  <th>Очки ⭐</th>
+                  <th>Роль</th>
+                  <th>Действия</th>
+                </tr>
+              </thead>
+              <tbody id="users-tbody"></tbody>
+            </table>
+          `;
 
-        document.querySelector('.close-modal').onclick = () => {
+          document.getElementById('reload-users-btn').addEventListener('click', loadUsers);
+          document.getElementById('search-user').addEventListener('input', filterUsers);
+
+          // Закрытие модалки
+          document.getElementById('edit-modal-close').addEventListener('click', () => {
             document.getElementById('edit-modal').style.display = 'none';
-        };
+          });
+          window.addEventListener('click', (e) => {
+            if (e.target === document.getElementById('edit-modal')) {
+              document.getElementById('edit-modal').style.display = 'none';
+            }
+          });
 
-        // Сохранение
-        document.getElementById('save-user-btn').onclick = async () => {
+          // Сохранение
+          document.getElementById('save-user-btn').addEventListener('click', async () => {
             const id = document.getElementById('edit-user-id').value;
-            const balance = parseInt(document.getElementById('edit-balance').value);
-            const points = parseInt(document.getElementById('edit-points').value);
+            const balance = parseInt(document.getElementById('edit-balance').value, 10);
+            const points = parseInt(document.getElementById('edit-points').value, 10);
             const role = document.getElementById('edit-role').value;
-
+            const msgEl = document.getElementById('edit-message');
             const btn = document.getElementById('save-user-btn');
+
+            if (isNaN(balance) || isNaN(points)) {
+              msgEl.textContent = 'Введите числовые значения.';
+              return;
+            }
+
             btn.disabled = true;
             btn.textContent = 'Сохранение...';
 
             try {
-                // Получаем текущий data, чтобы не затереть остальное
-                const { data: currentUser } = await supabase.from('users').select('data').eq('id', id).single();
-                const currentData = currentUser.data || {};
-                
-                const updatedData = {
-                    ...currentData,
-                    lokoin_balance: balance,
-                    points: points,
-                    role: role
-                };
+              // Получаем текущий data
+              const { data: currentRow, error: fetchError } = await supabase
+                .from('users')
+                .select('data')
+                .eq('id', id)
+                .single();
+              if (fetchError) throw fetchError;
 
-                const { error } = await supabase
-                    .from('users')
-                    .update({ data: updatedData })
-                    .eq('id', id);
+              const currentData = currentRow.data || {};
+              const updatedData = {
+                ...currentData,
+                lokoin_balance: balance,
+                points: points,
+                role: role
+              };
 
-                if (error) throw error;
-                
-                alert('Сохранено!');
+              const { error: updateError } = await supabase
+                .from('users')
+                .update({ data: updatedData, updated_at: new Date().toISOString() })
+                .eq('id', id);
+              if (updateError) throw updateError;
+
+              msgEl.textContent = 'Сохранено!';
+              msgEl.className = 'auth-message success';
+              setTimeout(() => {
                 document.getElementById('edit-modal').style.display = 'none';
-                loadUsers();
-
+              }, 1000);
+              loadUsers();
             } catch (err) {
-                alert('Ошибка: ' + err.message);
+              msgEl.textContent = 'Ошибка: ' + err.message;
+              msgEl.className = 'auth-message error';
             } finally {
-                btn.disabled = false;
-                btn.textContent = 'Сохранить';
+              btn.disabled = false;
+              btn.textContent = 'Сохранить';
             }
-        };
+          });
+        }
 
-        // Старт
-        checkAdmin();
-    </script>
+        async function loadUsers() {
+          const tbody = document.getElementById('users-tbody');
+          if (!tbody) return;
+
+          // Показываем скелетоны
+          tbody.innerHTML = Array.from({ length: 8 }, () => `
+            <tr class="skeleton-row">
+              <td><div class="skeleton-cell" style="width:80px;"></div></td>
+              <td><div class="skeleton-cell" style="width:120px;"></div></td>
+              <td><div class="skeleton-cell" style="width:180px;"></div></td>
+              <td><div class="skeleton-cell" style="width:60px;"></div></td>
+              <td><div class="skeleton-cell" style="width:60px;"></div></td>
+              <td><div class="skeleton-cell" style="width:60px;"></div></td>
+              <td><div class="skeleton-cell" style="width:60px;"></div></td>
+            </tr>
+          `).join('');
+
+          try {
+            const { data, error } = await supabase
+              .from('users')
+              .select('id, email, data')
+              .order('created_at', { ascending: false });
+
+            if (error) throw error;
+
+            allUsers = data || [];
+            setCachedUsers(allUsers);
+            renderUsersTable(allUsers);
+          } catch (e) {
+            console.error(e);
+            tbody.innerHTML = '<tr><td colspan="7" class="error-message">Ошибка загрузки</td></tr>';
+          }
+        }
+
+        function filterUsers() {
+          const query = document.getElementById('search-user').value.trim().toLowerCase();
+          let filtered = allUsers;
+          if (query) {
+            filtered = allUsers.filter(u => {
+              const d = u.data || {};
+              return (d.username || '').toLowerCase().includes(query) ||
+                     (u.email || '').toLowerCase().includes(query);
+            });
+          }
+          renderUsersTable(filtered);
+        }
+
+        function renderUsersTable(users) {
+          const tbody = document.getElementById('users-tbody');
+          if (!tbody) return;
+
+          if (!users.length) {
+            tbody.innerHTML = '<tr><td colspan="7">Пользователей нет</td></tr>';
+            return;
+          }
+
+          tbody.innerHTML = users.map(u => {
+            const d = u.data || {};
+            const roleClass = d.role === 'admin' ? 'badge-admin' : (d.role === 'moderator' ? 'badge-moderator' : 'badge-user');
+            return `
+              <tr>
+                <td class="small-text" title="${u.id}">${u.id.substring(0, 8)}...</td>
+                <td>${d.username || '-'}</td>
+                <td>${u.email || '-'}</td>
+                <td>${d.lokoin_balance || 0}</td>
+                <td>${d.points || 0}</td>
+                <td><span class="badge ${roleClass}">${d.role || 'user'}</span></td>
+                <td>
+                  <button class="btn btn-small edit-user-btn" data-uid="${u.id}" data-balance="${d.lokoin_balance || 0}" data-points="${d.points || 0}" data-role="${d.role || 'user'}">✏️</button>
+                </td>
+              </tr>
+            `;
+          }).join('');
+
+          // Обработчики кнопок редактирования
+          document.querySelectorAll('.edit-user-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+              openEditModal(btn.dataset.uid, btn.dataset.balance, btn.dataset.points, btn.dataset.role);
+            });
+          });
+        }
+
+        function openEditModal(id, balance, points, role) {
+          document.getElementById('edit-user-id').value = id;
+          document.getElementById('edit-balance').value = balance;
+          document.getElementById('edit-points').value = points;
+          document.getElementById('edit-role').value = role;
+          document.getElementById('edit-message').textContent = '';
+          document.getElementById('edit-modal').style.display = 'flex';
+        }
+      });
+    })();
+  </script>
 </body>
 </html>
