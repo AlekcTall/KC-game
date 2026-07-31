@@ -3,8 +3,6 @@
  * Управление активными эффектами: рамки, темы, двойной опыт и т.д.
  */
 
-const ACTIVE_EFFECTS_KEY = 'activeEffects';
-
 // Инициализация при загрузке страницы
 document.addEventListener('DOMContentLoaded', () => {
     checkActiveEffects();
@@ -16,20 +14,20 @@ document.addEventListener('DOMContentLoaded', () => {
  * Проверка и применение активных эффектов
  */
 async function checkActiveEffects() {
-    const user = firebase.auth().currentUser;
+    const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
     try {
         // Читаем профиль из Supabase
-        const { data, error } = await supabase
+        const { data: row, error } = await supabase
             .from('users')
             .select('data')
-            .eq('id', user.uid)
+            .eq('id', user.id)
             .single();
 
-        if (error || !data) return;
+        if (error || !row) return;
 
-        const userData = data.data || {};
+        const userData = row.data || {};
         const effects = userData.activeEffects || {};
         const now = Date.now();
 
@@ -59,7 +57,7 @@ async function checkActiveEffects() {
                 .update({ 
                     data: { ...userData, activeEffects: activeEffectsNow } 
                 })
-                .eq('id', user.uid);
+                .eq('id', user.id);
             
             console.log('Активные эффекты обновлены');
         }
@@ -110,13 +108,12 @@ function applyEffectVisuals(effectId, effectData) {
 /**
  * Удаление визуальных эффектов
  */
-function removeEffectVisuals(effectId) {
+function removeEffectVisuals(effectId, effectData = {}) {
     const body = document.body;
 
     switch (effectId) {
         case 'dark_theme_perm':
-            // Не удаляем, если пользователь сам не переключил (опционально)
-            // body.classList.remove('dark-theme'); 
+            // Не удаляем автоматически, чтобы пользователь мог переключить вручную
             break;
         
         case 'gold_frame':
@@ -136,7 +133,7 @@ function removeEffectVisuals(effectId) {
             break;
             
         default:
-            if (effectData && effectData.cssClass) {
+            if (effectData.cssClass) {
                 body.classList.remove(effectData.cssClass);
             }
             break;
@@ -148,20 +145,20 @@ function removeEffectVisuals(effectId) {
  * Вызывается из shop.js после успешной покупки
  */
 window.activateEffect = async (itemId, itemData) => {
-    const user = firebase.auth().currentUser;
+    const { data: { user } } = await supabase.auth.getUser();
     if (!user) return false;
 
     try {
         // Получаем текущие данные
-        const { data: userDataRow, error: fetchError } = await supabase
+        const { data: userRow, error: fetchError } = await supabase
             .from('users')
             .select('data')
-            .eq('id', user.uid)
+            .eq('id', user.id)
             .single();
 
         if (fetchError) throw fetchError;
 
-        const currentData = userDataRow.data || {};
+        const currentData = userRow.data || {};
         const currentEffects = currentData.activeEffects || {};
 
         // Вычисляем время окончания
@@ -181,7 +178,7 @@ window.activateEffect = async (itemId, itemData) => {
             .update({ 
                 data: { ...currentData, activeEffects: currentEffects } 
             })
-            .eq('id', user.uid);
+            .eq('id', user.id);
 
         if (updateError) throw updateError;
 
