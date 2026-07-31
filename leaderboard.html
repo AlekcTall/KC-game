@@ -159,8 +159,8 @@
               username: d.username || 'Без имени',
               department: d.department || '',
               points: d.points || 0,
-              achievements: d.achievements || [],
-              purchasedItems: d.purchasedItems || [],
+              achievements: Array.isArray(d.achievements) ? d.achievements : [],
+              purchasedItems: Array.isArray(d.purchasedItems) ? d.purchasedItems : [],
               avatarEmoji: d.avatarEmoji || null
             };
           });
