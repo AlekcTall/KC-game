@@ -2,7 +2,6 @@
 
 function getAchievementsConfig() {
   return [
-    // Существующие (без изменений)
     { id: 'first_game', name: 'Первый блин', description: 'Сыграйте в любую игру', icon: '🎮', hidden: false },
     { id: 'clicker_100', name: 'Кликоман', description: 'Наберите 100 кликов в кликере', icon: '🖱️', hidden: false },
     { id: 'clicker_1000', name: 'Мышку сломаешь!', description: 'Наберите 1000 кликов в кликере', icon: '💥🖱️', hidden: false },
@@ -36,36 +35,36 @@ function getAchievementsConfig() {
     { id: 'daily_100', name: 'Старожил', description: 'Заходите 100 раз', icon: '📅', hidden: true },
 
     // Морской бой
-    { id: 'battleship_5games', name: 'Морской волк', description: 'Сыграйте 5 партий в «Морской бой» (Морской бой)', icon: '🚢', hidden: false },
-    { id: 'battleship_first_win', name: 'Боевое крещение', description: 'Одержите первую победу (Морской бой)', icon: '⚔️', hidden: false },
-    { id: 'battleship_10wins', name: 'Адмирал', description: 'Одержите 10 побед (Морской бой)', icon: '🎖️', hidden: false },
-    { id: 'battleship_25wins', name: 'Флотоводец', description: 'Одержите 25 побед (Морской бой)', icon: '🏅', hidden: false },
-    { id: 'battleship_streak3', name: 'В ударе', description: 'Выиграйте 3 игры подряд (Морской бой)', icon: '🔥', hidden: true },
-    { id: 'battleship_streak5', name: 'Неудержимый', description: 'Выиграйте 5 игр подряд (Морской бой)', icon: '💥', hidden: true },
-    { id: 'battleship_sniper', name: 'Снайпер', description: 'Победите, сделав не более 30 выстрелов (Морской бой)', icon: '🎯', hidden: true },
-    { id: 'battleship_unsinkable', name: 'Непотопляемый', description: 'Победите, не потеряв ни одного корабля (Морской бой)', icon: '🛡️', hidden: true },
-    { id: 'battleship_pvp_win', name: 'Дуэлянт', description: 'Победите живого игрока (Морской бой)', icon: '🤝', hidden: false },
-    { id: 'battleship_pve_win', name: 'Железный человек', description: 'Победите компьютер (Морской бой)', icon: '🤖', hidden: false },
-    { id: 'battleship_sunk_4deck', name: 'Истребитель авианосцев', description: 'Потопите четырёхпалубный корабль (Морской бой)', icon: '✈️', hidden: true },
+    { id: 'battleship_5games', name: 'Морской волк', description: 'Сыграйте 5 партий в «Морской бой»', icon: '🚢', hidden: false },
+    { id: 'battleship_first_win', name: 'Боевое крещение', description: 'Одержите первую победу', icon: '⚔️', hidden: false },
+    { id: 'battleship_10wins', name: 'Адмирал', description: 'Одержите 10 побед', icon: '🎖️', hidden: false },
+    { id: 'battleship_25wins', name: 'Флотоводец', description: 'Одержите 25 побед', icon: '🏅', hidden: false },
+    { id: 'battleship_streak3', name: 'В ударе', description: 'Выиграйте 3 игры подряд', icon: '🔥', hidden: true },
+    { id: 'battleship_streak5', name: 'Неудержимый', description: 'Выиграйте 5 игр подряд', icon: '💥', hidden: true },
+    { id: 'battleship_sniper', name: 'Снайпер', description: 'Победите, сделав не более 30 выстрелов', icon: '🎯', hidden: true },
+    { id: 'battleship_unsinkable', name: 'Непотопляемый', description: 'Победите, не потеряв ни одного корабля', icon: '🛡️', hidden: true },
+    { id: 'battleship_pvp_win', name: 'Дуэлянт', description: 'Победите живого игрока', icon: '🤝', hidden: false },
+    { id: 'battleship_pve_win', name: 'Железный человек', description: 'Победите компьютер', icon: '🤖', hidden: false },
+    { id: 'battleship_sunk_4deck', name: 'Истребитель авианосцев', description: 'Потопите четырёхпалубный корабль', icon: '✈️', hidden: true },
 
     // Крестики-нолики
-    { id: 'tictactoe_first_win', name: 'Первая победа', description: 'Одержите первую победу (Крестики-нолики)', icon: '❌', hidden: false },
-    { id: 'tictactoe_streak3', name: 'На кураже', description: 'Выиграйте 3 игры подряд (Крестики-нолики)', icon: '🔥', hidden: true },
-    { id: 'tictactoe_draw', name: 'Миротворец', description: 'Сыграйте вничью (Крестики-нолики)', icon: '🤝', hidden: true },
-    { id: 'tictactoe_beat_hard', name: 'Превзойдя машину', description: 'Победите сложный ИИ (Крестики-нолики)', icon: '👑', hidden: true },
-    { id: 'tictactoe_pvp_win', name: 'Дуэлянт', description: 'Победите живого игрока (Крестики-нолики)', icon: '⚔️', hidden: false },
+    { id: 'tictactoe_first_win', name: 'Первая победа', description: 'Одержите первую победу', icon: '❌', hidden: false },
+    { id: 'tictactoe_streak3', name: 'На кураже', description: 'Выиграйте 3 игры подряд', icon: '🔥', hidden: true },
+    { id: 'tictactoe_draw', name: 'Миротворец', description: 'Сыграйте вничью', icon: '🤝', hidden: true },
+    { id: 'tictactoe_beat_hard', name: 'Превзойдя машину', description: 'Победите сложный ИИ', icon: '👑', hidden: true },
+    { id: 'tictactoe_pvp_win', name: 'Дуэлянт', description: 'Победите живого игрока', icon: '⚔️', hidden: false },
 
     // Камень-ножницы-бумага
-    { id: 'rps_first_win', name: 'Первая победа', description: 'Одержите первую победу (Камень-ножницы-бумага)', icon: '✊', hidden: false },
-    { id: 'rps_streak3', name: 'На кураже', description: 'Выиграйте 3 игры подряд (Камень-ножницы-бумага)', icon: '🔥', hidden: true },
-    { id: 'rps_beat_hard', name: 'Превзойдя машину', description: 'Победите сложный ИИ (Камень-ножницы-бумага)', icon: '👑', hidden: true },
-    { id: 'rps_pvp_win', name: 'Дуэлянт', description: 'Победите живого игрока (Камень-ножницы-бумага)', icon: '⚔️', hidden: false },
+    { id: 'rps_first_win', name: 'Первая победа', description: 'Одержите первую победу', icon: '✊', hidden: false },
+    { id: 'rps_streak3', name: 'На кураже', description: 'Выиграйте 3 игры подряд', icon: '🔥', hidden: true },
+    { id: 'rps_beat_hard', name: 'Превзойдя машину', description: 'Победите сложный ИИ', icon: '👑', hidden: true },
+    { id: 'rps_pvp_win', name: 'Дуэлянт', description: 'Победите живого игрока', icon: '⚔️', hidden: false },
 
     // Тетрис
     { id: 'tetris_5games', name: 'Тетрис-любитель', description: 'Сыграйте 5 игр в Тетрис', icon: '🧱', hidden: false },
     { id: 'tetris_1line', name: 'Первая линия', description: 'Соберите 1 линию в Тетрисе', icon: '📏', hidden: false },
-    { id: 'tetris_tetris', name: 'Тетрис', description: 'Соберите 4 линии одновременно (Тетрис)', icon: '🔥', hidden: true },
-    { id: 'tetris_20lines', name: 'Строитель', description: 'Соберите 20 линий за одну игру (Тетрис)', icon: '🏗️', hidden: true },
+    { id: 'tetris_tetris', name: 'Тетрис', description: 'Соберите 4 линии одновременно', icon: '🔥', hidden: true },
+    { id: 'tetris_20lines', name: 'Строитель', description: 'Соберите 20 линий за одну игру', icon: '🏗️', hidden: true },
     { id: 'tetris_5000score', name: 'Скоростной режим', description: 'Наберите 5000 очков в Тетрисе', icon: '⚡', hidden: false },
     { id: 'tetris_10000score', name: 'Ниндзя', description: 'Наберите 10000 очков в Тетрисе', icon: '🥷', hidden: true },
     { id: 'tetris_level10', name: 'Неудержимый', description: 'Достигните 10-го уровня в Тетрисе', icon: '💪', hidden: true },
@@ -86,15 +85,21 @@ function getAchievementsConfig() {
 // Получение глобальной статистики достижения (процент игроков)
 async function getAchievementStats(achievementId) {
   try {
-    const snap = await db.collection('users').get();
+    const { data: users, error } = await supabase
+      .from('users')
+      .select('data')
+      .neq('data->>role', 'admin');
+
+    if (error) throw error;
+
     let total = 0;
     let unlocked = 0;
-    snap.forEach(doc => {
-      const d = doc.data();
-      if (d.role === 'admin') return;
+    (users || []).forEach(user => {
       total++;
-      if ((d.achievements || []).includes(achievementId)) unlocked++;
+      const achievements = user.data?.achievements || [];
+      if (achievements.includes(achievementId)) unlocked++;
     });
+
     if (total === 0) return 0;
     return Math.round((unlocked / total) * 100);
   } catch (e) {
@@ -105,12 +110,17 @@ async function getAchievementStats(achievementId) {
 
 // Асинхронная проверка достижений
 async function checkAndAwardAchievements() {
-  const user = auth.currentUser;
+  const { data: { user } } = await supabase.auth.getUser();
   if (!user) return;
 
-  const userDoc = await db.collection('users').doc(user.uid).get();
-  if (!userDoc.exists) return;
-  const data = userDoc.data();
+  const { data: userRow, error: userError } = await supabase
+    .from('users')
+    .select('data')
+    .eq('id', user.id)
+    .single();
+
+  if (userError || !userRow) return;
+  const data = userRow.data || {};
   let unlocked = data.achievements || [];
   const gameStats = data.gameStats || {};
   const gameHistory = data.gameHistory || [];
@@ -130,7 +140,6 @@ async function checkAndAwardAchievements() {
     let earned = false;
 
     switch (ach.id) {
-      // Существующие
       case 'first_game': earned = gameHistory.length > 0; break;
       case 'clicker_100': earned = (gameStats.clicker?.totalClicks || 0) >= 100; break;
       case 'clicker_1000': earned = (gameStats.clicker?.totalClicks || 0) >= 1000; break;
@@ -148,14 +157,15 @@ async function checkAndAwardAchievements() {
 
       case 'top10':
       case 'top3': {
-        const snap = await db.collection('users').get();
-        const allPlayers = [];
-        snap.forEach(doc => {
-          const d = doc.data();
-          if (d.role !== 'admin') allPlayers.push({ uid: doc.id, points: d.points || 0 });
-        });
-        allPlayers.sort((a, b) => b.points - a.points);
-        const rank = allPlayers.findIndex(p => p.uid === user.uid) + 1;
+        // Получаем список всех не-админов, сортируем по очкам
+        const { data: allPlayers, error: leaderError } = await supabase
+          .from('users')
+          .select('id, data')
+          .neq('data->>role', 'admin')
+          .order('data->>points', { ascending: false });
+
+        if (leaderError) break;
+        const rank = (allPlayers || []).findIndex(p => p.id === user.id) + 1;
         if (ach.id === 'top10') {
           earned = (rank > 0 && rank <= 10);
           if (!earned && alreadyUnlocked) toRemove.push(ach.id);
@@ -237,7 +247,7 @@ async function checkAndAwardAchievements() {
       unlocked.push(ach.id);
       newlyUnlocked.push(ach);
     } else if (!earned && alreadyUnlocked && toRemove.includes(ach.id)) {
-      // удалим ниже
+      // удалим позже
     }
   }
 
@@ -246,7 +256,12 @@ async function checkAndAwardAchievements() {
   }
 
   if (newlyUnlocked.length > 0 || toRemove.length > 0) {
-    await db.collection('users').doc(user.uid).update({ achievements: unlocked });
+    const updatedData = { ...data, achievements: unlocked };
+    await supabase
+      .from('users')
+      .update({ data: updatedData })
+      .eq('id', user.id);
+
     const current = getCurrentUser();
     if (current) {
       current.achievements = unlocked;
@@ -254,7 +269,7 @@ async function checkAndAwardAchievements() {
     }
 
     for (const ach of newlyUnlocked) {
-      await addNotification(user.uid, `Получено достижение: ${ach.icon} ${ach.name}`, 'achievement', 'profile.html');
+      await addNotification(user.id, `Получено достижение: ${ach.icon} ${ach.name}`, 'achievement', 'profile.html');
     }
 
     // Дополнительно проверяем "Коллекционера" после обновления
