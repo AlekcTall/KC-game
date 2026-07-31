@@ -161,16 +161,16 @@
         <a href="../games.html" class="snake-back">← Вернуться к играм</a>
     </div>
 
-    <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-auth-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore-compat.js"></script>
-    <script src="../js/firebase-config.js"></script>
-    <script src="../js/firebase-auth.js"></script>
+    <!-- Supabase SDK и модули -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="../js/supabase-config.js"></script>
+    <script src="../js/auth.js"></script>
     <script src="../js/storage.js"></script>
     <script src="../js/achievements.js"></script>
     <script src="../js/notifications.js"></script>
     <script src="../js/easter-eggs.js"></script>
     <script src="../js/main.js"></script>
+
     <script>
         document.addEventListener('DOMContentLoaded', () => {
             if (typeof initEasterEggs === 'function') initEasterEggs();
@@ -200,7 +200,7 @@
         const ctx = canvas.getContext('2d');
         const dpr = window.devicePixelRatio || 1;
         const LOGICAL_SIZE = 500;
-        const CELL = LOGICAL_SIZE / 20; // 20 клеток, логическая клетка 25px
+        const CELL = LOGICAL_SIZE / 20;
         const GRID = 20;
         const STEP_INTERVAL = 130;
 
@@ -228,26 +228,49 @@
         const scoreEl = document.getElementById('score');
         const msgEl = document.getElementById('message');
 
-        auth.onAuthStateChanged(user => {
-            if (user) { loadBestAndTop(); } else { updateTopVisibility(); }
-        });
+        // Слушатель авторизации
+        if (typeof onAuthStateChange === 'function') {
+            onAuthStateChange((event, session) => {
+                if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
+                    if (session?.user) {
+                        currentUid = session.user.id;
+                        loadBestAndTop();
+                    }
+                } else {
+                    currentUid = null;
+                    updateTopVisibility();
+                }
+            });
+        }
 
         async function loadBestAndTop() {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user) return;
+
+            // Пробуем загрузить из кеша или Supabase
             const cu = getCurrentUser();
-            if (cu) currentUid = cu.uid || cu.id;
-            if (cu?.gameStats?.snake?.maxScore) bestScore = cu.gameStats.snake.maxScore;
-            if (auth.currentUser) {
-                try {
-                    const d = await db.collection('users').doc(auth.currentUser.uid).get();
-                    if (d.exists && d.data().gameStats?.snake?.maxScore) bestScore = d.data().gameStats.snake.maxScore;
-                } catch (e) {}
+            if (cu?.gameStats?.snake?.maxScore) {
+                bestScore = cu.gameStats.snake.maxScore;
             }
-            updateTopVisibility(); updateTop();
+            try {
+                const { data: row, error } = await supabase
+                    .from('users')
+                    .select('data')
+                    .eq('id', user.id)
+                    .single();
+                if (!error && row && row.data?.gameStats?.snake?.maxScore) {
+                    bestScore = row.data.gameStats.snake.maxScore;
+                }
+            } catch (e) {}
+
+            updateTopVisibility();
+            updateTop();
         }
 
         function updateTopVisibility() {
-            const table = document.getElementById('top-table'), warning = document.getElementById('auth-warning');
-            if (!auth.currentUser) {
+            const table = document.getElementById('top-table'),
+                warning = document.getElementById('auth-warning');
+            if (!currentUid) {
                 if (table) table.style.display = 'none';
                 if (warning) warning.style.display = 'block';
             } else {
@@ -258,23 +281,30 @@
 
         async function updateTop() {
             const tbody = document.querySelector('#top-table tbody');
-            if (!tbody) return;
-            if (!auth.currentUser) return;
+            if (!tbody || !currentUid) return;
+
             try {
-                const snap = await db.collection('users').get(), players = [];
-                snap.forEach(doc => {
-                    const d = doc.data();
-                    if (d.role === 'admin') return;
-                    const sc = d.gameStats?.snake?.maxScore || 0;
-                    if (sc > 0) players.push({ uid: doc.id, username: d.username || 'Аноним', score: sc });
-                });
-                players.sort((a, b) => b.score - a.score);
-                const top10 = players.slice(0, 10);
-                tbody.innerHTML = top10.map((p, i) => {
+                const { data: users, error } = await supabase
+                    .from('users')
+                    .select('id, data')
+                    .neq('data->>role', 'admin')
+                    .not('data->gameStats->snake->maxScore', 'is', null)
+                    .order('data->gameStats->snake->maxScore', { ascending: false })
+                    .limit(10);
+
+                if (error) throw error;
+
+                const players = (users || []).map(u => ({
+                    uid: u.id,
+                    username: u.data?.username || 'Аноним',
+                    score: u.data?.gameStats?.snake?.maxScore || 0
+                }));
+
+                tbody.innerHTML = players.map((p, i) => {
                     const me = (currentUid && p.uid === currentUid) ? ' class="me"' : '';
                     return `<tr${me}><td>${i+1}</td><td>${p.username}</td><td>${p.score}</td></tr>`;
                 }).join('');
-                if (!top10.length) tbody.innerHTML = '<tr><td colspan="3">Пока нет рекордов</td></tr>';
+                if (!players.length) tbody.innerHTML = '<tr><td colspan="3">Пока нет рекордов</td></tr>';
             } catch (e) { console.error(e); }
         }
 
@@ -332,7 +362,7 @@
         }
 
         function drawFood(deltaTime) {
-            applePulsePhase += deltaTime * 0.003; // плавная медленная пульсация
+            applePulsePhase += deltaTime * 0.003;
             const scale = 1 + Math.sin(applePulsePhase) * 0.05;
             const cx = Math.round(foodCell.col * CELL + CELL / 2);
             const cy = Math.round(foodCell.row * CELL + CELL / 2);
@@ -432,28 +462,27 @@
         function spawnParticle(col, row) { particles.push({ col, row, life: 1.0 }); }
 
         function updateParticles(deltaTime) {
-            const decay = deltaTime / 800; // время жизни ~0.8 секунды
+            const decay = deltaTime / 800;
             for (const p of particles) p.life -= decay;
             particles = particles.filter(p => p.life > 0);
         }
 
         async function award() {
-            const cu = getCurrentUser();
-            if (cu && cu.uid && auth.currentUser) {
-                try {
-                    const result = await addPointsToCurrentUser(1, 'snake');
-                    if (result && result.success) {
-                        const earned = result.points, hasDouble = earned > 1;
-                        const msg = `+${earned} балл(ов)${hasDouble ? ' (x2 бонус)' : ''}! Личный рекорд: ${Math.max(score, bestScore)} яблок`;
-                        msgEl.textContent = msg;
-                        showToast(`+${earned} балл(ов) за змейку!${hasDouble ? ' (x2 бонус)' : ''}`, 'success');
-                        await syncGameStats('snake', { maxScore: Math.max(score, bestScore) });
-                        checkAndAwardAchievements();
-                        if (score > bestScore) bestScore = score;
-                        updateTop();
-                    }
-                } catch (e) { console.error(e); }
-            }
+            if (!currentUid) return;
+            try {
+                const result = await addPointsToCurrentUser(1, 'snake');
+                if (result && result.success) {
+                    const earned = result.points,
+                        hasDouble = earned > 1;
+                    const msg = `+${earned} балл(ов)${hasDouble ? ' (x2 бонус)' : ''}! Личный рекорд: ${Math.max(score, bestScore)} яблок`;
+                    msgEl.textContent = msg;
+                    showToast(`+${earned} балл(ов) за змейку!${hasDouble ? ' (x2 бонус)' : ''}`, 'success');
+                    await syncGameStats('snake', { maxScore: Math.max(score, bestScore) });
+                    checkAndAwardAchievements();
+                    if (score > bestScore) bestScore = score;
+                    updateTop();
+                }
+            } catch (e) { console.error(e); }
         }
 
         function endGame() {
@@ -462,7 +491,7 @@
             if (score > bestScore) { bestScore = score; msgEl.textContent = 'Новый рекорд! '; }
             let reason = ''; if (isSelf) reason = 'Вы съели себя!'; else if (isWall) reason = 'Вы врезались в стену!';
             showGameOverOverlay(score, reason);
-            if (auth.currentUser) {
+            if (currentUid) {
                 syncGameStats('snake', { maxScore: score, selfEaten: isSelf, wallCrash: isWall })
                     .then(() => { checkAndAwardAchievements(); updateTop(); });
             }
