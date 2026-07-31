@@ -1,85 +1,321 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Рейтинг игроков | KC Games</title>
-    
-    <link rel="stylesheet" href="styles/main.css">
-    <link rel="stylesheet" href="styles/leaderboard.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Рейтинг – Геймификация КЦ</title>
+  <link rel="stylesheet" href="css/style.css">
+  <style>
+    .leaderboard-filters { display: flex; gap: 1rem; margin-bottom: 1.5rem; flex-wrap: wrap; align-items: flex-end; }
+    .filter-group { min-width: 160px; }
+    .filter-group label { display: block; font-weight: 600; font-size: 0.85rem; margin-bottom: 0.3rem; }
+    .filter-group input, .filter-group select { width: 100%; padding: 0.5rem; border: 1px solid #ccc; border-radius: 6px; }
+    .filter-range { display: flex; gap: 0.5rem; align-items: center; }
+    .filter-range input { width: 80px; }
+    .leaderboard-table { width: 100%; border-collapse: separate; border-spacing: 0; margin-top: 0.5rem; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.04); background: var(--color-white); }
+    .leaderboard-table th { background: #f1f5f9; color: #334155; font-weight: 600; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.5px; padding: 0.9rem 0.75rem; border-bottom: 2px solid #e2e8f0; }
+    .leaderboard-table td { padding: 0.8rem 0.75rem; border-bottom: 1px solid #f1f5f9; font-size: 0.95rem; transition: background 0.2s; }
+    .leaderboard-table tbody tr:hover { background: #f8fafc; }
+    .leaderboard-table tbody tr.top-1 { background: linear-gradient(to right, #fff9e6, #fff3cc); }
+    .leaderboard-table tbody tr.top-2 { background: linear-gradient(to right, #f5f9ff, #e6f0ff); }
+    .leaderboard-table tbody tr.top-3 { background: linear-gradient(to right, #fff5f0, #ffe9db); }
+    .place-cell { font-weight: 700; font-size: 1.1rem; color: #64748b; text-align: center; width: 60px; }
+    .top-1 .place-cell, .top-2 .place-cell, .top-3 .place-cell { font-size: 1.4rem; color: #334155; }
+    .top-1 .place-cell::before { content: "🥇 "; }
+    .top-2 .place-cell::before { content: "🥈 "; }
+    .top-3 .place-cell::before { content: "🥉 "; }
+    .player-cell { display: flex; align-items: center; gap: 0.7rem; }
+    .player-name-link { color: var(--color-primary); text-decoration: none; font-weight: 500; }
+    .player-name-link:hover { text-decoration: underline; }
+    .star-rating-name { color: #FBBF24; font-weight: 700; text-shadow: 0 0 5px rgba(251,191,36,0.5); }
+    .skeleton-row { animation: shimmer 1.5s infinite; }
+    .skeleton-row td { padding: 0.8rem 0.75rem; }
+    .skeleton-cell { height: 1rem; background: #e0e0e0; border-radius: 4px; }
+    .skeleton-avatar { width: 36px; height: 36px; border-radius: 50%; background: #e0e0e0; display: inline-block; }
+    @keyframes shimmer { 0% { opacity: 0.6; } 50% { opacity: 1; } 100% { opacity: 0.6; } }
+    .leaderboard-error { text-align: center; padding: 2rem; color: #e74c3c; }
+    .login-prompt-leaderboard { text-align: center; padding: 3rem 1rem; }
+    .login-prompt-leaderboard h3 { margin-bottom: 0.5rem; }
+    .login-prompt-leaderboard p { margin-bottom: 1.5rem; color: #666; }
+  </style>
 </head>
-<body class="dark-theme">
+<body>
+  <header class="header">
+    <div class="container header__inner">
+      <a href="index.html" class="logo">КЦ-Игры</a>
+      <button class="burger" id="burger-btn" aria-label="Меню">☰</button>
+      <nav class="nav" id="main-nav">
+        <ul class="nav__list">
+          <li><a href="index.html" class="nav__link">Главная</a></li>
+          <li><a href="games.html" class="nav__link">Игры</a></li>
+          <li><a href="leaderboard.html" class="nav__link active">Рейтинг</a></li>
+          <li><a href="shop.html" class="nav__link">Магазин</a></li>
+          <li><a href="profile.html" class="nav__link">Профиль</a></li>
+          <li><a href="admin.html" class="nav__link">Админ</a></li>
+        </ul>
+      </nav>
+      <div id="auth-status" class="auth-status"></div>
+    </div>
+  </header>
 
-    <!-- Навигация -->
-    <nav class="navbar">
-        <div class="container nav-container">
-            <a href="index.html" class="logo">KC Games</a>
-            <div class="nav-links">
-                <a href="index.html">Главная</a>
-                <a href="games.html">Игры</a>
-                <a href="shop.html">Магазин</a>
-                <a href="profile.html">Профиль</a>
-                <a href="leaderboard.html" class="active">Рейтинг</a>
-            </div>
-            <div class="user-info">
-                <span id="nav-balance" class="balance-badge">0 💰</span>
-                <span id="nav-points" class="points-badge">0 XP</span>
-            </div>
-        </div>
-    </nav>
+  <main class="main">
+    <div class="container">
+      <h2>Таблица лидеров</h2>
+      <div id="leaderboard-container"><p class="no-results">Загрузка...</p></div>
+    </div>
+  </main>
 
-    <main class="container leaderboard-container">
-        <header class="page-header">
-            <h1><i class="fas fa-trophy"></i> Топ игроков</h1>
-            <p>Лучшие игроки недели и все время</p>
-        </header>
+  <footer class="footer"><div class="container"><p>© 2026 ваши амбассадоры</p></div></footer>
 
-        <!-- Переключатели режимов -->
-        <div class="mode-switcher">
-            <button class="mode-btn active" data-mode="global">За все время</button>
-            <button class="mode-btn" data-mode="weekly">За неделю</button>
-            <button class="mode-btn" data-mode="monthly">За месяц</button>
-        </div>
+  <!-- Supabase SDK и модули -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="js/supabase-config.js"></script>
+  <script src="js/auth.js"></script>
+  <script src="js/storage.js"></script>
+  <script src="js/achievements.js"></script>
+  <script src="js/notifications.js"></script>
+  <script src="js/easter-eggs.js"></script>
+  <script src="js/feedback.js"></script>
+  <script src="js/main.js"></script>
 
-        <!-- Таблица лидеров -->
-        <div class="leaderboard-table-wrapper">
-            <table class="leaderboard-table">
-                <thead>
-                    <tr>
-                        <th>#</th>
-                        <th>Игрок</th>
-                        <th>Отдел</th>
-                        <th>Очки опыта</th>
-                        <th>Уровень</th>
-                    </tr>
-                </thead>
-                <tbody id="leaderboard-body">
-                    <tr>
-                        <td colspan="5" class="loading-row">
-                            <i class="fas fa-spinner fa-spin"></i> Загрузка рейтинга...
-                        </td>
-                    </tr>
-                </tbody>
-            </table>
-        </div>
+  <script>
+    (function() {
+      const CACHE_KEY = 'krugames_leaderboard';
+      const CACHE_TTL = 10 * 60 * 1000; // 10 минут
+      const FILTERS_KEY = 'krugames_leaderboard_filters';
 
-        <!-- Блок текущего пользователя -->
-        <div id="current-user-rank" class="my-rank-card">
-            <!-- Заполняется JS -->
-        </div>
-    </main>
+      let departmentsList = [];
+      let allUsers = [];
+      let currentUid = null;
 
-    <!-- Скрипты -->
-    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js"></script>
-    <script src="js/firebase-config.js"></script>
-    
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="js/supabase-client.js"></script>
-    
-    <script src="js/auth.js"></script>
-    <script src="js/leaderboard.js"></script>
+      let filterName, filterPointsMin, filterPointsMax, filterDept, filterAch;
+      let tableContainer;
 
+      async function loadDepartments() {
+        try {
+          const { data, error } = await supabase
+            .from('departments')
+            .select('name')
+            .order('name');
+
+          if (error) throw error;
+          departmentsList = data ? data.map(d => d.name) : [];
+          if (departmentsList.length === 0) {
+            departmentsList = ['РБ','МСБ','ТМ','Депозиты','ОКК','ООБП','Боссы','Заблудшие души'];
+          }
+        } catch (e) {
+          console.error(e);
+          departmentsList = ['Не удалось загрузить'];
+        }
+      }
+
+      function renderSkeletons() {
+        let html = '<table class="leaderboard-table"><thead><tr><th>Место</th><th>Игрок</th><th>Баллы</th><th>Отдел</th><th>🏆</th></tr></thead><tbody>';
+        for (let i = 0; i < 10; i++) {
+          html += `<tr class="skeleton-row">
+            <td><div class="skeleton-cell" style="width:30px;"></div></td>
+            <td><div class="skeleton-avatar"></div> <div class="skeleton-cell" style="width:100px; display:inline-block;"></div></td>
+            <td><div class="skeleton-cell" style="width:50px;"></div></td>
+            <td><div class="skeleton-cell" style="width:80px;"></div></td>
+            <td><div class="skeleton-cell" style="width:30px;"></div></td>
+          </tr>`;
+        }
+        html += '</tbody></table>';
+        tableContainer.innerHTML = html;
+      }
+
+      async function loadUsers() {
+        const cached = sessionStorage.getItem(CACHE_KEY);
+        if (cached) {
+          try {
+            const parsed = JSON.parse(cached);
+            if (Date.now() - parsed.timestamp < CACHE_TTL) {
+              allUsers = parsed.data;
+              renderTable();
+              return;
+            }
+          } catch (e) {}
+        }
+
+        if (!allUsers.length) {
+          renderSkeletons();
+        }
+
+        try {
+          // Получаем всех пользователей, кроме админов, сортируем по очкам
+          const { data, error } = await supabase
+            .from('users')
+            .select('id, data')
+            .neq('data->>role', 'admin')
+            .order('data->>points', { ascending: false });
+
+          if (error) throw error;
+
+          allUsers = (data || []).map(u => {
+            const d = u.data || {};
+            return {
+              uid: u.id,
+              id: u.id,
+              username: d.username || 'Без имени',
+              department: d.department || '',
+              points: d.points || 0,
+              achievements: d.achievements || [],
+              purchasedItems: d.purchasedItems || [],
+              avatarEmoji: d.avatarEmoji || null
+            };
+          });
+
+          sessionStorage.setItem(CACHE_KEY, JSON.stringify({
+            timestamp: Date.now(),
+            data: allUsers
+          }));
+
+          renderTable();
+        } catch (e) {
+          console.error('Ошибка загрузки рейтинга:', e);
+          if (!allUsers.length) {
+            tableContainer.innerHTML = '<p class="leaderboard-error">Не удалось загрузить рейтинг.</p>';
+          }
+        }
+      }
+
+      function renderTable() {
+        let filtered = [...allUsers];
+
+        const deptVal = filterDept.value;
+        if (deptVal) filtered = filtered.filter(u => u.department === deptVal);
+
+        const achVal = filterAch.value;
+        if (achVal === 'some') filtered = filtered.filter(u => u.achievements.length > 0);
+        else if (achVal === 'none') filtered = filtered.filter(u => u.achievements.length === 0);
+
+        const nameVal = filterName.value.trim().toLowerCase();
+        if (nameVal) filtered = filtered.filter(u => u.username.toLowerCase().includes(nameVal));
+
+        const pMin = parseInt(filterPointsMin.value, 10);
+        const pMax = parseInt(filterPointsMax.value, 10);
+        if (!isNaN(pMin)) filtered = filtered.filter(u => u.points >= pMin);
+        if (!isNaN(pMax)) filtered = filtered.filter(u => u.points <= pMax);
+
+        filtered.sort((a, b) => b.points - a.points);
+
+        saveFilters();
+
+        if (!filtered.length) {
+          tableContainer.innerHTML = '<p class="no-results">Никто не найден.</p>';
+          return;
+        }
+
+        let html = '<table class="leaderboard-table"><thead><tr><th>Место</th><th>Игрок</th><th>Баллы</th><th>Отдел</th><th>🏆</th></tr></thead><tbody>';
+        filtered.forEach((u, i) => {
+          let cls = i === 0 ? 'top-1' : i === 1 ? 'top-2' : i === 2 ? 'top-3' : '';
+          const hasStar = u.purchasedItems.includes('star_rating');
+          const nameClass = hasStar ? 'player-name-link star-rating-name' : 'player-name-link';
+          const av = typeof renderAvatarDiv === 'function'
+            ? renderAvatarDiv(u)
+            : `<div class="avatar-circle avatar-small" style="background:${getColorFromUid(u.uid)}">${getInitials(u.username)}</div>`;
+          html += `<tr class="${cls}">
+            <td class="place-cell">#${i + 1}</td>
+            <td class="player-cell">${av}<a href="public-profile.html?id=${u.id}" class="${nameClass}">${u.username}</a></td>
+            <td>${u.points}</td>
+            <td>${u.department || '—'}</td>
+            <td>${u.achievements.length}</td>
+          </tr>`;
+        });
+        html += '</tbody></table>';
+        tableContainer.innerHTML = html;
+      }
+
+      function saveFilters() {
+        const filters = {
+          name: filterName.value,
+          pointsMin: filterPointsMin.value,
+          pointsMax: filterPointsMax.value,
+          department: filterDept.value,
+          achievements: filterAch.value
+        };
+        sessionStorage.setItem(FILTERS_KEY, JSON.stringify(filters));
+      }
+
+      function restoreFilters() {
+        try {
+          const saved = JSON.parse(sessionStorage.getItem(FILTERS_KEY));
+          if (saved) {
+            filterName.value = saved.name || '';
+            filterPointsMin.value = saved.pointsMin || '';
+            filterPointsMax.value = saved.pointsMax || '';
+            filterDept.value = saved.department || '';
+            filterAch.value = saved.achievements || 'all';
+          }
+        } catch (e) {}
+      }
+
+      function buildUI() {
+        const container = document.getElementById('leaderboard-container');
+        container.innerHTML = `
+          <div class="leaderboard-filters" id="filters-block">
+            <div class="filter-group"><label>🔍 Имя</label><input type="text" id="filter-name"></div>
+            <div class="filter-group"><label>📊 Баллы</label><div class="filter-range"><input type="number" id="filter-points-min" placeholder="От"><span>–</span><input type="number" id="filter-points-max" placeholder="До"></div></div>
+            <div class="filter-group"><label>🏢 Отдел</label><select id="filter-department"><option value="">Все</option></select></div>
+            <div class="filter-group"><label>🏆 Достижения</label><select id="filter-achievements"><option value="all">Все</option><option value="some">Есть</option><option value="none">Нет</option></select></div>
+            <button class="btn btn-cancel" id="reset-filters-btn">Сбросить</button>
+          </div>
+          <div id="table-container"></div>
+        `;
+
+        tableContainer = document.getElementById('table-container');
+        filterName = document.getElementById('filter-name');
+        filterPointsMin = document.getElementById('filter-points-min');
+        filterPointsMax = document.getElementById('filter-points-max');
+        filterDept = document.getElementById('filter-department');
+        filterAch = document.getElementById('filter-achievements');
+
+        // Заполняем список отделов
+        departmentsList.forEach(d => {
+          const opt = document.createElement('option');
+          opt.value = d;
+          opt.textContent = d;
+          filterDept.appendChild(opt);
+        });
+
+        restoreFilters();
+
+        // Обработчики фильтров
+        [filterName, filterPointsMin, filterPointsMax, filterDept, filterAch].forEach(el => {
+          el.addEventListener('input', renderTable);
+          el.addEventListener('change', renderTable);
+        });
+
+        document.getElementById('reset-filters-btn').addEventListener('click', () => {
+          filterName.value = '';
+          filterPointsMin.value = '';
+          filterPointsMax.value = '';
+          filterDept.value = '';
+          filterAch.value = 'all';
+          sessionStorage.removeItem(FILTERS_KEY);
+          renderTable();
+        });
+
+        // Загружаем пользователей
+        loadUsers();
+      }
+
+      document.addEventListener('DOMContentLoaded', async () => {
+        // Проверяем авторизацию (ждём, пока auth.js инициализируется)
+        if (typeof onAuthStateChange === 'function') {
+          onAuthStateChange((event, session) => {
+            if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
+              currentUid = session?.user?.id || null;
+              loadDepartments().then(buildUI);
+            } else {
+              document.getElementById('leaderboard-container').innerHTML = '<div class="login-prompt-leaderboard"><h3>Войдите, чтобы увидеть рейтинг</h3><p>Пожалуйста, авторизуйтесь для просмотра таблицы лидеров.</p><a href="login.html?redirect=leaderboard.html" class="btn">Войти</a></div>';
+            }
+          });
+        } else {
+          document.getElementById('leaderboard-container').innerHTML = '<p>Ошибка загрузки системы авторизации.</p>';
+        }
+      });
+    })();
+  </script>
 </body>
 </html>
