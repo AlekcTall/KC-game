@@ -4,8 +4,6 @@
 
 // ============================================================
 // SHIM для совместимости со старым кодом
-// Эмулирует интерфейс Firebase Auth, чтобы остальные файлы
-// продолжали работать с auth.currentUser и auth.onAuthStateChanged
 // ============================================================
 window.auth = {
   currentUser: null,
@@ -13,7 +11,6 @@ window.auth = {
   onAuthStateChanged: function(callback) {
     const { data: { subscription } } = supa.auth.onAuthStateChange(async (event, session) => {
       const supaUser = session?.user || null;
-      // Эмулируем emailVerified и методы Firebase User
       if (supaUser) {
         supaUser.emailVerified = !!supaUser.email_confirmed_at;
         supaUser.sendEmailVerification = () =>
@@ -21,7 +18,6 @@ window.auth = {
         supaUser.updatePassword = (newPassword) =>
           supa.auth.updateUser({ password: newPassword });
         supaUser.updateProfile = async ({ displayName }) => {
-          // displayName → username в data
           const { data: row } = await supa.from('users').select('data').eq('id', supaUser.id).single();
           const newData = { ...(row?.data || {}), username: displayName };
           await supa.from('users').update({ data: newData, updated_at: new Date().toISOString() }).eq('id', supaUser.id);
@@ -29,7 +25,6 @@ window.auth = {
           if (c) { c.username = displayName; c._rawData = newData; setCurrentUser(c); }
         };
         supaUser.reauthenticateWithCredential = async (credential) => {
-          // В Supabase нет прямой аналогии. Проверяем старый пароль через signIn
           const { error } = await supa.auth.signInWithPassword({
             email: credential.email,
             password: credential.password
@@ -38,15 +33,12 @@ window.auth = {
           return { user: supaUser };
         };
         supaUser.delete = async () => {
-          // На клиенте удалить себя нельзя (нужен service_role).
-          // Просто выходим.
           await supa.auth.signOut();
         };
       }
       auth.currentUser = supaUser;
       callback(supaUser);
     });
-    // Возвращаем функцию отписки, как в Firebase
     return () => subscription.unsubscribe();
   },
 
@@ -71,23 +63,30 @@ window.auth = {
     if (error) throw error;
   },
 
-  // Эмуляция EmailAuthProvider для смены пароля в profile.html
   EmailAuthProvider: {
     credential: (email, password) => ({ email, password })
   }
 };
 
-// Обнуляем db, чтобы старые вызовы падали явно (а не работали с Firebase)
 window.db = null;
 
 // ============================================================
-// ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ДЛЯ РАБОТЫ С ДАННЫМИ
+// НОРМАЛИЗАЦИЯ ДАННЫХ
 // ============================================================
+function ensureArray(value) {
+  return Array.isArray(value) ? value : [];
+}
 
-// Распаковка строки БД в плоский объект (как в старом Firebase-коде)
 function unpackUserData(row) {
   if (!row) return null;
   const data = row.data || {};
+
+  // Нормализуем dailyLogin.loginHistory
+  const dailyLogin = data.dailyLogin || {};
+  if (dailyLogin.loginHistory && !Array.isArray(dailyLogin.loginHistory)) {
+    dailyLogin.loginHistory = [];
+  }
+
   return {
     uid: row.id,
     id: row.id,
@@ -96,32 +95,36 @@ function unpackUserData(row) {
     department: data.department || '',
     points: data.points || 0,
     lokoin_balance: data.lokoin_balance || 0,
-    purchasedItems: data.purchasedItems || [],
+    purchasedItems: ensureArray(data.purchasedItems),
     role: data.role || 'user',
     description: data.description || '',
-    achievements: data.achievements || [],
-    easterEggsFound: data.easterEggsFound || [],
-    completedGames: data.completedGames || [],
+    achievements: ensureArray(data.achievements),
+    easterEggsFound: ensureArray(data.easterEggsFound),
+    completedGames: ensureArray(data.completedGames),
     disabled: data.disabled || false,
-    dailyLogin: data.dailyLogin || { lastLoginDate: null, streak: 0, longestStreak: 0, totalLogins: 0, loginHistory: [] },
+    dailyLogin: {
+      lastLoginDate: dailyLogin.lastLoginDate || null,
+      streak: dailyLogin.streak || 0,
+      longestStreak: dailyLogin.longestStreak || 0,
+      totalLogins: dailyLogin.totalLogins || 0,
+      loginHistory: ensureArray(dailyLogin.loginHistory)
+    },
     activeEffects: data.activeEffects || {},
     gameStats: data.gameStats || {},
-    gameHistory: data.gameHistory || [],
+    gameHistory: ensureArray(data.gameHistory),
     battleshipStats: data.battleshipStats || {},
     tictactoeStats: data.tictactoeStats || {},
     rpsStats: data.rpsStats || {},
-    ownedAvatars: data.ownedAvatars || [],
+    ownedAvatars: ensureArray(data.ownedAvatars),
     avatarEmoji: data.avatarEmoji || null,
     activeTheme: data.activeTheme || 'light',
     customStatus: data.customStatus || '',
     showGoldFrame: data.showGoldFrame !== false,
     showAnimatedAvatar: data.showAnimatedAvatar !== false,
-    // Сырой JSONB для обратной упаковки
-    _rawData: data
+    _rawData: data   // сохраняем оригинал, но нормализованные поля уже в объекте
   };
 }
 
-// Упаковка плоского объекта обратно в JSONB для Supabase
 function packUserData(user) {
   const data = user._rawData ? { ...user._rawData } : {};
   const fields = [
@@ -137,7 +140,6 @@ function packUserData(user) {
   return data;
 }
 
-// Получить профиль пользователя по ID
 async function fetchUserById(uid) {
   const { data, error } = await supa
     .from('users')
@@ -149,16 +151,14 @@ async function fetchUserById(uid) {
 }
 
 // ============================================================
-// ОСНОВНЫЕ ФУНКЦИИ (с алиасами для совместимости)
+// ОСНОВНЫЕ ФУНКЦИИ
 // ============================================================
-
 async function registerUser(email, password, username, department) {
   const { data: authData, error: authError } = await supa.auth.signUp({ email, password });
   if (authError) throw authError;
   const user = authData.user;
   if (!user) throw new Error('Не удалось создать пользователя');
 
-  // Создаём запись в public.users
   const { error: dbError } = await supa.from('users').upsert([{
     id: user.id,
     email: user.email,
@@ -257,7 +257,6 @@ async function updateProfile(uid, updates) {
 
 // ============================================================
 // НАЧИСЛЕНИЕ БАЛЛОВ
-// TODO: В будущем заменить на RPC-функцию для 100% защиты от гонок данных
 // ============================================================
 async function addPointsToCurrentUser(points, gameId = null) {
   const { data: { user } } = await supa.auth.getUser();
@@ -287,11 +286,11 @@ async function addPointsToCurrentUser(points, gameId = null) {
     if (delta > 0) newData.lokoin_balance = newLokoinBalance;
 
     if (gameId) {
-      const completedGames = data.completedGames || [];
+      const completedGames = ensureArray(data.completedGames);
       if (!completedGames.includes(gameId)) {
         newData.completedGames = [...completedGames, gameId];
       }
-      const gameHistory = data.gameHistory || [];
+      const gameHistory = ensureArray(data.gameHistory);
       newData.gameHistory = [...gameHistory, { game: gameId, points: actualPoints, timestamp: Date.now() }];
     }
     newData.last_active = new Date().toISOString();
@@ -322,8 +321,7 @@ async function addPointsToCurrentUser(points, gameId = null) {
 }
 
 // ============================================================
-// ЕЖЕДНЕВНЫЙ ВХОД
-// TODO: В будущем заменить на RPC-функцию
+// ЕЖЕДНЕВНЫЙ ВХОД (исправлен)
 // ============================================================
 async function processDailyLogin(uid) {
   if (!uid) return null;
@@ -335,9 +333,11 @@ async function processDailyLogin(uid) {
       .single();
     if (error || !row) return null;
     const data = row.data || {};
-    const dailyLogin = data.dailyLogin || { lastLoginDate: null, streak: 0, longestStreak: 0, totalLogins: 0, loginHistory: [] };
+    const dailyLogin = data.dailyLogin || {};
+    let loginHistory = ensureArray(dailyLogin.loginHistory);
     const today = getMoscowDate();
     const yesterday = getYesterdayMoscow();
+
     if (dailyLogin.lastLoginDate === today) return null;
 
     let newStreak = dailyLogin.streak || 0;
@@ -345,7 +345,6 @@ async function processDailyLogin(uid) {
     else newStreak = 1;
     const reward = getDailyReward(newStreak);
 
-    const loginHistory = dailyLogin.loginHistory || [];
     loginHistory.push(today);
     const newDailyLogin = {
       lastLoginDate: today,
@@ -388,7 +387,7 @@ async function processDailyLogin(uid) {
 }
 
 // ============================================================
-// СИНХРОНИЗАЦИЯ
+// СИНХРОНИЗАЦИЯ (все используют ensureArray внутри по необходимости)
 // ============================================================
 async function syncEasterEggs(easterEggs) {
   const { data: { user } } = await supa.auth.getUser();
@@ -526,8 +525,7 @@ function getYesterdayMoscow() {
 }
 
 // ============================================================
-// АЛИАСЫ ДЛЯ СОВМЕСТИМОСТИ СО СТАРЫМ КОДОМ
-// Пока остальные файлы не переписаны, они продолжают работать
+// АЛИАСЫ И ГЛОБАЛЬНЫЕ ФУНКЦИИ
 // ============================================================
 window.firebaseRegister = registerUser;
 window.firebaseLogin = loginUser;
@@ -536,7 +534,6 @@ window.firebaseUpdateProfile = updateProfile;
 window.syncEasterEggsToFirestore = syncEasterEggs;
 window.syncAchievementsToFirestore = syncAchievements;
 
-// Глобальная функция onAuthStateChange для совместимости с новыми модулями
 window.onAuthStateChange = function(callback) {
   const { data: { subscription } } = supa.auth.onAuthStateChange((event, session) => {
     callback(event, session);
