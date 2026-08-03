@@ -23,7 +23,6 @@
   <main class="main"><div class="container"><h2>Доступные игры</h2><div id="games-filters-container"></div><div id="games-grid" class="games-grid"></div></div></main>
   <footer class="footer"><div class="container"><p>© 2026 ваши амбассадоры</p></div></footer>
 
-  <!-- Supabase SDK и модули -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="js/supabase-config.js"></script>
   <script src="js/auth.js"></script>
@@ -172,7 +171,19 @@
           renderGames();
         });
 
-        loadGames();
+        // Ожидаем авторизацию, затем загружаем игры
+        if (typeof onAuthStateChange === 'function') {
+          onAuthStateChange((event, session) => {
+            if (session?.user) {
+              loadGames();
+            } else {
+              grid.innerHTML = '<p style="text-align:center; padding:2rem;">Войдите, чтобы увидеть список игр. <a href="login.html?redirect=games.html">Войти</a></p>';
+            }
+          });
+        } else {
+          // Если модуль auth не загружен, пробуем загрузить сразу (для демо)
+          loadGames();
+        }
       });
     })();
   </script>
