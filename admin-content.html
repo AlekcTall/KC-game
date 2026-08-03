@@ -268,7 +268,9 @@
           }
           document.getElementById('news-modal').style.display = 'flex';
         }
+
         function toDatetimeLocal(date) { return date.toISOString().slice(0,16); }
+
         document.getElementById('news-modal-close').addEventListener('click', () => document.getElementById('news-modal').style.display = 'none');
         document.getElementById('news-save-btn').addEventListener('click', async () => {
           const title = document.getElementById('news-title').value.trim();
@@ -286,6 +288,7 @@
             : null;
 
           const dataRow = {
+            id: curNewsId || crypto.randomUUID(), // генерируем ID для новой новости
             title,
             content: body,
             data: { icon, imageUrl, videoUrl, link },
