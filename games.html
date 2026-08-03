@@ -40,12 +40,11 @@
       const filtersContainer = document.getElementById('games-filters-container');
       const CACHE_KEY = 'krugames_games_cache';
       const SEARCH_KEY = 'krugames_games_search';
-      const CACHE_TTL = 10 * 60 * 1000; // 10 минут
+      const CACHE_TTL = 10 * 60 * 1000;
 
       let allGames = [];
       let searchInput;
 
-      // Рендер скелетонов
       function renderSkeletons() {
         grid.innerHTML = Array.from({ length: 4 }, () => `
           <div class="skeleton-card">
@@ -57,7 +56,6 @@
         `).join('');
       }
 
-      // Отрисовка игр с учётом поиска
       function renderGames() {
         const query = searchInput.value.trim().toLowerCase();
         let filtered = allGames.filter(g => !g.hidden);
@@ -99,7 +97,6 @@
         });
       }
 
-      // Загрузка игр из Supabase с кешированием
       async function loadGames() {
         const cachedData = sessionStorage.getItem(CACHE_KEY);
         if (cachedData) {
@@ -139,12 +136,10 @@
         }
       }
 
-      // Сохранение поискового запроса
       function saveSearch() {
         sessionStorage.setItem(SEARCH_KEY, searchInput.value);
       }
 
-      // Восстановление поискового запроса
       function restoreSearch() {
         const saved = sessionStorage.getItem(SEARCH_KEY);
         if (saved) {
@@ -152,9 +147,7 @@
         }
       }
 
-      // Инициализация
       document.addEventListener('DOMContentLoaded', () => {
-        // Вставляем фильтры
         filtersContainer.innerHTML = `
           <div class="games-filters">
             <div class="filter-group">
@@ -168,7 +161,6 @@
         searchInput = document.getElementById('games-search');
         restoreSearch();
 
-        // Обработчики
         searchInput.addEventListener('input', () => {
           saveSearch();
           renderGames();
@@ -180,7 +172,6 @@
           renderGames();
         });
 
-        // Загружаем игры
         loadGames();
       });
     })();
