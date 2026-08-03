@@ -324,7 +324,6 @@
           try {
             const now = new Date();
             const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-            // Получаем всех пользователей с их данными для статистики
             const { data: users, error } = await supabase
               .from('users')
               .select('data');
@@ -338,7 +337,7 @@
               const d = u.data || {};
               total++;
               totalPoints += d.points || 0;
-              const history = d.gameHistory || [];
+              const history = Array.isArray(d.gameHistory) ? d.gameHistory : [];
               let active = false;
               history.forEach(h => {
                 if (h.game && gameCounts[h.game] !== undefined) gameCounts[h.game]++;
