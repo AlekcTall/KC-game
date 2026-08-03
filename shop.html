@@ -40,7 +40,6 @@
   </div></main>
   <footer class="footer"><div class="container"><p>© 2026 ваши амбассадоры</p></div></footer>
 
-  <!-- Модальное окно подтверждения покупки -->
   <div class="modal-overlay" id="purchase-modal" style="display:none;">
     <div class="modal">
       <span class="modal-close" id="modal-close">&times;</span>
@@ -54,7 +53,6 @@
     </div>
   </div>
 
-  <!-- Supabase SDK и наши модули -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="js/supabase-config.js"></script>
   <script src="js/auth.js"></script>
@@ -87,7 +85,6 @@
       const CACHE_KEY = 'krugames_shop_cache';
       const CACHE_TTL = 10 * 60 * 1000;
 
-      // Рендер скелетонов
       function renderSkeletons() {
         grid.innerHTML = Array.from({ length: 8 }, () => `
           <div class="skeleton-card">
@@ -99,7 +96,6 @@
         `).join('');
       }
 
-      // Загрузка товаров из Supabase
       async function loadShopItems() {
         const cached = sessionStorage.getItem(CACHE_KEY);
         if (cached) {
@@ -120,7 +116,6 @@
             .from('shop_items')
             .select('*')
             .order('category');
-
           if (error) throw error;
           allItems = data || [];
           sessionStorage.setItem(CACHE_KEY, JSON.stringify({ timestamp: Date.now(), items: allItems }));
@@ -132,7 +127,6 @@
         }
       }
 
-      // Категории
       function renderCategories() {
         const categories = [...new Set(allItems.map(i => i.category).filter(Boolean))];
         categoryContainer.innerHTML = '<button class="shop-category-btn active" data-category="all">Все</button>';
@@ -148,7 +142,6 @@
           });
           categoryContainer.appendChild(btn);
         });
-        // Обработчик для кнопки "Все"
         categoryContainer.querySelector('[data-category="all"]').addEventListener('click', () => {
           categoryContainer.querySelectorAll('.shop-category-btn').forEach(b => b.classList.remove('active'));
           categoryContainer.querySelector('[data-category="all"]').classList.add('active');
@@ -156,7 +149,6 @@
         });
       }
 
-      // Отрисовка товаров выбранной категории
       function renderItems(category) {
         let filtered = category === 'all' ? allItems : allItems.filter(i => i.category === category);
         filtered = filtered.filter(i => !i.hidden);
@@ -166,7 +158,7 @@
           return;
         }
 
-        const purchased = currentUserData?.purchasedItems || [];
+        const purchased = Array.isArray(currentUserData?.purchasedItems) ? currentUserData.purchasedItems : [];
         const activeEffects = currentUserData?.activeEffects || {};
         const now = Date.now();
 
@@ -211,7 +203,6 @@
           `;
         }).join('');
 
-        // Обработчики кнопок "Купить"
         grid.querySelectorAll('.btn-buy').forEach(btn => {
           if (btn.disabled) return;
           btn.addEventListener('click', (e) => {
@@ -222,7 +213,6 @@
         });
       }
 
-      // Открыть модальное окно покупки
       function openPurchaseModal(item) {
         modalIcon.textContent = item.icon || '🛒';
         modalTitle.textContent = item.name;
@@ -234,7 +224,6 @@
         modal.style.display = 'flex';
       }
 
-      // Закрыть модальное окно
       function closeModal() {
         modal.style.display = 'none';
         selectedItem = null;
@@ -242,7 +231,7 @@
       modalClose.addEventListener('click', closeModal);
       modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
 
-      // Подтверждение покупки
+      // ---------- ПОКУПКА (исправлено) ----------
       confirmBtn.addEventListener('click', async () => {
         if (!selectedItem || !currentUserData) return;
         confirmBtn.disabled = true;
@@ -253,57 +242,87 @@
           const userId = currentUserData.id;
           const price = selectedItem.price;
 
-          // Проверка баланса
           if (currentUserData.lokoin_balance < price) {
             throw new Error('Недостаточно локоинов.');
           }
 
-          // 1. Списываем локоины и добавляем товар в purchasedItems
+          // ----- Подготовка новых данных -----
+          const rawData = { ...currentUserData._rawData };
           const newBalance = currentUserData.lokoin_balance - price;
-          const purchased = [...(currentUserData.purchasedItems || []), selectedItem.id];
-          const newData = { ...currentUserData._rawData };
-          newData.lokoin_balance = newBalance;
-          newData.purchasedItems = purchased;
+          rawData.lokoin_balance = newBalance;
 
-          // Если есть эффект, активируем его
-          if (selectedItem.effect_type) {
-            const effects = newData.activeEffects || {};
-            const durationMs = (selectedItem.duration || 60) * 60000;
-            effects[selectedItem.effect_type] = {
-              activatedAt: Date.now(),
-              expiresAt: Date.now() + durationMs,
-              params: selectedItem.effect_params || {}
-            };
-            newData.activeEffects = effects;
+          // purchasedItems всегда массив
+          const purchased = Array.isArray(currentUserData.purchasedItems)
+            ? [...currentUserData.purchasedItems]
+            : [];
+          if (!purchased.includes(selectedItem.id)) {
+            purchased.push(selectedItem.id);
+          }
+          rawData.purchasedItems = purchased;
+
+          // ownedAvatars всегда массив
+          const ownedAvatars = Array.isArray(rawData.ownedAvatars) ? rawData.ownedAvatars : [];
+          rawData.ownedAvatars = ownedAvatars;
+
+          // ----- Обработка эффекта (если есть) -----
+          const effectType = selectedItem.effect_type;
+          if (effectType) {
+            // Бессрочные товары (duration = 0) – не создаём временный эффект
+            if (selectedItem.duration > 0) {
+              const durationMs = selectedItem.duration * 60000; // duration в минутах
+              const effects = rawData.activeEffects || {};
+              effects[effectType] = {
+                activatedAt: Date.now(),
+                expiresAt: Date.now() + durationMs,
+                params: selectedItem.effect_params || {}
+              };
+              rawData.activeEffects = effects;
+            } else {
+              // Постоянный эффект
+              if (effectType === 'custom_avatar') {
+                const emoji = selectedItem.effect_params?.avatar || '🐱';
+                if (!ownedAvatars.includes(emoji)) {
+                  ownedAvatars.push(emoji);
+                }
+                if (!rawData.avatarEmoji) {
+                  rawData.avatarEmoji = emoji;
+                }
+              } else if (effectType === 'dark_theme') {
+                rawData.activeTheme = 'dark';
+              } else if (effectType === 'gold_frame' || effectType === 'animated_avatar' || effectType === 'custom_status' || effectType === 'star_rating' || effectType === 'double_reactions' || effectType === 'special_reactions') {
+                // для этих типов просто добавляем товар в purchasedItems (уже сделано)
+              }
+            }
           }
 
-          // 2. Обновляем пользователя в БД
+          // ----- Обновление в БД -----
           const { error: updateError } = await supabase
             .from('users')
-            .update({ data: newData, updated_at: new Date().toISOString() })
+            .update({ data: rawData, updated_at: new Date().toISOString() })
             .eq('id', userId);
-
           if (updateError) throw updateError;
 
-          // 3. Создаём запись о покупке (для истории/админа)
+          // ----- История покупки -----
           await supabase.from('purchase_requests').insert([{
             user_id: userId,
             item_id: selectedItem.id,
             item_name: selectedItem.name,
             price: price,
-            status: 'approved', // сразу подтверждена, можно 'pending' для модерации
+            status: 'approved',
             created_at: new Date().toISOString()
           }]);
 
-          // 4. Обновляем локальный кеш
+          // ----- Обновляем локальный кэш -----
           currentUserData.lokoin_balance = newBalance;
           currentUserData.purchasedItems = purchased;
-          currentUserData._rawData = newData;
-          currentUserData.activeEffects = newData.activeEffects;
+          currentUserData._rawData = rawData;
+          currentUserData.activeEffects = rawData.activeEffects;
+          currentUserData.ownedAvatars = ownedAvatars;
+          if (rawData.avatarEmoji) currentUserData.avatarEmoji = rawData.avatarEmoji;
           setCurrentUser(currentUserData);
           updateAuthUI(auth.currentUser);
 
-          // 5. Уведомление
+          // ----- Уведомления -----
           if (typeof addNotification === 'function') {
             await addNotification(userId, `Вы приобрели «${selectedItem.name}» за ${price} лок.`, 'purchase', 'shop.html');
           }
@@ -311,7 +330,7 @@
             await addPurchaseNotification(userId, selectedItem.name, price, newBalance);
           }
 
-          // 6. Пасхалка "Первый покупатель"
+          // ----- Пасхалка -----
           if (purchased.length === 1 && typeof checkFirstPurchase === 'function') {
             await checkFirstPurchase();
           }
@@ -319,7 +338,7 @@
           purchaseMsg.textContent = '✅ Покупка успешна!';
           purchaseMsg.className = 'auth-message success';
 
-          // Перерисовываем список товаров
+          // Перерисовываем товары
           renderItems(categoryContainer.querySelector('.active').dataset.category);
 
           setTimeout(closeModal, 1500);
@@ -331,15 +350,13 @@
         }
       });
 
-      // Инициализация при загрузке
+      // ---------- ИНИЦИАЛИЗАЦИЯ ----------
       document.addEventListener('DOMContentLoaded', async () => {
-        // Ждём авторизации
         if (typeof onAuthStateChange === 'function') {
           onAuthStateChange(async (event, session) => {
             if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
               const { data: { user } } = await supabase.auth.getUser();
               if (user) {
-                // Загружаем данные пользователя
                 const { data: row } = await supabase
                   .from('users')
                   .select('id, email, data')
