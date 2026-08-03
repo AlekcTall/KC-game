@@ -97,25 +97,27 @@
       }
 
       async function loadGames() {
+        // Проверяем кеш
         const cachedData = sessionStorage.getItem(CACHE_KEY);
         if (cachedData) {
           try {
             const parsed = JSON.parse(cachedData);
-            if (Date.now() - parsed.timestamp < CACHE_TTL) {
+            // Игнорируем кеш, если он пустой или устарел
+            if (Date.now() - parsed.timestamp < CACHE_TTL && Array.isArray(parsed.games) && parsed.games.length > 0) {
               allGames = parsed.games;
               renderGames();
-              return;
+              return; // кеш валиден и не пуст, используем его
             } else {
+              // кеш устарел или пуст – удаляем и идём за свежими данными
               sessionStorage.removeItem(CACHE_KEY);
-              renderSkeletons();
             }
           } catch (e) {
             sessionStorage.removeItem(CACHE_KEY);
-            renderSkeletons();
           }
-        } else {
-          renderSkeletons();
         }
+
+        // Показываем скелетоны, пока грузим
+        renderSkeletons();
 
         try {
           const { data, error } = await supabase
@@ -125,13 +127,17 @@
           if (error) throw error;
 
           allGames = data || [];
-          sessionStorage.setItem(CACHE_KEY, JSON.stringify({ timestamp: Date.now(), games: allGames }));
+          // Сохраняем только если массив не пуст
+          if (allGames.length > 0) {
+            sessionStorage.setItem(CACHE_KEY, JSON.stringify({ timestamp: Date.now(), games: allGames }));
+          } else {
+            // если вдруг пришёл пустой массив, удаляем старый кеш
+            sessionStorage.removeItem(CACHE_KEY);
+          }
           renderGames();
         } catch (e) {
           console.error('Ошибка загрузки игр:', e);
-          if (!allGames.length) {
-            grid.innerHTML = '<p class="games-error">Не удалось загрузить игры.</p>';
-          }
+          grid.innerHTML = '<p class="games-error">Не удалось загрузить игры.</p>';
         }
       }
 
@@ -171,7 +177,7 @@
           renderGames();
         });
 
-        // Ожидаем авторизацию, затем загружаем игры
+        // Ждём авторизацию, затем загружаем игры
         if (typeof onAuthStateChange === 'function') {
           onAuthStateChange((event, session) => {
             if (session?.user) {
@@ -181,7 +187,7 @@
             }
           });
         } else {
-          // Если модуль auth не загружен, пробуем загрузить сразу (для демо)
+          // если auth не загружен – просто пробуем загрузить
           loadGames();
         }
       });
