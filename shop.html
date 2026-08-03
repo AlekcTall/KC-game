@@ -158,10 +158,9 @@
           return;
         }
 
-        // Берем данные из localStorage, чтобы всегда были актуальными
-        const freshUser = getCurrentUser();
-        const purchased = Array.isArray(freshUser?.purchasedItems) ? freshUser.purchasedItems : [];
-        const activeEffects = freshUser?.activeEffects || {};
+        // Используем currentUserData, который обновляется после покупки
+        const purchased = Array.isArray(currentUserData?.purchasedItems) ? currentUserData.purchasedItems : [];
+        const activeEffects = currentUserData?.activeEffects || {};
         const now = Date.now();
 
         grid.innerHTML = filtered.map(item => {
@@ -180,7 +179,7 @@
           }
 
           let timerHtml = '';
-          if (item.effect_type && activeEffects[item.effect_type]) {
+          if (item.duration > 0 && item.effect_type && activeEffects[item.effect_type]) {
             const effect = activeEffects[item.effect_type];
             const expiresAt = effect.expiresAt || 0;
             if (expiresAt > now) {
@@ -303,6 +302,7 @@
             created_at: new Date().toISOString()
           }]);
 
+          // Обновляем currentUserData
           currentUserData.lokoin_balance = newBalance;
           currentUserData.purchasedItems = purchased;
           currentUserData._rawData = rawData;
@@ -326,7 +326,8 @@
           purchaseMsg.textContent = '✅ Покупка успешна!';
           purchaseMsg.className = 'auth-message success';
 
-          renderItems(categoryContainer.querySelector('.active').dataset.category);
+          // Перерисовываем товары — теперь currentUserData обновлён, плашка появится
+          renderItems(categoryContainer.querySelector('.active')?.dataset?.category || 'all');
 
           setTimeout(closeModal, 1500);
         } catch (error) {
