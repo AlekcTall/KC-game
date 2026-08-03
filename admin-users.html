@@ -56,12 +56,16 @@
     </div>
   </main>
 
-  <!-- Модальное окно редактирования -->
+  <!-- Модальное окно редактирования пользователя -->
   <div class="modal-overlay" id="edit-modal" style="display:none;">
     <div class="modal" style="max-width:450px;">
       <span class="modal-close" id="edit-modal-close">&times;</span>
       <h3>Редактирование пользователя</h3>
       <input type="hidden" id="edit-user-id">
+      <div class="form-group">
+        <label>Имя</label>
+        <input type="text" id="edit-username">
+      </div>
       <div class="form-group">
         <label>Баланс Локоинов:</label>
         <input type="number" id="edit-balance">
@@ -78,8 +82,45 @@
           <option value="moderator">Moderator</option>
         </select>
       </div>
+      <div class="form-group">
+        <label><input type="checkbox" id="edit-disabled"> Заблокирован</label>
+      </div>
       <button class="btn" id="save-user-btn">Сохранить</button>
       <p id="edit-message" class="auth-message"></p>
+    </div>
+  </div>
+
+  <!-- Модальное окно подарка -->
+  <div class="modal-overlay" id="gift-modal" style="display:none;">
+    <div class="modal" style="max-width:400px;">
+      <span class="modal-close" id="gift-modal-close">&times;</span>
+      <h3>Подарить товар</h3>
+      <p id="gift-user-name"></p>
+      <div class="form-group">
+        <label for="gift-item-select">Товар</label>
+        <select id="gift-item-select"></select>
+      </div>
+      <button class="btn" id="gift-submit">Подарить</button>
+      <p id="gift-message" class="auth-message"></p>
+    </div>
+  </div>
+
+  <!-- Модальное окно выдачи награды -->
+  <div class="modal-overlay" id="award-modal" style="display:none;">
+    <div class="modal" style="max-width:450px;">
+      <span class="modal-close" id="award-modal-close">&times;</span>
+      <h3>Выдать награду</h3>
+      <p id="award-user-name"></p>
+      <div class="form-group">
+        <label for="award-select">Награда</label>
+        <select id="award-select"></select>
+      </div>
+      <div class="form-group">
+        <label for="award-comment">Комментарий</label>
+        <textarea id="award-comment" rows="2"></textarea>
+      </div>
+      <button class="btn" id="award-submit">Выдать</button>
+      <p id="award-message" class="auth-message"></p>
     </div>
   </div>
 
@@ -117,6 +158,22 @@
         sessionStorage.setItem(CACHE_KEY, JSON.stringify({ timestamp: Date.now(), data: users }));
       }
 
+      // Загрузка списков товаров и наград для модалок
+      let shopItems = [];
+      let awardsList = [];
+
+      async function loadShopItemsForGift() {
+        if (shopItems.length > 0) return;
+        const { data, error } = await supabase.from('shop_items').select('id, name, price, icon');
+        if (!error) shopItems = data || [];
+      }
+
+      async function loadAwards() {
+        if (awardsList.length > 0) return;
+        const { data, error } = await supabase.from('awards').select('id, name, lokoin_reward, icon');
+        if (!error) awardsList = data || [];
+      }
+
       document.addEventListener('DOMContentLoaded', async () => {
         const container = document.getElementById('admin-container');
 
@@ -140,6 +197,8 @@
 
               renderPage();
               loadUsers();
+              loadShopItemsForGift();
+              loadAwards();
             } catch (e) {
               container.innerHTML = `<p>Ошибка: ${e.message}</p>`;
             }
@@ -165,6 +224,7 @@
                   <th>Баланс 💰</th>
                   <th>Очки ⭐</th>
                   <th>Роль</th>
+                  <th>Статус</th>
                   <th>Действия</th>
                 </tr>
               </thead>
@@ -175,22 +235,36 @@
           document.getElementById('reload-users-btn').addEventListener('click', loadUsers);
           document.getElementById('search-user').addEventListener('input', filterUsers);
 
-          // Закрытие модалки
+          // Закрытие модалок
           document.getElementById('edit-modal-close').addEventListener('click', () => {
             document.getElementById('edit-modal').style.display = 'none';
+          });
+          document.getElementById('gift-modal-close').addEventListener('click', () => {
+            document.getElementById('gift-modal').style.display = 'none';
+          });
+          document.getElementById('award-modal-close').addEventListener('click', () => {
+            document.getElementById('award-modal').style.display = 'none';
           });
           window.addEventListener('click', (e) => {
             if (e.target === document.getElementById('edit-modal')) {
               document.getElementById('edit-modal').style.display = 'none';
             }
+            if (e.target === document.getElementById('gift-modal')) {
+              document.getElementById('gift-modal').style.display = 'none';
+            }
+            if (e.target === document.getElementById('award-modal')) {
+              document.getElementById('award-modal').style.display = 'none';
+            }
           });
 
-          // Сохранение
+          // Сохранение редактирования
           document.getElementById('save-user-btn').addEventListener('click', async () => {
             const id = document.getElementById('edit-user-id').value;
+            const username = document.getElementById('edit-username').value.trim();
             const balance = parseInt(document.getElementById('edit-balance').value, 10);
             const points = parseInt(document.getElementById('edit-points').value, 10);
             const role = document.getElementById('edit-role').value;
+            const disabled = document.getElementById('edit-disabled').checked;
             const msgEl = document.getElementById('edit-message');
             const btn = document.getElementById('save-user-btn');
 
@@ -203,7 +277,6 @@
             btn.textContent = 'Сохранение...';
 
             try {
-              // Получаем текущий data
               const { data: currentRow, error: fetchError } = await supabase
                 .from('users')
                 .select('data')
@@ -214,9 +287,11 @@
               const currentData = currentRow.data || {};
               const updatedData = {
                 ...currentData,
+                username,
                 lokoin_balance: balance,
                 points: points,
-                role: role
+                role: role,
+                disabled: disabled
               };
 
               const { error: updateError } = await supabase
@@ -239,13 +314,96 @@
               btn.textContent = 'Сохранить';
             }
           });
+
+          // Подарок товара
+          document.getElementById('gift-submit').addEventListener('click', async () => {
+            const select = document.getElementById('gift-item-select');
+            const itemId = select.value;
+            if (!itemId) {
+              document.getElementById('gift-message').textContent = 'Выберите товар.';
+              return;
+            }
+            const userId = document.getElementById('gift-modal').dataset.userId;
+            if (!userId) return;
+
+            const item = shopItems.find(i => i.id === itemId);
+            try {
+              const { data: userRow } = await supabase.from('users').select('data').eq('id', userId).single();
+              const userData = userRow.data || {};
+              const purchased = Array.isArray(userData.purchasedItems) ? userData.purchasedItems : [];
+              if (!purchased.includes(item.id)) purchased.push(item.id);
+              const newData = { ...userData, purchasedItems: purchased };
+              await supabase.from('users').update({ data: newData, updated_at: new Date().toISOString() }).eq('id', userId);
+
+              // Уведомление
+              if (typeof addNotification === 'function') {
+                await addNotification(userId, `🎁 Вам подарен товар: ${item.name}`, 'gift', 'shop.html');
+              }
+
+              document.getElementById('gift-message').textContent = 'Товар подарен!';
+              document.getElementById('gift-message').className = 'auth-message success';
+              setTimeout(() => { document.getElementById('gift-modal').style.display = 'none'; }, 1500);
+              loadUsers();
+            } catch (err) {
+              document.getElementById('gift-message').textContent = 'Ошибка: ' + err.message;
+            }
+          });
+
+          // Выдача награды
+          document.getElementById('award-submit').addEventListener('click', async () => {
+            const select = document.getElementById('award-select');
+            const awardId = select.value;
+            const comment = document.getElementById('award-comment').value.trim();
+            if (!awardId) {
+              document.getElementById('award-message').textContent = 'Выберите награду.';
+              return;
+            }
+            const userId = document.getElementById('award-modal').dataset.userId;
+            if (!userId) return;
+
+            const award = awardsList.find(a => a.id === awardId);
+            try {
+              // Запись в user_awarded
+              const { data: { user } } = await supabase.auth.getUser();
+              await supabase.from('user_awarded').insert([{
+                user_id: userId,
+                award_id: awardId,
+                awarded_at: new Date().toISOString(),
+                comment,
+                given_by: user?.id
+              }]);
+
+              // Начисление локоинов
+              if (award.lokoin_reward > 0) {
+                const { data: userRow } = await supabase.from('users').select('data').eq('id', userId).single();
+                const userData = userRow.data || {};
+                const newBalance = (userData.lokoin_balance || 0) + award.lokoin_reward;
+                const newData = { ...userData, lokoin_balance: newBalance };
+                await supabase.from('users').update({ data: newData, updated_at: new Date().toISOString() }).eq('id', userId);
+              }
+
+              // Уведомление
+              let msg = `Вы получили награду «${award.name}»!`;
+              if (comment) msg += ` Комментарий: ${comment}`;
+              if (award.lokoin_reward > 0) msg += ` (+${award.lokoin_reward} лок.)`;
+              if (typeof addNotification === 'function') {
+                await addNotification(userId, msg, 'award', 'profile.html');
+              }
+
+              document.getElementById('award-message').textContent = 'Награда выдана!';
+              document.getElementById('award-message').className = 'auth-message success';
+              setTimeout(() => { document.getElementById('award-modal').style.display = 'none'; }, 1500);
+              loadUsers();
+            } catch (err) {
+              document.getElementById('award-message').textContent = 'Ошибка: ' + err.message;
+            }
+          });
         }
 
         async function loadUsers() {
           const tbody = document.getElementById('users-tbody');
           if (!tbody) return;
 
-          // Показываем скелетоны
           tbody.innerHTML = Array.from({ length: 8 }, () => `
             <tr class="skeleton-row">
               <td><div class="skeleton-cell" style="width:80px;"></div></td>
@@ -255,6 +413,7 @@
               <td><div class="skeleton-cell" style="width:60px;"></div></td>
               <td><div class="skeleton-cell" style="width:60px;"></div></td>
               <td><div class="skeleton-cell" style="width:60px;"></div></td>
+              <td><div class="skeleton-cell" style="width:100px;"></div></td>
             </tr>
           `).join('');
 
@@ -271,7 +430,7 @@
             renderUsersTable(allUsers);
           } catch (e) {
             console.error(e);
-            tbody.innerHTML = '<tr><td colspan="7" class="error-message">Ошибка загрузки</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="8" class="error-message">Ошибка загрузки</td></tr>';
           }
         }
 
@@ -293,13 +452,14 @@
           if (!tbody) return;
 
           if (!users.length) {
-            tbody.innerHTML = '<tr><td colspan="7">Пользователей нет</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="8">Пользователей нет</td></tr>';
             return;
           }
 
           tbody.innerHTML = users.map(u => {
             const d = u.data || {};
             const roleClass = d.role === 'admin' ? 'badge-admin' : (d.role === 'moderator' ? 'badge-moderator' : 'badge-user');
+            const status = d.disabled ? '🔒' : '✅';
             return `
               <tr>
                 <td class="small-text" title="${u.id}">${u.id.substring(0, 8)}...</td>
@@ -308,28 +468,79 @@
                 <td>${d.lokoin_balance || 0}</td>
                 <td>${d.points || 0}</td>
                 <td><span class="badge ${roleClass}">${d.role || 'user'}</span></td>
+                <td>${status}</td>
                 <td>
-                  <button class="btn btn-small edit-user-btn" data-uid="${u.id}" data-balance="${d.lokoin_balance || 0}" data-points="${d.points || 0}" data-role="${d.role || 'user'}">✏️</button>
+                  <button class="btn btn-small edit-user-btn" data-uid="${u.id}" data-username="${d.username || ''}" data-balance="${d.lokoin_balance || 0}" data-points="${d.points || 0}" data-role="${d.role || 'user'}" data-disabled="${d.disabled || false}">✏️</button>
+                  <button class="btn btn-small toggle-block-btn" data-uid="${u.id}" data-disabled="${d.disabled || false}">${d.disabled ? '🔓' : '🔒'}</button>
+                  <button class="btn btn-small gift-btn" data-uid="${u.id}" data-username="${d.username || ''}">🎁</button>
+                  <button class="btn btn-small award-btn" data-uid="${u.id}" data-username="${d.username || ''}">🎖️</button>
                 </td>
               </tr>
             `;
           }).join('');
 
-          // Обработчики кнопок редактирования
+          // Обработчики
           document.querySelectorAll('.edit-user-btn').forEach(btn => {
             btn.addEventListener('click', () => {
-              openEditModal(btn.dataset.uid, btn.dataset.balance, btn.dataset.points, btn.dataset.role);
+              openEditModal(btn.dataset.uid, btn.dataset.username, btn.dataset.balance, btn.dataset.points, btn.dataset.role, btn.dataset.disabled === 'true');
+            });
+          });
+
+          document.querySelectorAll('.toggle-block-btn').forEach(btn => {
+            btn.addEventListener('click', async () => {
+              const uid = btn.dataset.uid;
+              const currentDisabled = btn.dataset.disabled === 'true';
+              const newDisabled = !currentDisabled;
+              if (confirm(`Вы уверены, что хотите ${newDisabled ? 'заблокировать' : 'разблокировать'} пользователя?`)) {
+                const { data: currentRow } = await supabase.from('users').select('data').eq('id', uid).single();
+                const newData = { ...(currentRow?.data || {}), disabled: newDisabled };
+                await supabase.from('users').update({ data: newData, updated_at: new Date().toISOString() }).eq('id', uid);
+                showToast(newDisabled ? 'Пользователь заблокирован' : 'Пользователь разблокирован', 'success');
+                loadUsers();
+              }
+            });
+          });
+
+          document.querySelectorAll('.gift-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+              openGiftModal(btn.dataset.uid, btn.dataset.username);
+            });
+          });
+
+          document.querySelectorAll('.award-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+              openAwardModal(btn.dataset.uid, btn.dataset.username);
             });
           });
         }
 
-        function openEditModal(id, balance, points, role) {
+        function openEditModal(id, username, balance, points, role, disabled) {
           document.getElementById('edit-user-id').value = id;
+          document.getElementById('edit-username').value = username;
           document.getElementById('edit-balance').value = balance;
           document.getElementById('edit-points').value = points;
           document.getElementById('edit-role').value = role;
+          document.getElementById('edit-disabled').checked = disabled;
           document.getElementById('edit-message').textContent = '';
           document.getElementById('edit-modal').style.display = 'flex';
+        }
+
+        function openGiftModal(userId, username) {
+          document.getElementById('gift-user-name').textContent = `Пользователь: ${username}`;
+          document.getElementById('gift-message').textContent = '';
+          const select = document.getElementById('gift-item-select');
+          select.innerHTML = shopItems.map(item => `<option value="${item.id}">${item.icon || '🛒'} ${item.name} (${item.price} лок.)</option>`).join('');
+          document.getElementById('gift-modal').dataset.userId = userId;
+          document.getElementById('gift-modal').style.display = 'flex';
+        }
+
+        function openAwardModal(userId, username) {
+          document.getElementById('award-user-name').textContent = `Пользователь: ${username}`;
+          document.getElementById('award-message').textContent = '';
+          const select = document.getElementById('award-select');
+          select.innerHTML = awardsList.map(a => `<option value="${a.id}">${a.name} ${a.lokoin_reward > 0 ? `(+${a.lokoin_reward} лок.)` : ''}</option>`).join('');
+          document.getElementById('award-modal').dataset.userId = userId;
+          document.getElementById('award-modal').style.display = 'flex';
         }
       });
     })();
