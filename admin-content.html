@@ -275,6 +275,10 @@
         document.getElementById('news-save-btn').addEventListener('click', async () => {
           const title = document.getElementById('news-title').value.trim();
           if (!title) { document.getElementById('news-message').textContent = 'Введите заголовок'; return; }
+          
+          const { data: { user } } = await supabase.auth.getUser();
+          const authorId = user?.id || null;
+          
           const body = document.getElementById('news-body').value.trim();
           const icon = document.getElementById('news-icon').value.trim() || '📢';
           const imageUrl = document.getElementById('news-image-url').value.trim();
@@ -288,9 +292,10 @@
             : null;
 
           const dataRow = {
-            id: curNewsId || crypto.randomUUID(), // генерируем ID для новой новости
+            id: curNewsId || crypto.randomUUID(),
             title,
             content: body,
+            author_id: authorId,
             data: { icon, imageUrl, videoUrl, link },
             publish_at: publishAt,
             expire_at: expireAt,
