@@ -158,13 +158,13 @@
           return;
         }
 
-        // Используем currentUserData, который обновляется после покупки
         const purchased = Array.isArray(currentUserData?.purchasedItems) ? currentUserData.purchasedItems : [];
         const activeEffects = currentUserData?.activeEffects || {};
         const now = Date.now();
 
         grid.innerHTML = filtered.map(item => {
-          const owned = item.unique && purchased.includes(item.id);
+          // Показываем "Куплено", если id товара есть в purchasedItems
+          const owned = purchased.includes(item.id);
           let stockText = '';
           if (item.stock !== null && item.stock !== undefined) {
             stockText = `<div class="shop-card__stock">Осталось: ${item.stock} шт.</div>`;
@@ -326,7 +326,7 @@
           purchaseMsg.textContent = '✅ Покупка успешна!';
           purchaseMsg.className = 'auth-message success';
 
-          // Перерисовываем товары — теперь currentUserData обновлён, плашка появится
+          // Перерисовываем товары
           renderItems(categoryContainer.querySelector('.active')?.dataset?.category || 'all');
 
           setTimeout(closeModal, 1500);
