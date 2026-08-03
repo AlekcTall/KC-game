@@ -1,195 +1,184 @@
-/**
- * Effects Engine (Supabase Version)
- * Управление активными эффектами: рамки, темы, двойной опыт и т.д.
- */
+// js/effects-engine.js
 
-// Инициализация при загрузке страницы
-document.addEventListener('DOMContentLoaded', () => {
-    checkActiveEffects();
-    // Проверяем эффекты каждую минуту
-    setInterval(checkActiveEffects, 60000);
-});
-
-/**
- * Проверка и применение активных эффектов
- */
-async function checkActiveEffects() {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-
-    try {
-        // Читаем профиль из Supabase
-        const { data: row, error } = await supabase
-            .from('users')
-            .select('data')
-            .eq('id', user.id)
-            .single();
-
-        if (error || !row) return;
-
-        const userData = row.data || {};
-        const effects = userData.activeEffects || {};
-        const now = Date.now();
-
-        let hasChanges = false;
-        const activeEffectsNow = {};
-
-        // Перебираем все эффекты
-        for (const [effectId, effectData] of Object.entries(effects)) {
-            const expiresAt = effectData.expiresAt || 0;
-
-            if (expiresAt > now) {
-                // Эффект еще активен -> применяем
-                activeEffectsNow[effectId] = effectData;
-                applyEffectVisuals(effectId, effectData);
-            } else {
-                // Эффект истек -> помечаем на удаление
-                console.log(`Эффект ${effectId} истек`);
-                hasChanges = true;
-                removeEffectVisuals(effectId);
-            }
-        }
-
-        // Если что-то истекло, обновляем базу
-        if (hasChanges) {
-            await supabase
-                .from('users')
-                .update({ 
-                    data: { ...userData, activeEffects: activeEffectsNow } 
-                })
-                .eq('id', user.id);
-            
-            console.log('Активные эффекты обновлены');
-        }
-
-    } catch (err) {
-        console.error('Ошибка проверки эффектов:', err);
+// Карта обработчиков эффектов
+const EFFECT_HANDLERS = {
+  dark_theme: {
+    displayName: '🌙 Тёмная тема',
+    handler: async (userId, params) => {
+      const { data: row } = await supabase.from('users').select('data').eq('id', userId).single();
+      const newData = { ...(row?.data || {}), activeTheme: 'dark' };
+      await supabase.from('users').update({ data: newData }).eq('id', userId);
+      document.body.classList.add('dark-theme');
+      return true;
     }
-}
-
-/**
- * Применение визуальных эффектов (CSS классы, темы)
- */
-function applyEffectVisuals(effectId, effectData) {
-    const body = document.body;
-
-    switch (effectId) {
-        case 'dark_theme_perm':
-            body.classList.add('dark-theme');
-            localStorage.setItem('theme', 'dark');
-            break;
-        
-        case 'gold_frame':
-            body.classList.add('has-gold-frame');
-            break;
-        
-        case 'double_xp':
-            // Визуально можно добавить иконку рядом с балансом
-            const xpBadge = document.getElementById('nav-points');
-            if (xpBadge && !xpBadge.classList.contains('double-xp-active')) {
-                xpBadge.classList.add('double-xp-active');
-                xpBadge.title = 'Двойной опыт активен!';
-            }
-            break;
-
-        case 'vip_status':
-            body.classList.add('vip-user');
-            break;
-            
-        default:
-            // Кастомные эффекты из data
-            if (effectData.cssClass) {
-                body.classList.add(effectData.cssClass);
-            }
-            break;
+  },
+  gold_frame: {
+    displayName: '🖼️ Золотая рамка',
+    handler: async (userId, params) => {
+      const { data: row } = await supabase.from('users').select('data').eq('id', userId).single();
+      const purchased = Array.isArray(row?.data?.purchasedItems) ? row.data.purchasedItems : [];
+      purchased.push('gold_frame');
+      const newData = { ...(row?.data || {}), purchasedItems: purchased };
+      await supabase.from('users').update({ data: newData }).eq('id', userId);
+      return true;
     }
-}
-
-/**
- * Удаление визуальных эффектов
- */
-function removeEffectVisuals(effectId, effectData = {}) {
-    const body = document.body;
-
-    switch (effectId) {
-        case 'dark_theme_perm':
-            // Не удаляем автоматически, чтобы пользователь мог переключить вручную
-            break;
-        
-        case 'gold_frame':
-            body.classList.remove('has-gold-frame');
-            break;
-        
-        case 'double_xp':
-            const xpBadge = document.getElementById('nav-points');
-            if (xpBadge) {
-                xpBadge.classList.remove('double-xp-active');
-                xpBadge.title = '';
-            }
-            break;
-
-        case 'vip_status':
-            body.classList.remove('vip-user');
-            break;
-            
-        default:
-            if (effectData.cssClass) {
-                body.classList.remove(effectData.cssClass);
-            }
-            break;
+  },
+  animated_avatar: {
+    displayName: '✨ Анимированный аватар',
+    handler: async (userId, params) => {
+      const { data: row } = await supabase.from('users').select('data').eq('id', userId).single();
+      const purchased = Array.isArray(row?.data?.purchasedItems) ? row.data.purchasedItems : [];
+      purchased.push('animated_avatar');
+      const newData = { ...(row?.data || {}), purchasedItems: purchased };
+      await supabase.from('users').update({ data: newData }).eq('id', userId);
+      return true;
     }
-}
-
-/**
- * Активация эффекта после покупки
- * Вызывается из shop.js после успешной покупки
- */
-window.activateEffect = async (itemId, itemData) => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return false;
-
-    try {
-        // Получаем текущие данные
-        const { data: userRow, error: fetchError } = await supabase
-            .from('users')
-            .select('data')
-            .eq('id', user.id)
-            .single();
-
-        if (fetchError) throw fetchError;
-
-        const currentData = userRow.data || {};
-        const currentEffects = currentData.activeEffects || {};
-
-        // Вычисляем время окончания
-        const durationMinutes = itemData.duration || 60; // По умолчанию 1 час
-        const expiresAt = Date.now() + (durationMinutes * 60 * 1000);
-
-        // Добавляем новый эффект
-        currentEffects[itemId] = {
-            activatedAt: Date.now(),
-            expiresAt: expiresAt,
-            params: itemData.effectParams || {}
-        };
-
-        // Обновляем в базе
-        const { error: updateError } = await supabase
-            .from('users')
-            .update({ 
-                data: { ...currentData, activeEffects: currentEffects } 
-            })
-            .eq('id', user.id);
-
-        if (updateError) throw updateError;
-
-        // Сразу применяем визуально
-        applyEffectVisuals(itemId, currentEffects[itemId]);
-        
-        console.log(`Эффект ${itemId} активирован до ${new Date(expiresAt).toLocaleTimeString()}`);
-        return true;
-
-    } catch (err) {
-        console.error('Ошибка активации эффекта:', err);
-        return false;
+  },
+  custom_status: {
+    displayName: '💬 Кастомный статус',
+    handler: async (userId, params) => {
+      const { data: row } = await supabase.from('users').select('data').eq('id', userId).single();
+      const purchased = Array.isArray(row?.data?.purchasedItems) ? row.data.purchasedItems : [];
+      purchased.push('custom_status');
+      const newData = { ...(row?.data || {}), purchasedItems: purchased };
+      await supabase.from('users').update({ data: newData }).eq('id', userId);
+      return true;
     }
+  },
+  custom_avatar: {
+    displayName: '🐱 Кастомный аватар',
+    handler: async (userId, params) => {
+      const emoji = params.avatar || '🐱';
+      const { data: row } = await supabase.from('users').select('data').eq('id', userId).single();
+      const userData = row?.data || {};
+      const ownedAvatars = Array.isArray(userData.ownedAvatars) ? userData.ownedAvatars : [];
+      if (!ownedAvatars.includes(emoji)) {
+        ownedAvatars.push(emoji);
+      }
+      const newData = { ...userData, ownedAvatars: ownedAvatars };
+      if (!userData.avatarEmoji) newData.avatarEmoji = emoji;
+      await supabase.from('users').update({ data: newData }).eq('id', userId);
+      return true;
+    }
+  },
+  double_xp: {
+    displayName: '⚡ Двойной опыт',
+    handler: async (userId, params) => {
+      const durationHours = params.duration || 1;
+      const { data: row } = await supabase.from('users').select('data').eq('id', userId).single();
+      const userData = row?.data || {};
+      const effects = userData.activeEffects || {};
+      effects['double_xp'] = { activatedAt: Date.now(), durationHours };
+      const newData = { ...userData, activeEffects: effects };
+      await supabase.from('users').update({ data: newData }).eq('id', userId);
+      return true;
+    }
+  },
+  fast_cooldown: {
+    displayName: '⏱️ Ускорение кулдауна',
+    handler: async (userId, params) => {
+      const durationHours = params.duration || 24;
+      const { data: row } = await supabase.from('users').select('data').eq('id', userId).single();
+      const userData = row?.data || {};
+      const effects = userData.activeEffects || {};
+      effects['fast_cooldown'] = { activatedAt: Date.now(), durationHours };
+      const newData = { ...userData, activeEffects: effects };
+      await supabase.from('users').update({ data: newData }).eq('id', userId);
+      return true;
+    }
+  },
+  star_rating: {
+    displayName: '⭐ Звезда в рейтинге',
+    handler: async (userId, params) => {
+      const { data: row } = await supabase.from('users').select('data').eq('id', userId).single();
+      const purchased = Array.isArray(row?.data?.purchasedItems) ? row.data.purchasedItems : [];
+      purchased.push('star_rating');
+      const newData = { ...(row?.data || {}), purchasedItems: purchased };
+      await supabase.from('users').update({ data: newData }).eq('id', userId);
+      return true;
+    }
+  },
+  double_reactions: {
+    displayName: '💯 Двойная реакция',
+    handler: async (userId, params) => {
+      const { data: row } = await supabase.from('users').select('data').eq('id', userId).single();
+      const purchased = Array.isArray(row?.data?.purchasedItems) ? row.data.purchasedItems : [];
+      purchased.push('double_reactions');
+      const newData = { ...(row?.data || {}), purchasedItems: purchased };
+      await supabase.from('users').update({ data: newData }).eq('id', userId);
+      return true;
+    }
+  },
+  special_reactions: {
+    displayName: '🚀 Особые реакции',
+    handler: async (userId, params) => {
+      const { data: row } = await supabase.from('users').select('data').eq('id', userId).single();
+      const purchased = Array.isArray(row?.data?.purchasedItems) ? row.data.purchasedItems : [];
+      purchased.push('special_reactions');
+      const newData = { ...(row?.data || {}), purchasedItems: purchased };
+      await supabase.from('users').update({ data: newData }).eq('id', userId);
+      return true;
+    }
+  },
+  coffee_boss: {
+    displayName: '☕ Кофе с руководителем',
+    handler: async (userId, params) => { return true; }
+  },
+  gift_certificate: {
+    displayName: '🎖️ Именная награда',
+    handler: async (userId, params) => { return true; }
+  },
+  extra_break: {
+    displayName: '☕ Дополнительный перерыв',
+    handler: async (userId, params) => { return true; }
+  },
+  priority_vacation: {
+    displayName: '🏖️ Приоритет отпуска',
+    handler: async (userId, params) => { return true; }
+  },
+  quality_10: {
+    displayName: '💯 +10 к оценке',
+    handler: async (userId, params) => { return true; }
+  },
+  short_shift: {
+    displayName: '⏰ Сокращённая смена',
+    handler: async (userId, params) => { return true; }
+  }
 };
+
+// Универсальная функция применения эффекта товара
+async function applyItemEffect(userId, item) {
+  const effectType = item.effect_type || item.effect;
+  if (!effectType) return false;
+
+  const entry = EFFECT_HANDLERS[effectType];
+  if (!entry) {
+    console.error('Неизвестный тип эффекта:', effectType);
+    return false;
+  }
+
+  try {
+    const params = {
+      ...(item.effect_params || {}),
+      duration: item.duration || 0
+    };
+    await entry.handler(userId, params);
+    return true;
+  } catch (e) {
+    console.error('Ошибка применения эффекта:', e);
+    return false;
+  }
+}
+
+// Получить список доступных типов эффектов (для админки)
+function getAvailableEffectTypes() {
+  return Object.keys(EFFECT_HANDLERS).map(key => ({
+    id: key,
+    name: EFFECT_HANDLERS[key].displayName || key
+  }));
+}
+
+// Получить человекочитаемое название эффекта по ключу
+function getEffectDisplayName(effectId) {
+  return EFFECT_HANDLERS[effectId]?.displayName || effectId;
+}
