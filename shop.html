@@ -158,8 +158,10 @@
           return;
         }
 
-        const purchased = Array.isArray(currentUserData?.purchasedItems) ? currentUserData.purchasedItems : [];
-        const activeEffects = currentUserData?.activeEffects || {};
+        // Берем данные из localStorage, чтобы всегда были актуальными
+        const freshUser = getCurrentUser();
+        const purchased = Array.isArray(freshUser?.purchasedItems) ? freshUser.purchasedItems : [];
+        const activeEffects = freshUser?.activeEffects || {};
         const now = Date.now();
 
         grid.innerHTML = filtered.map(item => {
@@ -231,7 +233,6 @@
       modalClose.addEventListener('click', closeModal);
       modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
 
-      // ---------- ПОКУПКА (исправлено) ----------
       confirmBtn.addEventListener('click', async () => {
         if (!selectedItem || !currentUserData) return;
         confirmBtn.disabled = true;
@@ -246,12 +247,10 @@
             throw new Error('Недостаточно локоинов.');
           }
 
-          // ----- Подготовка новых данных -----
           const rawData = { ...currentUserData._rawData };
           const newBalance = currentUserData.lokoin_balance - price;
           rawData.lokoin_balance = newBalance;
 
-          // purchasedItems всегда массив
           const purchased = Array.isArray(currentUserData.purchasedItems)
             ? [...currentUserData.purchasedItems]
             : [];
@@ -260,16 +259,13 @@
           }
           rawData.purchasedItems = purchased;
 
-          // ownedAvatars всегда массив
           const ownedAvatars = Array.isArray(rawData.ownedAvatars) ? rawData.ownedAvatars : [];
           rawData.ownedAvatars = ownedAvatars;
 
-          // ----- Обработка эффекта (если есть) -----
           const effectType = selectedItem.effect_type;
           if (effectType) {
-            // Бессрочные товары (duration = 0) – не создаём временный эффект
             if (selectedItem.duration > 0) {
-              const durationMs = selectedItem.duration * 60000; // duration в минутах
+              const durationMs = selectedItem.duration * 60000;
               const effects = rawData.activeEffects || {};
               effects[effectType] = {
                 activatedAt: Date.now(),
@@ -278,7 +274,6 @@
               };
               rawData.activeEffects = effects;
             } else {
-              // Постоянный эффект
               if (effectType === 'custom_avatar') {
                 const emoji = selectedItem.effect_params?.avatar || '🐱';
                 if (!ownedAvatars.includes(emoji)) {
@@ -289,20 +284,16 @@
                 }
               } else if (effectType === 'dark_theme') {
                 rawData.activeTheme = 'dark';
-              } else if (effectType === 'gold_frame' || effectType === 'animated_avatar' || effectType === 'custom_status' || effectType === 'star_rating' || effectType === 'double_reactions' || effectType === 'special_reactions') {
-                // для этих типов просто добавляем товар в purchasedItems (уже сделано)
               }
             }
           }
 
-          // ----- Обновление в БД -----
           const { error: updateError } = await supabase
             .from('users')
             .update({ data: rawData, updated_at: new Date().toISOString() })
             .eq('id', userId);
           if (updateError) throw updateError;
 
-          // ----- История покупки -----
           await supabase.from('purchase_requests').insert([{
             user_id: userId,
             item_id: selectedItem.id,
@@ -312,7 +303,6 @@
             created_at: new Date().toISOString()
           }]);
 
-          // ----- Обновляем локальный кэш -----
           currentUserData.lokoin_balance = newBalance;
           currentUserData.purchasedItems = purchased;
           currentUserData._rawData = rawData;
@@ -322,7 +312,6 @@
           setCurrentUser(currentUserData);
           updateAuthUI(auth.currentUser);
 
-          // ----- Уведомления -----
           if (typeof addNotification === 'function') {
             await addNotification(userId, `Вы приобрели «${selectedItem.name}» за ${price} лок.`, 'purchase', 'shop.html');
           }
@@ -330,7 +319,6 @@
             await addPurchaseNotification(userId, selectedItem.name, price, newBalance);
           }
 
-          // ----- Пасхалка -----
           if (purchased.length === 1 && typeof checkFirstPurchase === 'function') {
             await checkFirstPurchase();
           }
@@ -338,7 +326,6 @@
           purchaseMsg.textContent = '✅ Покупка успешна!';
           purchaseMsg.className = 'auth-message success';
 
-          // Перерисовываем товары
           renderItems(categoryContainer.querySelector('.active').dataset.category);
 
           setTimeout(closeModal, 1500);
@@ -350,7 +337,6 @@
         }
       });
 
-      // ---------- ИНИЦИАЛИЗАЦИЯ ----------
       document.addEventListener('DOMContentLoaded', async () => {
         if (typeof onAuthStateChange === 'function') {
           onAuthStateChange(async (event, session) => {
