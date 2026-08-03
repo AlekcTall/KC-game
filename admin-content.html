@@ -251,7 +251,6 @@
             document.getElementById('news-modal-title').textContent = 'Редактировать';
             document.getElementById('news-title').value = news.title || '';
             document.getElementById('news-body').value = news.content || '';
-            // Извлекаем данные из JSONB data
             const nd = news.data || {};
             document.getElementById('news-icon').value = nd.icon || '📢';
             document.getElementById('news-image-url').value = nd.imageUrl || '';
@@ -343,7 +342,10 @@
           if (allAwards.length) {
             html += '<ul class="awards-list">';
             allAwards.forEach(x => {
-              html += `<li><span><img src="img/awards/${x.icon}" class="award-icon-preview" onerror="this.style.display='none'"> <strong>${x.name}</strong> (${x.id})${x.lokoin_reward>0?` — +${x.lokoin_reward} лок.`:''}</span><div><button class="btn btn-small edit-award-btn" data-award-id="${x.id}">✏️</button><button class="btn btn-small btn-danger delete-award-btn" data-award-id="${x.id}">Удалить</button></div></li>`;
+              const iconHtml = x.icon 
+                ? `<img src="img/awards/${x.icon}" class="award-icon-preview" onerror="this.style.display='none'" alt="${x.name}">` 
+                : '<span style="font-size:24px;">🎖️</span>';
+              html += `<li><span>${iconHtml} <strong>${x.name}</strong> (${x.id})${x.lokoin_reward>0?` — +${x.lokoin_reward} лок.`:''}</span><div><button class="btn btn-small edit-award-btn" data-award-id="${x.id}">✏️</button><button class="btn btn-small btn-danger delete-award-btn" data-award-id="${x.id}">Удалить</button></div></li>`;
             });
             html += '</ul>';
           } else html += '<p>Нет наград.</p>';
