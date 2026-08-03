@@ -12,6 +12,7 @@
     .shop-items-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 1.5rem; margin-top: 1rem; }
     .shop-card { background: white; border-radius: 12px; padding: 1.5rem; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.05); transition: transform 0.2s, box-shadow 0.2s; display: flex; flex-direction: column; }
     .shop-card:hover { transform: translateY(-3px); box-shadow: 0 6px 16px rgba(0,0,0,0.08); }
+    .shop-card.owned { background: linear-gradient(135deg, #f0fdf4, #e6f7e6); border: 2px solid #27ae60; }
     .shop-card__icon { font-size: 2.5rem; margin-bottom: 0.5rem; }
     .shop-card__title { font-weight: 600; margin-bottom: 0.3rem; color: var(--color-header); }
     .shop-card__desc { font-size: 0.85rem; color: #666; margin-bottom: 1rem; flex: 1; }
@@ -19,6 +20,7 @@
     .shop-card__stock { font-size: 0.8rem; color: #e74c3c; margin-bottom: 0.5rem; }
     .shop-card__duration { font-size: 0.8rem; color: #888; margin-bottom: 0.5rem; }
     .shop-card__timer { font-size: 0.8rem; color: #e67e22; font-weight: 600; margin-bottom: 0.5rem; }
+    .already-owned { display: inline-block; margin-top: 0.5rem; padding: 0.4rem 1rem; background: #27ae60; color: white; border-radius: 20px; font-weight: 600; font-size: 0.85rem; box-shadow: 0 2px 6px rgba(39, 174, 96, 0.3); }
     .btn-buy { width: 100%; }
     .modal { max-width: 400px; text-align: center; }
     .modal-icon { font-size: 3rem; margin-bottom: 0.5rem; }
@@ -163,7 +165,6 @@
         const now = Date.now();
 
         grid.innerHTML = filtered.map(item => {
-          // Показываем "Куплено", если id товара есть в purchasedItems
           const owned = purchased.includes(item.id);
           let stockText = '';
           if (item.stock !== null && item.stock !== undefined) {
@@ -189,7 +190,7 @@
           }
 
           return `
-            <div class="shop-card" data-item-id="${item.id}">
+            <div class="shop-card ${owned ? 'owned' : ''}" data-item-id="${item.id}">
               <div class="shop-card__icon">${item.icon || '🛒'}</div>
               <div class="shop-card__title">${item.name}</div>
               <div class="shop-card__desc">${item.description || ''}</div>
@@ -197,15 +198,15 @@
               ${durationText}
               ${stockText}
               ${timerHtml}
-              <button class="btn btn-buy" ${owned ? 'disabled' : ''} data-id="${item.id}">
-                ${owned ? 'Куплено' : 'Купить'}
-              </button>
+              ${owned 
+                ? '<span class="already-owned">✅ Уже куплено</span>' 
+                : `<button class="btn btn-buy" data-id="${item.id}">Купить</button>`
+              }
             </div>
           `;
         }).join('');
 
         grid.querySelectorAll('.btn-buy').forEach(btn => {
-          if (btn.disabled) return;
           btn.addEventListener('click', (e) => {
             const itemId = e.target.dataset.id;
             selectedItem = allItems.find(i => i.id === itemId);
@@ -302,7 +303,6 @@
             created_at: new Date().toISOString()
           }]);
 
-          // Обновляем currentUserData
           currentUserData.lokoin_balance = newBalance;
           currentUserData.purchasedItems = purchased;
           currentUserData._rawData = rawData;
@@ -326,7 +326,6 @@
           purchaseMsg.textContent = '✅ Покупка успешна!';
           purchaseMsg.className = 'auth-message success';
 
-          // Перерисовываем товары
           renderItems(categoryContainer.querySelector('.active')?.dataset?.category || 'all');
 
           setTimeout(closeModal, 1500);
