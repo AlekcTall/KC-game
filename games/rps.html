@@ -206,7 +206,10 @@
         let lastOpponentChoice = null;
         let lastRoundResult = null;
         let isSubmitting = false;
-        let gameEndProcessed = false;
+        // FIX #5: используем ID игры вместо глобального флага
+        let processedGameId = null;
+        // FIX #3: флаг для предотвращения множественных ходов ИИ
+        let aiMoveScheduled = false;
 
         if (typeof onAuthStateChange === 'function') {
             onAuthStateChange(async (event, session) => {
@@ -245,6 +248,71 @@
             else console.log(msg);
         }
 
+        // ========== ГЛОБАЛЬНЫЙ ОБРАБОТЧИК КЛИКОВ (FIX #6: делегирование событий) ==========
+        gameContainer.addEventListener('click', (e) => {
+            // Клик по кнопке выбора
+            const choiceBtn = e.target.closest('.choice-btn:not(:disabled)');
+            if (choiceBtn && gameData?.status === 'active') {
+                submitChoice(choiceBtn.dataset.choice);
+                return;
+            }
+
+            // Кнопка "Отменить игру"
+            if (e.target.closest('#cancel-game-btn')) {
+                cancelGame();
+                return;
+            }
+
+            // Кнопка "Новая игра"
+            if (e.target.closest('#new-game-btn')) {
+                unsubscribeFromGame();
+                gameId = null; gameData = null;
+                processedGameId = null;
+                showLobby();
+                return;
+            }
+
+            // Кнопка "Сдаться"
+            if (e.target.closest('#surrender-btn')) {
+                surrender();
+                return;
+            }
+
+            // Кнопка "Играть с другом"
+            if (e.target.closest('#create-pvp-btn')) {
+                createGame(false);
+                return;
+            }
+
+            // Кнопка "Играть с компьютером"
+            if (e.target.closest('#play-ai-btn')) {
+                createGame(true);
+                return;
+            }
+
+            // Кнопка "Присоединиться"
+            if (e.target.closest('#join-game-btn')) {
+                joinGame();
+                return;
+            }
+
+            // Кнопка "Войти" в открытую игру
+            const joinBtn = e.target.closest('.join-open-btn');
+            if (joinBtn) {
+                joinGameById(joinBtn.dataset.id);
+                return;
+            }
+
+            // Кнопки сложности
+            const diffBtn = e.target.closest('.difficulty-btn');
+            if (diffBtn) {
+                document.querySelectorAll('.difficulty-btn').forEach(b => b.classList.remove('selected'));
+                diffBtn.classList.add('selected');
+                aiLevel = diffBtn.dataset.level;
+                return;
+            }
+        });
+
         // ========== ЛОББИ ==========
         function showLobby() {
             unsubscribeFromOpenGames();
@@ -254,7 +322,8 @@
             myChoice = null; opponentChoice = null;
             lastMyChoice = null; lastOpponentChoice = null; lastRoundResult = null;
             isSubmitting = false;
-            gameEndProcessed = false;
+            processedGameId = null;
+            aiMoveScheduled = false;
 
             gameContainer.innerHTML = `
                 <div class="lobby-panel">
@@ -287,18 +356,6 @@
                     <div id="open-games-list"><p>Загрузка...</p></div>
                 </div>
             `;
-
-            document.getElementById('create-pvp-btn').addEventListener('click', () => createGame(false));
-            document.getElementById('play-ai-btn').addEventListener('click', () => createGame(true));
-            document.getElementById('join-game-btn').addEventListener('click', joinGame);
-
-            document.querySelectorAll('.difficulty-btn').forEach(btn => {
-                btn.addEventListener('click', () => {
-                    document.querySelectorAll('.difficulty-btn').forEach(b => b.classList.remove('selected'));
-                    btn.classList.add('selected');
-                    aiLevel = btn.dataset.level;
-                });
-            });
 
             openGamesChannel = supabase
                 .channel('open_rps_games')
@@ -342,7 +399,6 @@
             });
             html += '</tbody></table>';
             list.innerHTML = html;
-            list.querySelectorAll('.join-open-btn').forEach(b => b.addEventListener('click', () => joinGameById(b.dataset.id)));
         }
 
         // ========== РЕЙТИНГИ ==========
@@ -396,7 +452,7 @@
                 opponentUid = Object.keys(players).find(uid => uid !== currentUser.id) || 'ai';
                 myScore = players[currentUser.id]?.score || 0;
                 opponentScore = players[opponentUid]?.score || 0;
-                gameEndProcessed = false;
+                processedGameId = null;
                 subscribeToGame();
                 return true;
             } catch (e) { return false; }
@@ -404,13 +460,15 @@
 
         // ========== СОЗДАНИЕ / ПРИСОЕДИНЕНИЕ ==========
         async function createGame(aiMode = false) {
+            if (!currentUser) { showToast('Войдите, чтобы играть', 'error'); return; }
             try {
                 isAI = aiMode;
-                gameEndProcessed = false;
+                processedGameId = null;
                 gameId = 'rps_' + Date.now() + '_' + myUid.substring(0,5);
 
+                const username = (typeof getCurrentUser === 'function' ? getCurrentUser()?.username : null) || currentUser.user_metadata?.username || 'Игрок';
                 const players = {
-                    [myUid]: { username: getCurrentUser()?.username || 'Игрок', score: 0 }
+                    [myUid]: { username, score: 0 }
                 };
                 if (aiMode) players['ai'] = { username: 'Компьютер', score: 0 };
 
@@ -438,6 +496,7 @@
         }
 
         async function joinGameById(id) {
+            if (!currentUser) { showToast('Войдите, чтобы играть', 'error'); return; }
             try {
                 const { data, error } = await supabase
                     .from('rps_games')
@@ -447,30 +506,31 @@
 
                 if (error || !data) { showToast('Игра не найдена', 'error'); return; }
 
-                const gameData = data;
-                if (gameData.participants?.includes(myUid)) {
-                    gameId = gameData.id;
-                    isAI = gameData.data?.isAI || false;
-                    const players = gameData.data?.players || {};
+                const gData = data;
+                if (gData.participants?.includes(myUid)) {
+                    gameId = gData.id;
+                    isAI = gData.data?.isAI || false;
+                    const players = gData.data?.players || {};
                     opponentUid = Object.keys(players).find(uid => uid !== myUid) || 'ai';
                     myScore = players[myUid]?.score || 0;
                     opponentScore = players[opponentUid]?.score || 0;
-                    gameEndProcessed = false;
+                    processedGameId = null;
                     subscribeToGame();
                     showToast('Игра восстановлена', 'info');
                     return;
                 }
 
-                if (gameData.status !== 'waiting') { showToast('Игра уже началась или завершена', 'error'); return; }
+                if (gData.status !== 'waiting') { showToast('Игра уже началась или завершена', 'error'); return; }
 
-                const updatedData = { ...gameData.data };
-                updatedData.players[myUid] = { username: getCurrentUser()?.username || 'Игрок', score: 0 };
+                const username = (typeof getCurrentUser === 'function' ? getCurrentUser()?.username : null) || currentUser.user_metadata?.username || 'Игрок';
+                const updatedData = { ...gData.data };
+                updatedData.players[myUid] = { username, score: 0 };
 
                 const { error: updateError } = await supabase
                     .from('rps_games')
                     .update({
                         data: updatedData,
-                        participants: [...(gameData.participants || []), myUid],
+                        participants: [...(gData.participants || []), myUid],
                         status: 'active'
                     })
                     .eq('id', id);
@@ -481,7 +541,7 @@
                 isAI = false;
                 opponentUid = Object.keys(updatedData.players).find(uid => uid !== myUid);
                 myScore = 0; opponentScore = 0;
-                gameEndProcessed = false;
+                processedGameId = null;
                 subscribeToGame();
                 showToast('Вы присоединились!', 'success');
             } catch (e) { showToast('Ошибка: ' + e.message, 'error'); }
@@ -523,8 +583,8 @@
             if (gameData.status === 'active') {
                 renderGameScreen();
             } else if (gameData.status === 'finished') {
-                if (!gameEndProcessed) {
-                    gameEndProcessed = true;
+                // FIX #5: вызываем handleGameEnd для ТЕКУЩЕГО пользователя при завершении игры
+                if (processedGameId !== gameId) {
                     const isWin = gameData.winner === myUid;
                     handleGameEnd(isWin);
                 }
@@ -542,7 +602,6 @@
                     <button class="btn" id="cancel-game-btn">Отменить игру</button>
                 </div>
             `;
-            document.getElementById('cancel-game-btn').addEventListener('click', cancelGame);
         }
 
         function renderGameScreen() {
@@ -592,18 +651,13 @@
 
             gameContainer.innerHTML = html;
 
-            document.querySelectorAll('.choice-btn').forEach(btn => {
-                btn.addEventListener('click', () => {
-                    const choice = btn.dataset.choice;
-                    submitChoice(choice);
-                });
-            });
-
-            const surrenderBtn = document.getElementById('surrender-btn');
-            if (surrenderBtn) surrenderBtn.addEventListener('click', surrender);
-
-            if (isAI && !opponentChoice && gameData.status === 'active' && !isSubmitting && !lastRoundResult) {
-                setTimeout(() => submitAIChoice(), 600 + Math.random() * 800);
+            // FIX #2 и #3: ИИ делает ход только когда игрок уже выбрал, и только один раз
+            if (isAI && myChoice && !opponentChoice && gameData.status === 'active' && !isSubmitting && !aiMoveScheduled) {
+                aiMoveScheduled = true;
+                setTimeout(async () => {
+                    await submitAIChoice();
+                    aiMoveScheduled = false;
+                }, 600 + Math.random() * 800);
             }
         }
 
@@ -616,11 +670,6 @@
                 <p>Счёт: ${myScore} - ${opponentScore}</p>
                 <button class="btn" id="new-game-btn">Новая игра</button>
             `;
-            document.getElementById('new-game-btn').addEventListener('click', () => {
-                unsubscribeFromGame();
-                gameId = null; gameData = null;
-                showLobby();
-            });
         }
 
         function emojiFor(choice) {
@@ -635,9 +684,11 @@
             return 'lose';
         }
 
-        // ========== ТРАНЗАКЦИИ ХОДОВ (атомарно через RPC, но пока через обычный update с проверкой) ==========
+        // ========== ТРАНЗАКЦИИ ХОДОВ (FIX #1: try/finally для isSubmitting) ==========
         async function submitChoice(choice) {
             if (!gameId || !myUid || !opponentUid || isSubmitting || myChoice) return;
+            if (gameData.status !== 'active') return; // FIX #7: проверка статуса
+            
             isSubmitting = true;
             lastRoundResult = null;
 
@@ -652,7 +703,7 @@
                 if (fetchError || !current || current.status !== 'active') return;
 
                 const round = current.data?.currentRound || {};
-                if (round[myUid]) return;
+                if (round[myUid]) return; // Ход уже сделан
 
                 round[myUid] = choice;
                 const opponent = round[opponentUid];
@@ -694,12 +745,16 @@
                 console.error('Ошибка отправки хода:', e);
                 lastRoundResult = null;
             } finally {
+                // FIX #1: гарантированный сброс флага
                 isSubmitting = false;
             }
         }
 
         async function submitAIChoice() {
+            // FIX #7: проверка статуса перед ходом ИИ
             if (!gameId || !opponentUid || isSubmitting || opponentChoice) return;
+            if (!gameData || gameData.status !== 'active') return;
+            
             isSubmitting = true;
             const aiChoice = calculateAIMove();
             lastRoundResult = null;
@@ -781,8 +836,13 @@
             }
         }
 
-        // ========== ЗАВЕРШЕНИЕ ==========
+        // ========== ЗАВЕРШЕНИЕ (FIX #5: processedGameId) ==========
         async function handleGameEnd(isWin) {
+            // FIX #5: используем processedGameId вместо gameEndProcessed
+            if (processedGameId === gameId) return;
+            processedGameId = gameId;
+
+            if (!currentUser) return;
             const mode = isAI ? 'pve' : 'pvp';
 
             try {
@@ -834,10 +894,10 @@
                 if (typeof checkAndAwardAchievements === 'function') await checkAndAwardAchievements();
             } catch (e) {
                 console.error('Ошибка при завершении игры:', e);
+            } finally {
+                unsubscribeFromGame();
+                gameId = null;
             }
-
-            unsubscribeFromGame();
-            gameId = null;
         }
 
         // ========== ВЫХОД ==========
@@ -846,6 +906,7 @@
             await supabase.from('rps_games').update({ status: 'finished', winner: 'cancelled' }).eq('id', gameId);
             unsubscribeFromGame();
             gameId = null; gameData = null;
+            processedGameId = null;
             showLobby();
             showToast('Игра отменена', 'info');
         }
@@ -869,9 +930,48 @@
             if (openGamesChannel) { supabase.removeChannel(openGamesChannel); openGamesChannel = null; }
         }
 
+        // FIX #4: перед закрытием помечаем игру как заброшенную
         window.addEventListener('beforeunload', () => {
             unsubscribeFromGame();
             unsubscribeFromOpenGames();
+            
+            if (gameId && gameData && gameData.status === 'active' && currentUser) {
+                try {
+                    const supabaseUrl = typeof SUPABASE_URL !== 'undefined' ? SUPABASE_URL : '';
+                    const supabaseKey = typeof SUPABASE_ANON_KEY !== 'undefined' ? SUPABASE_ANON_KEY : '';
+                    if (supabaseUrl && supabaseKey) {
+                        const payload = JSON.stringify({
+                            status: 'finished',
+                            winner: opponentUid,
+                            data: { ...gameData.data, abandoned: true, abandonedBy: currentUser.id }
+                        });
+                        fetch(`${supabaseUrl}/rest/v1/rps_games?id=eq.${gameId}`, {
+                            method: 'PATCH',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Authorization': `Bearer ${supabaseKey}`,
+                                'apikey': supabaseKey,
+                                'Prefer': 'return=minimal'
+                            },
+                            body: payload,
+                            keepalive: true
+                        }).catch(() => {});
+                    }
+                } catch (e) {
+                    console.warn('Не удалось отправить сигнал о выходе:', e);
+                }
+                
+                const mode = isAI ? 'pve' : 'pvp';
+                supabase.from('users').select('data').eq('id', currentUser.id).single().then(({ data: row }) => {
+                    if (row) {
+                        const userData = row.data || {};
+                        const stats = userData.rpsStats || {};
+                        stats[`${mode}Losses`] = (stats[`${mode}Losses`] || 0) + 1;
+                        stats.currentWinStreak = 0;
+                        supabase.from('users').update({ data: { ...userData, rpsStats: stats } }).eq('id', currentUser.id).catch(() => {});
+                    }
+                }).catch(() => {});
+            }
         });
     })();
 </script>
