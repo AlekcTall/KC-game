@@ -621,7 +621,6 @@
             html += `<p class="status-message">${lastRoundResult === 'win' ? '🎉 Вы выиграли раунд!' : lastRoundResult === 'lose' ? '😞 Вы проиграли раунд' : '🤝 Ничья'}</p>`;
         }
 
-        // ИСПРАВЛЕНО: Показываем кнопки когда игрок ещё не выбрал, независимо от выбора соперника
         if (!myChoice && !isSubmitting) {
             const hint = opponentChoice 
                 ? '<p style="color:#059669; margin-bottom:0.5rem;">⚡ Соперник уже выбрал! Ваш ход:</p>'
@@ -664,7 +663,6 @@
 
         gameContainer.innerHTML = html;
 
-        // ИИ ходит ТОЛЬКО когда игрок уже выбрал
         if (isAI && myChoice && !opponentChoice && gameData.status === 'active' && !isSubmitting && !aiMoveScheduled) {
             aiMoveScheduled = true;
             setTimeout(async () => {
@@ -675,20 +673,17 @@
     }
 
     function renderFinishedScreen() {
-        const winner = gameData.winner === myUid ? 'Вы' : (gameData.data?.players?.[gameData.winner]?.username || 'Соперник');
-        const isWin = gameData.winner === myUid;
-        const isDraw = gameData.winner === 'draw';
-        const isCancelled = gameData.winner === 'cancelled';
-
+        const winner = gameData.winner;
+        const isDraw = winner === 'draw';
+        const isCancelled = winner === 'cancelled';
         let title = '';
         if (isCancelled) title = '⚠️ Игра отменена';
         else if (isDraw) title = '🤝 Ничья!';
-        else if (isWin) title = '🎉 Победа!';
+        else if (winner === myUid) title = '🎉 Победа!';
         else title = '😞 Поражение';
 
         gameContainer.innerHTML = `
             <h3 style="font-size:1.8rem; margin:1rem 0;">${title}</h3>
-            ${!isCancelled && !isDraw ? `<p>Победитель: <strong>${winner}</strong></p>` : ''}
             <p>Счёт: ${myScore} - ${opponentScore}</p>
             <button class="btn" id="new-game-btn" style="margin-top:1rem; padding:0.7rem 2rem;">🔄 Новая игра</button>
         `;
@@ -859,7 +854,7 @@
         }
     }
 
-    // ===== ЗАВЕРШЕНИЕ =====
+    // ===== ЗАВЕРШЕНИЕ (ИСПРАВЛЕНО) =====
     async function handleGameEnd(isWin) {
         if (processedGameId === gameId) return;
         processedGameId = gameId;
@@ -868,16 +863,23 @@
         const mode = isAI ? 'pve' : 'pvp';
 
         try {
-            const { data: userRow, error } = await supabase
+            // 1. Начисляем баллы (добавит историю)
+            if (isWin && typeof addPointsToCurrentUser === 'function') {
+                const points = isAI ? 3 : 5;
+                await addPointsToCurrentUser(points, 'rps');
+            }
+
+            // 2. Заново читаем актуальные данные
+            const { data: freshRow, error: fetchErr } = await supabase
                 .from('users')
                 .select('data')
                 .eq('id', myUid)
                 .single();
 
-            if (error || !userRow) return;
+            if (fetchErr || !freshRow) return;
 
-            const userData = userRow.data || {};
-            const stats = userData.rpsStats || {};
+            const freshData = freshRow.data || {};
+            const stats = freshData.rpsStats || {};
 
             let newStreak = stats.currentWinStreak || 0;
             let bestStreak = stats.bestWinStreak || 0;
@@ -900,23 +902,22 @@
                 newStats.beatHardAI = true;
             }
 
-            const newData = { ...userData, rpsStats: newStats };
-
-            let toastMsg = '';
-            if (isWin) {
-                const points = isAI ? 3 : 5;
-                if (typeof addPointsToCurrentUser === 'function') await addPointsToCurrentUser(points, 'rps');
-                const newBalance = (userData.lokoin_balance || 0) + (isAI ? 1 : 2);
-                newData.lokoin_balance = newBalance;
-                toastMsg = `🎉 Победа! +${points} баллов, +${isAI ? 1 : 2} локоинов`;
-            }
+            // 3. Обновляем только статистику и локоины
+            const updatedData = {
+                ...freshData,
+                rpsStats: newStats,
+                lokoin_balance: (freshData.lokoin_balance || 0) + (isWin ? (isAI ? 1 : 2) : 0)
+            };
 
             await supabase
                 .from('users')
-                .update({ data: newData, updated_at: new Date().toISOString() })
+                .update({ data: updatedData, updated_at: new Date().toISOString() })
                 .eq('id', myUid);
 
-            if (toastMsg) showToast(toastMsg, 'success');
+            if (isWin) {
+                const points = isAI ? 3 : 5;
+                showToast(`🎉 Победа! +${points} баллов, +${isAI ? 1 : 2} локоинов`, 'success');
+            }
 
             if (typeof checkAndAwardAchievements === 'function') await checkAndAwardAchievements();
         } catch (e) {
