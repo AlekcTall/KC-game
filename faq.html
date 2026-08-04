@@ -50,7 +50,6 @@
 
   <main class="main">
     <div class="container faq-page">
-      <!-- весь контент FAQ без изменений -->
       <h2>📚 Справка и правила</h2>
       <p style="margin-bottom:1.5rem; color:#666;">Здесь собраны ответы на самые частые вопросы. Нажмите на вопрос, чтобы увидеть ответ.</p>
       <div class="faq-nav">
@@ -84,7 +83,7 @@
 
       <!-- Игры -->
       <div class="faq-category" id="games"><h3><span class="cat-icon">🎮</span> Игры</h3>
-        <div class="faq-item"><button class="faq-item__question"><span>Какие игры доступны?</span><span class="faq-item__arrow">▼</span></button><div class="faq-item__answer">Вас ждут знакомые с детства игры — от простых кликеров до логических головоломок. Загляните в каталог игр, чтобы увидеть полный список и выбрать, во что поиграть сегодня.</div></div>
+        <div class="faq-item"><button class="faq-item__question"><span>Какие игры доступны?</span><span class="faq-item__arrow">▼</span></button><div class="faq-item__answer">Вам доступны как одиночные, так и многопользовательские игры, включая «Морской бой», «Крестики-нолики» и «Тетрис». Полный список откроется после входа в каталог игр.</div></div>
         <div class="faq-item"><button class="faq-item__question"><span>Как играть с коллегами?</span><span class="faq-item__arrow">▼</span></button><div class="faq-item__answer">Некоторые игры позволяют соревноваться с коллегами в реальном времени. Создайте игровую сессию и поделитесь её номером с коллегой, либо присоединитесь к уже созданной игре.</div></div>
         <div class="faq-item"><button class="faq-item__question"><span>Есть ли ограничения на мобильных устройствах?</span><span class="faq-item__arrow">▼</span></button><div class="faq-item__answer">Большинство игр удобно работают на телефонах и планшетах, но некоторые лучше проходить на компьютере — это указано в описании конкретной игры.</div></div>
       </div>
@@ -170,7 +169,6 @@
   <script src="js/main.js"></script>
   <script>
     document.addEventListener('DOMContentLoaded', () => {
-      // Аккордеон
       document.querySelectorAll('.faq-item__question').forEach(btn => {
         btn.addEventListener('click', () => {
           const item = btn.parentElement;
@@ -178,7 +176,6 @@
         });
       });
 
-      // Плавная прокрутка к якорям
       document.querySelectorAll('.faq-nav a').forEach(link => {
         link.addEventListener('click', e => {
           e.preventDefault();
