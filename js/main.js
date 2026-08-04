@@ -115,7 +115,7 @@ function updateAuthUI(authUser) {
   if (!statusEl) return;
   if (authUser) {
     const current = getCurrentUser();
-    const name = current ? current.username : authUser.email;
+    const name = current ? current.username : 'Пользователь';
     statusEl.innerHTML = `👤 <span class="auth-greeting">${name}</span> | <a href="#" id="logout-link">Выйти</a>`;
     const logoutLink = document.getElementById('logout-link');
     if (logoutLink) {
@@ -132,41 +132,10 @@ function updateAuthUI(authUser) {
   }
 }
 
-// Проверка режима обслуживания с кешированием на 10 минут
+// Проверка режима обслуживания (без длительного кеша, мгновенное применение)
 async function checkMaintenanceMode() {
   try {
-    const CACHE_KEY = 'krugames_maintenance_cache';
-    const CACHE_TTL = 10 * 60 * 1000; // 10 минут
-    const cached = sessionStorage.getItem(CACHE_KEY);
-    if (cached) {
-      const parsed = JSON.parse(cached);
-      if (Date.now() - parsed.timestamp < CACHE_TTL) {
-        if (!parsed.data.enabled) return false;
-        const currentUser = getCurrentUser();
-        const isAdmin = currentUser && currentUser.role === 'admin';
-        if (!isAdmin) {
-          document.body.innerHTML = `
-            <div style="display:flex; align-items:center; justify-content:center; min-height:100vh; background:#1a1a2e; color:#fff; font-family:'Segoe UI',sans-serif; text-align:center;">
-              <div style="max-width:500px; padding:2rem;">
-                <div style="font-size:3rem; margin-bottom:1rem;">🔧</div>
-                <h2 style="margin-bottom:1rem;">Техническое обслуживание</h2>
-                <p style="font-size:1.1rem; margin-bottom:1.5rem; opacity:0.8;">${parsed.data.message || 'Сайт на техническом обслуживании. Попробуйте зайти позже.'}</p>
-                <a href="login.html" style="color:#4a9eff;">Войти как администратор</a>
-              </div>
-            </div>
-          `;
-          return true;
-        } else {
-          const banner = document.createElement('div');
-          banner.id = 'maintenance-banner';
-          banner.style.cssText = 'background:#f39c12; color:#000; text-align:center; padding:0.5rem; font-weight:600; position:sticky; top:0; z-index:9999;';
-          banner.textContent = '⚠️ Включён режим обслуживания. Обычные пользователи не видят сайт.';
-          document.body.prepend(banner);
-        }
-        return false;
-      }
-    }
-
+    // Всегда запрашиваем актуальный статус из Supabase, кеш не используем
     const { data, error } = await supabase
       .from('settings')
       .select('value')
@@ -176,14 +145,23 @@ async function checkMaintenanceMode() {
     if (error) throw error;
 
     const maintenanceData = data ? (typeof data.value === 'string' ? JSON.parse(data.value) : data.value) : { enabled: false };
-    sessionStorage.setItem(CACHE_KEY, JSON.stringify({ timestamp: Date.now(), data: maintenanceData }));
 
-    if (!maintenanceData.enabled) return false;
+    // Сохраняем в кеш для возможного использования в рамках сессии, но не полагаемся на него
+    sessionStorage.setItem('krugames_maintenance_cache', JSON.stringify({ timestamp: Date.now(), data: maintenanceData }));
 
+    if (!maintenanceData.enabled) {
+      // Убираем баннер, если он был
+      const banner = document.getElementById('maintenance-banner');
+      if (banner) banner.remove();
+      return false;
+    }
+
+    // Режим включен
     const currentUser = getCurrentUser();
     const isAdmin = currentUser && currentUser.role === 'admin';
 
     if (!isAdmin) {
+      // Не-админ видит заглушку
       document.body.innerHTML = `
         <div style="display:flex; align-items:center; justify-content:center; min-height:100vh; background:#1a1a2e; color:#fff; font-family:'Segoe UI',sans-serif; text-align:center;">
           <div style="max-width:500px; padding:2rem;">
@@ -196,11 +174,18 @@ async function checkMaintenanceMode() {
       `;
       return true;
     } else {
-      const banner = document.createElement('div');
-      banner.id = 'maintenance-banner';
-      banner.style.cssText = 'background:#f39c12; color:#000; text-align:center; padding:0.5rem; font-weight:600; position:sticky; top:0; z-index:9999;';
-      banner.textContent = '⚠️ Включён режим обслуживания. Обычные пользователи не видят сайт.';
-      document.body.prepend(banner);
+      // Админ видит баннер
+      let banner = document.getElementById('maintenance-banner');
+      if (!banner) {
+        banner = document.createElement('div');
+        banner.id = 'maintenance-banner';
+        banner.style.cssText = 'background:#f39c12; color:#000; text-align:center; padding:0.5rem; font-weight:600; position:sticky; top:0; z-index:9999;';
+        banner.textContent = '⚠️ Включён режим обслуживания. Обычные пользователи не видят сайт.';
+        document.body.prepend(banner);
+      } else {
+        // Обновляем текст на случай изменения сообщения
+        banner.textContent = '⚠️ Включён режим обслуживания. Обычные пользователи не видят сайт.';
+      }
     }
     return false;
   } catch (e) {
@@ -209,7 +194,7 @@ async function checkMaintenanceMode() {
   }
 }
 
-// Проверка версии кеша с кешированием на 10 минут
+// Проверка версии кеша с кешированием на 10 минут (оставлено без изменений)
 async function checkCacheVersion() {
   try {
     const CACHE_KEY = 'krugames_cache_version_check';
@@ -302,7 +287,7 @@ async function updateLastActive(uid) {
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
-  // Проверяем обслуживание и версию кеша (эти функции уже асинхронные и работают с Supabase)
+  // Проверяем обслуживание (теперь без кеша, мгновенно)
   const isMaintenance = await checkMaintenanceMode();
   if (isMaintenance) return;
 
