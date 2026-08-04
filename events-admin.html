@@ -741,8 +741,7 @@
             },
             start_time: document.getElementById('event-start').value ? new Date(document.getElementById('event-start').value).toISOString() : null,
             end_time: document.getElementById('event-end').value ? new Date(document.getElementById('event-end').value).toISOString() : null,
-            status: isEdit ? ev.status : 'draft',
-            updated_at: new Date().toISOString()
+            status: isEdit ? ev.status : 'draft'
           };
 
           if (!['quiz'].includes(type)) {
@@ -758,7 +757,6 @@
               if (error) throw error;
             } else {
               dataObj.created_at = new Date().toISOString();
-              // Убираем created_by, так как колонки нет в таблице events
               const { error } = await supabase.from('events').insert([dataObj]);
               if (error) throw error;
             }
