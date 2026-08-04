@@ -67,20 +67,31 @@
             eventsSection = document.getElementById('events-section'),
             eventsGrid = document.getElementById('events-grid');
 
+      // Сразу скрываем секции (на случай, если инлайн-стили не сработали)
+      newsSection.style.display = 'none';
+      eventsSection.style.display = 'none';
+
       let newsChannel = null, eventsChannel = null;
 
       // Подписка на изменения аутентификации через onAuthStateChange
       if (typeof onAuthStateChange === 'function') {
         onAuthStateChange((event, session) => {
           if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
-            // Пользователь вошёл — показываем секции и загружаем данные
-            eventsSection.style.display = 'block';
-            newsSection.style.display = 'block';
-            loadEvents();
-            loadNews();
-            subscribeToEvents();
-            subscribeToNews();
-          } else if (event === 'SIGNED_OUT') {
+            if (session?.user) {
+              // Пользователь вошёл — показываем секции и загружаем данные
+              eventsSection.style.display = 'block';
+              newsSection.style.display = 'block';
+              loadEvents();
+              loadNews();
+              subscribeToEvents();
+              subscribeToNews();
+            } else {
+              // INITIAL_SESSION без сессии — точно скрываем
+              eventsSection.style.display = 'none';
+              newsSection.style.display = 'none';
+            }
+          } else {
+            // Любое другое событие (SIGNED_OUT, USER_UPDATED и т.д.) — скрываем
             eventsSection.style.display = 'none';
             newsSection.style.display = 'none';
             // Отписываемся от каналов
@@ -89,7 +100,7 @@
           }
         });
       } else {
-        // Если onAuthStateChange не определён, просто прячем секции
+        // Если onAuthStateChange не определён, скрываем секции
         eventsSection.style.display = 'none';
         newsSection.style.display = 'none';
       }
@@ -158,7 +169,6 @@
             table: 'events',
             filter: `status=eq.active`
           }, () => {
-            // При любых изменениях в активных ивентах перезагружаем список
             loadEvents();
           })
           .subscribe();
@@ -179,7 +189,6 @@
           return;
         }
 
-        // Фильтруем просроченные на клиенте (если expire_at задано)
         const filtered = (announcements || []).filter(a => {
           if (a.expire_at) return new Date(a.expire_at) > new Date();
           return true;
@@ -271,7 +280,6 @@
           return;
         }
 
-        // Получаем все реакции для этой новости
         const { data: reactions, error } = await supabase
           .from('announcement_reactions')
           .select('*')
@@ -308,13 +316,11 @@
         container.querySelectorAll('.reaction-btn').forEach(btn => {
           btn.addEventListener('click', async () => {
             const emoji = btn.dataset.emoji;
-            // Проверка на двойную реакцию
             if (!canDoubleReact && userReactions.length >= 1 && !userReactions.includes(emoji)) {
               showToast('Можно поставить только 1 реакцию. Купите товар для 2 реакций!', 'info');
               return;
             }
 
-            // Переключение реакции: если уже стоит — удаляем, иначе добавляем
             if (userReactions.includes(emoji)) {
               await supabase
                 .from('announcement_reactions')
@@ -331,7 +337,6 @@
                   emoji: emoji
                 }]);
             }
-            // Обновляем блок реакций
             loadReactions(newsId);
           });
         });
