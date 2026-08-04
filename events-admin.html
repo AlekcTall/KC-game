@@ -725,7 +725,9 @@
             }
           });
 
+          // Обязательно добавляем id
           const dataObj = {
+            id: id,  // <-- важно: id обязателен и не может быть null
             type,
             title: document.getElementById('event-title').value.trim(),
             data: {
