@@ -66,10 +66,7 @@
   <script src="js/main.js"></script>
 
   <script>
-    // === Самовыполняющаяся функция магазина ===
     (function() {
-      console.log('🚀 Магазин: скрипт начал выполняться');
-
       const shopContainer = document.getElementById('shop-container');
       const modal = document.getElementById('purchase-modal');
       const modalClose = document.getElementById('modal-close');
@@ -88,7 +85,32 @@
       const CACHE_KEY = 'krugames_shop_cache';
       const CACHE_TTL = 10 * 60 * 1000;
 
-      function renderSkeletons() {
+      // Создаёт базовую структуру с категориями и сеткой
+      function buildShopLayout() {
+        shopContainer.innerHTML = `
+          <div class="shop-categories" id="category-filters"></div>
+          <div class="shop-items-grid" id="shop-items-grid"></div>
+        `;
+      }
+
+      async function loadShopItems() {
+        const cached = sessionStorage.getItem(CACHE_KEY);
+        if (cached) {
+          try {
+            const parsed = JSON.parse(cached);
+            if (Date.now() - parsed.timestamp < CACHE_TTL && Array.isArray(parsed.items) && parsed.items.length > 0) {
+              allItems = parsed.items;
+              buildShopLayout();
+              renderCategories();
+              renderItems('all');
+              return;
+            }
+          } catch (e) {
+            sessionStorage.removeItem(CACHE_KEY);
+          }
+        }
+
+        // Если кеша нет — показываем скелетоны
         shopContainer.innerHTML = '<div class="shop-categories" id="category-filters"></div><div class="shop-items-grid">' +
           Array.from({ length: 8 }, () => `
             <div class="skeleton-card">
@@ -98,27 +120,7 @@
               <div class="skeleton-price"></div>
             </div>
           `).join('') + '</div>';
-      }
 
-      async function loadShopItems() {
-        console.log('🛒 loadShopItems вызвана');
-        const cached = sessionStorage.getItem(CACHE_KEY);
-        if (cached) {
-          try {
-            const parsed = JSON.parse(cached);
-            if (Date.now() - parsed.timestamp < CACHE_TTL && Array.isArray(parsed.items) && parsed.items.length > 0) {
-              allItems = parsed.items;
-              renderCategories();
-              renderItems('all');
-              console.log('✅ Магазин отрисован из кеша');
-              return;
-            }
-          } catch (e) {
-            sessionStorage.removeItem(CACHE_KEY);
-          }
-        }
-
-        renderSkeletons();
         try {
           const { data, error } = await supabase
             .from('shop_items')
@@ -129,11 +131,11 @@
           if (allItems.length > 0) {
             sessionStorage.setItem(CACHE_KEY, JSON.stringify({ timestamp: Date.now(), items: allItems }));
           }
+          buildShopLayout();
           renderCategories();
           renderItems('all');
-          console.log('✅ Магазин отрисован из свежих данных');
         } catch (e) {
-          console.error('❌ Ошибка загрузки товаров:', e);
+          console.error('Ошибка загрузки товаров:', e);
           shopContainer.innerHTML = '<p class="shop-error">Не удалось загрузить товары.</p>';
         }
       }
@@ -167,7 +169,7 @@
         let filtered = category === 'all' ? allItems : allItems.filter(i => i.category === category);
         filtered = filtered.filter(i => !i.hidden);
 
-        const grid = document.querySelector('.shop-items-grid');
+        const grid = document.getElementById('shop-items-grid');
         if (!grid) return;
 
         if (!filtered.length) {
@@ -358,14 +360,11 @@
       });
 
       async function initShop() {
-        console.log('🛍️ initShop запущена');
         shopContainer.innerHTML = '<p style="text-align:center; padding:2rem;">Загрузка...</p>';
 
         try {
           const { data: { session } } = await supabase.auth.getSession();
-          console.log('Сессия:', session ? 'активна' : 'отсутствует');
           if (session?.user) {
-            console.log('Загружаем профиль...');
             const { data: row, error: userError } = await supabase
               .from('users')
               .select('id, email, data')
@@ -378,7 +377,6 @@
             currentUserData = unpackUserData(row);
             setCurrentUser(currentUserData);
             updateAuthUI(session.user);
-            console.log('Профиль загружен, запускаем loadShopItems');
             await loadShopItems();
           } else {
             shopContainer.innerHTML = '<p style="text-align:center; padding:2rem;">Войдите, чтобы просматривать магазин. <a href="login.html?redirect=shop.html">Войти</a></p>';
@@ -402,7 +400,6 @@
       }
 
       document.addEventListener('DOMContentLoaded', initShop);
-      console.log('📦 Магазин: DOMContentLoaded подписан');
     })();
   </script>
 </body>
