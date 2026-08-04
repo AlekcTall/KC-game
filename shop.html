@@ -37,8 +37,7 @@
   <header class="header"><div class="container header__inner"><a href="index.html" class="logo">КЦ-Игры</a><button class="burger" id="burger-btn" aria-label="Меню">☰</button><nav class="nav" id="main-nav"><ul class="nav__list"><li><a href="index.html" class="nav__link">Главная</a></li><li><a href="games.html" class="nav__link">Игры</a></li><li><a href="leaderboard.html" class="nav__link">Рейтинг</a></li><li><a href="shop.html" class="nav__link active">Магазин</a></li><li><a href="profile.html" class="nav__link">Профиль</a></li><li><a href="admin.html" class="nav__link">Админ</a></li></ul></nav><div id="auth-status" class="auth-status"></div></div></header>
   <main class="main"><div class="container">
     <h2>🛒 Магазин</h2>
-    <div class="shop-categories" id="category-filters"></div>
-    <div id="shop-items-grid" class="shop-items-grid"></div>
+    <div id="shop-container"></div>
   </div></main>
   <footer class="footer"><div class="container"><p>© 2026 ваши амбассадоры</p></div></footer>
 
@@ -68,8 +67,7 @@
 
   <script>
     (function() {
-      const grid = document.getElementById('shop-items-grid');
-      const categoryContainer = document.getElementById('category-filters');
+      const shopContainer = document.getElementById('shop-container');
       const modal = document.getElementById('purchase-modal');
       const modalClose = document.getElementById('modal-close');
       const modalIcon = document.getElementById('modal-icon');
@@ -88,14 +86,15 @@
       const CACHE_TTL = 10 * 60 * 1000;
 
       function renderSkeletons() {
-        grid.innerHTML = Array.from({ length: 8 }, () => `
-          <div class="skeleton-card">
-            <div class="skeleton-icon"></div>
-            <div class="skeleton-title"></div>
-            <div class="skeleton-text"></div>
-            <div class="skeleton-price"></div>
-          </div>
-        `).join('');
+        shopContainer.innerHTML = '<div class="shop-categories" id="category-filters"></div><div class="shop-items-grid">' +
+          Array.from({ length: 8 }, () => `
+            <div class="skeleton-card">
+              <div class="skeleton-icon"></div>
+              <div class="skeleton-title"></div>
+              <div class="skeleton-text"></div>
+              <div class="skeleton-price"></div>
+            </div>
+          `).join('') + '</div>';
       }
 
       async function loadShopItems() {
@@ -125,11 +124,13 @@
           renderItems('all');
         } catch (e) {
           console.error('Ошибка загрузки товаров:', e);
-          grid.innerHTML = '<p class="shop-error">Не удалось загрузить товары.</p>';
+          shopContainer.innerHTML = '<p class="shop-error">Не удалось загрузить товары.</p>';
         }
       }
 
       function renderCategories() {
+        const categoryContainer = document.getElementById('category-filters');
+        if (!categoryContainer) return;
         const categories = [...new Set(allItems.map(i => i.category).filter(Boolean))];
         categoryContainer.innerHTML = '<button class="shop-category-btn active" data-category="all">Все</button>';
         categories.forEach(cat => {
@@ -154,6 +155,9 @@
       function renderItems(category) {
         let filtered = category === 'all' ? allItems : allItems.filter(i => i.category === category);
         filtered = filtered.filter(i => !i.hidden);
+
+        const grid = document.querySelector('.shop-items-grid');
+        if (!grid) return;
 
         if (!filtered.length) {
           grid.innerHTML = '<p class="no-results">Товаров не найдено.</p>';
@@ -326,7 +330,12 @@
           purchaseMsg.textContent = '✅ Покупка успешна!';
           purchaseMsg.className = 'auth-message success';
 
-          renderItems(categoryContainer.querySelector('.active')?.dataset?.category || 'all');
+          const activeCategory = document.querySelector('.shop-category-btn.active');
+          if (activeCategory) {
+            renderItems(activeCategory.dataset.category);
+          } else {
+            renderItems('all');
+          }
 
           setTimeout(closeModal, 1500);
         } catch (error) {
@@ -338,6 +347,9 @@
       });
 
       document.addEventListener('DOMContentLoaded', async () => {
+        // Сразу показываем "Загрузка..."
+        shopContainer.innerHTML = '<p style="text-align:center; padding:2rem;">Загрузка...</p>';
+
         if (typeof onAuthStateChange === 'function') {
           onAuthStateChange(async (event, session) => {
             if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
@@ -353,14 +365,16 @@
                   setCurrentUser(currentUserData);
                   updateAuthUI(user);
                 }
+                loadShopItems();
+              } else {
+                shopContainer.innerHTML = '<p style="text-align:center; padding:2rem;">Войдите, чтобы просматривать магазин. <a href="login.html?redirect=shop.html">Войти</a></p>';
               }
-              loadShopItems();
             } else {
-              grid.innerHTML = '<p style="text-align:center; padding:2rem;">Войдите, чтобы просматривать магазин. <a href="login.html?redirect=shop.html">Войти</a></p>';
+              shopContainer.innerHTML = '<p style="text-align:center; padding:2rem;">Войдите, чтобы просматривать магазин. <a href="login.html?redirect=shop.html">Войти</a></p>';
             }
           });
         } else {
-          grid.innerHTML = '<p>Ошибка загрузки системы авторизации.</p>';
+          shopContainer.innerHTML = '<p style="text-align:center; padding:2rem;">Ошибка загрузки системы авторизации.</p>';
         }
       });
     })();
