@@ -98,30 +98,21 @@
       }
 
       async function loadShopItems() {
+        // Пытаемся загрузить из кеша
         const cached = sessionStorage.getItem(CACHE_KEY);
         if (cached) {
           try {
             const parsed = JSON.parse(cached);
             if (Date.now() - parsed.timestamp < CACHE_TTL && Array.isArray(parsed.items) && parsed.items.length > 0) {
               allItems = parsed.items;
-              // Попробуем отрисовать из кеша — если упадет, то поймаем ниже
-              try {
-                renderCategories();
-                renderItems('all');
-                return;
-              } catch (renderError) {
-                console.warn('Ошибка рендеринга из кеша, сбрасываем кеш и идём на сервер:', renderError);
-                sessionStorage.removeItem(CACHE_KEY);
-                // Продолжим без кеша
-              }
-            } else {
-              sessionStorage.removeItem(CACHE_KEY);
+              renderCategories();
+              renderItems('all');
+              return;
             }
           } catch (e) {
             sessionStorage.removeItem(CACHE_KEY);
           }
         }
-
         // Загружаем свежие данные
         renderSkeletons();
         try {
@@ -133,8 +124,6 @@
           allItems = data || [];
           if (allItems.length > 0) {
             sessionStorage.setItem(CACHE_KEY, JSON.stringify({ timestamp: Date.now(), items: allItems }));
-          } else {
-            sessionStorage.removeItem(CACHE_KEY);
           }
           renderCategories();
           renderItems('all');
@@ -169,10 +158,7 @@
       }
 
       function renderItems(category) {
-        if (!currentUserData) {
-          // Если данные пользователя еще не загружены, не пытаемся рисовать
-          return;
-        }
+        if (!currentUserData) return;
         let filtered = category === 'all' ? allItems : allItems.filter(i => i.category === category);
         filtered = filtered.filter(i => !i.hidden);
 
@@ -366,62 +352,48 @@
         }
       });
 
-      // Инициализация магазина с немедленной проверкой сессии
+      // Новая простая и надёжная инициализация
       async function initShop() {
-        // Всегда сначала показываем "Загрузка..."
         shopContainer.innerHTML = '<p style="text-align:center; padding:2rem;">Загрузка...</p>';
 
         try {
           const { data: { session } } = await supabase.auth.getSession();
           if (session?.user) {
-            await loadUserDataAndShop(session.user);
-          } else {
-            // Ждем событие авторизации — оно может прийти с задержкой, поэтому не показываем сразу "Войдите",
-            // а только если через некоторое время сессии так и нет.
-            // Но чтобы не крутить вечно "Загрузка...", запустим таймер на 3 секунды, после которого покажем приглашение.
-            const timeout = setTimeout(() => {
-              if (!currentUserData) {
-                shopContainer.innerHTML = '<p style="text-align:center; padding:2rem;">Войдите, чтобы просматривать магазин. <a href="login.html?redirect=shop.html">Войти</a></p>';
-              }
-            }, 3000);
-
-            // Подписка на auth изменения
-            if (typeof onAuthStateChange === 'function') {
-              onAuthStateChange(async (event, session) => {
-                if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
-                  if (session?.user) {
-                    clearTimeout(timeout);
-                    await loadUserDataAndShop(session.user);
-                  }
-                } else if (event === 'SIGNED_OUT') {
-                  clearTimeout(timeout);
-                  shopContainer.innerHTML = '<p style="text-align:center; padding:2rem;">Войдите, чтобы просматривать магазин. <a href="login.html?redirect=shop.html">Войти</a></p>';
-                }
-              });
+            // Загружаем пользователя и магазин
+            const { data: row, error: userError } = await supabase
+              .from('users')
+              .select('id, email, data')
+              .eq('id', session.user.id)
+              .single();
+            if (userError || !row) {
+              shopContainer.innerHTML = '<p class="shop-error">Не удалось загрузить профиль.</p>';
+              return;
             }
+            currentUserData = unpackUserData(row);
+            setCurrentUser(currentUserData);
+            updateAuthUI(session.user);
+            await loadShopItems();
+          } else {
+            // Сессии нет — показываем приглашение
+            shopContainer.innerHTML = '<p style="text-align:center; padding:2rem;">Войдите, чтобы просматривать магазин. <a href="login.html?redirect=shop.html">Войти</a></p>';
           }
         } catch (e) {
           console.error('Ошибка инициализации магазина:', e);
           shopContainer.innerHTML = '<p class="shop-error">Не удалось загрузить магазин.</p>';
         }
-      }
 
-      async function loadUserDataAndShop(user) {
-        try {
-          const { data: row } = await supabase
-            .from('users')
-            .select('id, email, data')
-            .eq('id', user.id)
-            .single();
-          if (row) {
-            currentUserData = unpackUserData(row);
-            setCurrentUser(currentUserData);
-            updateAuthUI(user);
-          }
-          await loadShopItems();
-        } catch (e) {
-          console.error('Ошибка загрузки данных пользователя:', e);
-          shopContainer.innerHTML = '<p class="shop-error">Не удалось загрузить данные профиля.</p>';
+        // Подписываемся на изменения авторизации для автоматического обновления
+        if (typeof onAuthStateChange === 'function') {
+          onAuthStateChange((event, session) => {
+            if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
+              if (session?.user && !currentUserData) {
+                // Пользователь вошёл, а данных ещё нет — перезагрузим страницу для простоты
+                window.location.reload();
+              }
+            } else if (event === 'SIGNED_OUT') {
+              shopContainer.innerHTML = '<p style="text-align:center; padding:2rem;">Войдите, чтобы просматривать магазин. <a href="login.html?redirect=shop.html">Войти</a></p>';
+            }
+          });
         }
       }
 
