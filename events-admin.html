@@ -758,7 +758,7 @@
               if (error) throw error;
             } else {
               dataObj.created_at = new Date().toISOString();
-              dataObj.created_by = (await supabase.auth.getUser()).data.user?.id;
+              // Убираем created_by, так как колонки нет в таблице events
               const { error } = await supabase.from('events').insert([dataObj]);
               if (error) throw error;
             }
