@@ -231,30 +231,56 @@
       function getMoscowDate(){ return new Date(Date.now()+3*3600000).toISOString().slice(0,10); }
       function getDailyReward(day){ const r={1:{points:2,lokoin:1},2:{points:3,lokoin:1},3:{points:5,lokoin:2},4:{points:5,lokoin:2},5:{points:8,lokoin:3},6:{points:8,lokoin:3},7:{points:12,lokoin:5}}; return day>7?r[7]:r[day]||r[1]; }
 
-      // Загрузка наград через user_awarded с JOIN к awards
+      // ========== ИСПРАВЛЕННАЯ ЗАГРУЗКА НАГРАД ==========
       async function loadUserAwards(uid) {
         try {
-          const { data, error } = await supabase
+          // 1. Получаем записи о выданных наградах
+          const { data: awardedData, error: awardedError } = await supabase
             .from('user_awarded')
-            .select('id, awarded_at, comment, given_by, award_id, awards (id, name, description, icon, lokoin_reward)')
+            .select('award_id, awarded_at, comment, given_by')
             .eq('user_id', uid);
-          if (error) throw error;
-          if (!data || data.length === 0) return [];
-          // Преобразуем в плоский массив
-          const awards = data.map(entry => {
-            const award = entry.awards || {};
-            return {
-              id: entry.award_id,
-              name: award.name || '',
-              description: award.description || '',
-              icon: award.icon || '',
-              lokoin_reward: award.lokoin_reward || 0,
-              comment: entry.comment,
-              awardedAt: entry.awarded_at ? { seconds: new Date(entry.awarded_at).getTime() / 1000 } : null,
-              given_by: entry.given_by
-            };
+
+          if (awardedError) {
+            console.error('Ошибка загрузки user_awarded:', awardedError);
+            return [];
+          }
+          if (!awardedData || awardedData.length === 0) return [];
+
+          // 2. Собираем уникальные ID наград
+          const awardIds = [...new Set(awardedData.map(entry => entry.award_id).filter(Boolean))];
+
+          // 3. Загружаем информацию о наградах
+          const { data: awardsData, error: awardsError } = await supabase
+            .from('awards')
+            .select('id, name, description, icon, lokoin_reward')
+            .in('id', awardIds);
+
+          if (awardsError) {
+            console.error('Ошибка загрузки awards:', awardsError);
+            return [];
+          }
+
+          // 4. Создаём словарь наград
+          const awardsMap = {};
+          (awardsData || []).forEach(award => {
+            awardsMap[award.id] = award;
           });
-          awards.sort((x, y) => (y.awardedAt?.seconds || 0) - (x.awardedAt?.seconds || 0));
+
+          // 5. Собираем итоговый массив
+          const awards = awardedData
+            .filter(entry => awardsMap[entry.award_id])
+            .map(entry => ({
+              id: entry.award_id,
+              name: awardsMap[entry.award_id].name || '',
+              description: awardsMap[entry.award_id].description || '',
+              icon: awardsMap[entry.award_id].icon || '',
+              lokoin_reward: awardsMap[entry.award_id].lokoin_reward || 0,
+              comment: entry.comment,
+              awardedAt: entry.awarded_at ? new Date(entry.awarded_at).getTime() / 1000 : null,
+              given_by: entry.given_by
+            }));
+
+          awards.sort((x, y) => (y.awardedAt || 0) - (x.awardedAt || 0));
           return awards;
         } catch (e) {
           console.error('Ошибка загрузки наград:', e);
@@ -326,7 +352,6 @@
         const achCfg = getAchievementsConfig();
         const purchased = Array.isArray(user.purchasedItems) ? user.purchasedItems : [];
         const hasTheme = purchased.includes('dark_theme');
-        // Проверка подтверждения email через сессию
         const { data: { user: authUser } } = await supabase.auth.getUser();
         const emailVerified = authUser?.email_confirmed_at ? true : false;
         const dailyLogin = user.dailyLogin || {};
@@ -365,7 +390,7 @@
           ${effectsHtml}
           ${buildDailyCalendar(dailyLogin)}
           <div class="awards-section" id="awards-container">
-            ${awards ? `<h3 class="section-title">🎖️ Награды</h3>
+            ${awards && awards.length > 0 ? `<h3 class="section-title">🎖️ Награды</h3>
               <div class="awards-grid">${awards.map(a => `<div class="award-card" data-award-id="${a.id}"><div class="award-card-icon"><img src="img/awards/${a.icon}" alt="${a.name}" onerror="this.parentElement.innerHTML='🎖️'"></div><div class="award-card-info"><div class="award-card-name">${a.name}</div>${a.comment ? `<div class="award-card-comment">${a.comment}</div>` : ''}</div></div>`).join('')}</div>` :
               (awards === undefined ? '<p class="loading-note">Загрузка наград...</p>' : '<p class="no-data">Нет наград.</p>')}
           </div>
@@ -490,7 +515,6 @@
           const nw = document.getElementById('new-password').value.trim();
           if (!old || !nw) return;
           try {
-            // Проверяем старый пароль через signIn
             const { error: signInError } = await supabase.auth.signInWithPassword({
               email: user.email,
               password: old
@@ -575,7 +599,6 @@
           onAuthStateChange(async (event, session) => {
             const user = session?.user;
             if (!user) {
-              // Пользователь не авторизован — показываем приглашение
               container.innerHTML = `<div class="login-prompt"><h3>🔒 Вы не авторизованы</h3><p>Войдите в профиль, чтобы отслеживать баллы, достижения и участвовать в ивентах.</p><a href="login.html?redirect=profile.html" class="btn">Войти</a></div>`;
               return;
             }
@@ -616,6 +639,7 @@
             if (user.activeTheme === 'dark') document.body.classList.add('dark-theme');
             else document.body.classList.remove('dark-theme');
 
+            // Загружаем награды асинхронно
             let awards = undefined;
             loadUserAwards(user.id).then(a => {
               const awardsContainer = document.getElementById('awards-container');
