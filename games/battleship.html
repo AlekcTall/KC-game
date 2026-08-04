@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>Морской бой – КЦ Игры</title>
     <link rel="stylesheet" href="../css/style.css">
+    <!-- стили оставлены без изменений -->
     <style>
         :root {
             --water-base: #a0c4e8;
@@ -272,12 +273,8 @@
         let isAI = false;
         let gameChannel = null, openGamesChannel = null;
         let autoMisses = [];
-        // FIX #8: используем ID игры вместо глобального флага, чтобы избежать двойной обработки
         let processedGameId = null;
-
-        // FIX #3: флаг для предотвращения множественных выстрелов
         let shotInProgress = false;
-        // FIX #4: флаг для предотвращения множественных ходов ИИ
         let aiMoveScheduled = false;
 
         function serializeBoard(board) { return JSON.stringify(board); }
@@ -327,23 +324,20 @@
             else console.log(`[${type.toUpperCase()}] ${msg}`);
         }
 
-        // ========== ГЛОБАЛЬНЫЙ ОБРАБОТЧИК КЛИКОВ (FIX #9: делегирование событий) ==========
+        // ========== ГЛОБАЛЬНЫЙ ОБРАБОТЧИК КЛИКОВ ==========
         gameContainer.addEventListener('click', (e) => {
-            // Клик по ячейке вражеского поля
             const enemyCell = e.target.closest('#enemy-board .cell:not(.disabled)');
             if (enemyCell && gameData?.status === 'active' && gameData?.turn === currentUser?.id) {
                 makeShot(parseInt(enemyCell.dataset.row), parseInt(enemyCell.dataset.col));
                 return;
             }
 
-            // Клик по ячейке своего поля (расстановка)
             const myCell = e.target.closest('#my-board .cell:not(.disabled)');
             if (myCell && gameData?.status === 'setup') {
                 placeShip(parseInt(myCell.dataset.row), parseInt(myCell.dataset.col));
                 return;
             }
 
-            // Кнопки выбора корабля
             const shipBtn = e.target.closest('.ship-btn');
             if (shipBtn) {
                 selectedShipIndex = parseInt(shipBtn.dataset.index);
@@ -352,7 +346,6 @@
                 return;
             }
 
-            // Кнопки ориентации
             const orientBtn = e.target.closest('.orientation-btn');
             if (orientBtn) {
                 orientation = orientBtn.dataset.orientation;
@@ -361,25 +354,21 @@
                 return;
             }
 
-            // Кнопка "Готов"
             if (e.target.closest('#ready-btn') && !e.target.closest('#ready-btn').disabled) {
                 readyUp();
                 return;
             }
 
-            // Кнопка "Отменить последний"
             if (e.target.closest('#undo-last-btn') && !e.target.closest('#undo-last-btn').disabled) {
                 undoLastShip();
                 return;
             }
 
-            // Кнопка "Сдаться"
             if (e.target.closest('#surrender-btn')) {
                 surrender();
                 return;
             }
 
-            // Кнопка "Новая игра"
             if (e.target.closest('#new-game-btn')) {
                 unsubscribeFromGame();
                 gameId = null; gameData = null;
@@ -389,31 +378,26 @@
                 return;
             }
 
-            // Кнопка "Отменить игру"
             if (e.target.closest('#cancel-game-btn')) {
                 cancelGame();
                 return;
             }
 
-            // Кнопка "Играть с другом"
             if (e.target.closest('#create-pvp-btn')) {
                 createGame(false);
                 return;
             }
 
-            // Кнопка "Играть с компьютером"
             if (e.target.closest('#play-ai-btn')) {
                 createGame(true);
                 return;
             }
 
-            // Кнопка "Присоединиться"
             if (e.target.closest('#join-game-btn')) {
                 joinGame();
                 return;
             }
 
-            // Кнопка "Войти" в открытую игру
             const joinBtn = e.target.closest('.join-open-btn');
             if (joinBtn) {
                 joinGameById(joinBtn.dataset.id);
@@ -751,7 +735,6 @@
                 renderBattleScreen();
             } else if (gameData.status === 'finished') {
                 clearSetupTimer();
-                // FIX #6: вызываем handleGameEnd для ТЕКУЩЕГО пользователя при завершении игры
                 if (processedGameId !== gameId) {
                     handleGameEnd(gameData.winner);
                 }
@@ -775,9 +758,8 @@
             `;
         }
 
-        // ========== ТАЙМЕР РАССТАНОВКИ (FIX #1) ==========
+        // ========== ТАЙМЕР РАССТАНОВКИ ==========
         function startSetupTimer() {
-            // FIX #1: не запускаем таймер, если он уже запущен
             if (setupTimer) return;
             clearSetupTimer();
             setupSecondsLeft = SETUP_TIME;
@@ -917,7 +899,6 @@
             `;
             gameContainer.innerHTML = html;
             
-            // FIX #1: запускаем таймер только если он ещё не запущен
             startSetupTimer();
             updateTimerDisplay();
 
@@ -1052,7 +1033,6 @@
                 <button class="btn btn-cancel" id="surrender-btn">🏳️ Сдаться</button>
             `;
 
-            // FIX #4: ИИ делает ход только один раз
             if (gameData.turn === 'ai' && gameData.status === 'active' && !aiMoveScheduled) {
                 aiMoveScheduled = true;
                 setTimeout(async () => {
@@ -1100,9 +1080,7 @@
         }
 
         async function makeShot(row, col) {
-            // FIX #3: предотвращаем множественные выстрелы
             if (shotInProgress) return;
-            // FIX #7: проверяем, что игра ещё активна
             if (gameData.status !== 'active') return;
             if (gameData.turn !== currentUser.id) return;
             if (enemyBoard[row][col] !== 0) { showToast('Сюда уже стреляли', 'info'); return; }
@@ -1156,7 +1134,6 @@
 
                 if (error) { showToast('Ошибка сохранения хода', 'error'); return; }
 
-                // Обновляем локальное состояние для немедленного отображения
                 gameData = { ...gameData, data: updatedData };
                 if (allSunk) {
                     gameData.status = 'finished';
@@ -1185,7 +1162,6 @@
         }
 
         async function aiMove() {
-            // FIX #7: проверяем, что игра ещё активна
             if (!gameData || gameData.status !== 'active' || gameData.turn !== 'ai') return;
             
             const myUid = currentUser.id;
@@ -1223,17 +1199,15 @@
             }
         }
 
-        // FIX #5: корректная обработка пустого массива кораблей
         function checkAllShipsSunk(ships, shots) {
-            if (!ships || ships.length === 0) return false; // FIX: пустой массив != "все потоплены"
+            if (!ships || ships.length === 0) return false;
             const allCells = ships.flat();
             const hitShots = shots.filter(s => s.hit).map(s => ({ row: s.row, col: s.col }));
             return allCells.every(cell => hitShots.some(h => h.row === cell.row && h.col === cell.col));
         }
 
-        // ========== ОБРАБОТКА КОНЦА ИГРЫ (FIX #2, #3, #8) ==========
+        // ========== ОБРАБОТКА КОНЦА ИГРЫ ==========
         async function handleGameEnd(winnerUid) {
-            // FIX #8: используем processedGameId вместо gameEndProcessed
             if (processedGameId === gameId) return;
             processedGameId = gameId;
 
@@ -1280,23 +1254,24 @@
                 if (sniper) newStats.sniperGame = true;
                 if (unsinkable) newStats.unsinkableGame = true;
 
-                // FIX #3: ОДНО обновление вместо двух
-                const newData = { ...userData, battleshipStats: newStats };
-                
                 let toastMsg = '';
                 if (isWin) {
+                    // Начисляем баллы через универсальную функцию (она же добавит историю)
                     if (typeof addPointsToCurrentUser === 'function') {
                         await addPointsToCurrentUser(10, 'battleship');
                     }
+                    // Начисляем локоины
                     const newBalance = (userData.lokoin_balance || 0) + 3;
-                    newData.lokoin_balance = newBalance;
+                    newStats.lokoin_balance = newBalance;
+                    userData.lokoin_balance = newBalance; // обновим локально
                     toastMsg = '🎉 Победа! +10 баллов, +3 локоина';
                 }
 
-                // ОДИН запрос к БД
+                // Обновляем ТОЛЬКО статистику и баланс, не трогая историю
+                const updatedData = { ...userData, battleshipStats: newStats };
                 await supabase
                     .from('users')
-                    .update({ data: newData, updated_at: new Date().toISOString() })
+                    .update({ data: updatedData, updated_at: new Date().toISOString() })
                     .eq('id', myUid);
 
                 if (toastMsg) showToast(toastMsg, 'success');
@@ -1355,7 +1330,6 @@
                 .eq('id', gameId);
 
             clearSetupTimer();
-            // handleGameEnd будет вызван автоматически через updateGameState
         }
 
         // ========== ОЧИСТКА ПОДПИСОК ==========
@@ -1379,7 +1353,6 @@
             clearSetupTimer();
             if (gameId && gameData && gameData.status === 'active' && currentUser) {
                 const opponentUid = getOpponentUid();
-                // Используем sendBeacon для гарантии доставки при закрытии страницы
                 try {
                     const supabaseUrl = typeof SUPABASE_URL !== 'undefined' ? SUPABASE_URL : '';
                     const supabaseKey = typeof SUPABASE_ANON_KEY !== 'undefined' ? SUPABASE_ANON_KEY : '';
