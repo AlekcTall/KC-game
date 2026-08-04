@@ -76,47 +76,31 @@
       eventsSection.style.display = 'none';
 
       let newsChannel = null, eventsChannel = null;
-      let newsRetryTimer = null, eventsRetryTimer = null;
+      let channelsInitialized = false; // чтобы не пересоздавать каналы при обновлении токена
 
-      // Безопасное создание канала с очисткой предыдущего
-      function safeSubscribe(channelName, table, filter, callback, existingChannelRef) {
-        // Удаляем старый канал, если есть
-        if (existingChannelRef.current) {
-          supabase.removeChannel(existingChannelRef.current).catch(console.warn);
-          existingChannelRef.current = null;
-        }
-        try {
-          const channel = supabase
-            .channel(channelName)
-            .on('postgres_changes', { event: '*', schema: 'public', table, filter }, callback)
-            .subscribe((status) => {
-              if (status === 'SUBSCRIBED') {
-                console.log(`✅ Подписка ${channelName} активна`);
-                // Сбрасываем таймеры повторов при успехе
-                if (channelName.includes('news')) clearTimeout(newsRetryTimer);
-                if (channelName.includes('events')) clearTimeout(eventsRetryTimer);
-              } else if (status === 'CHANNEL_ERROR' || status === 'CLOSED') {
-                console.warn(`⚠️ Ошибка подписки ${channelName}, переподключаемся...`);
-                // Планируем повторную подписку через 10 секунд
-                const retryFn = () => {
-                  safeSubscribe(channelName, table, filter, callback, existingChannelRef);
-                };
-                if (channelName.includes('news')) {
-                  clearTimeout(newsRetryTimer);
-                  newsRetryTimer = setTimeout(retryFn, 10000);
-                } else {
-                  clearTimeout(eventsRetryTimer);
-                  eventsRetryTimer = setTimeout(retryFn, 10000);
-                }
-              }
-            });
-          existingChannelRef.current = channel;
-        } catch (e) {
-          console.error(`Ошибка создания канала ${channelName}:`, e);
-        }
+      // Создание каналов только один раз
+      function initChannels() {
+        if (channelsInitialized) return;
+        channelsInitialized = true;
+
+        // Канал ивентов
+        eventsChannel = supabase
+          .channel('events_channel')
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'events', filter: 'status=eq.active' }, () => {
+            loadEvents();
+          })
+          .subscribe();
+
+        // Канал новостей
+        newsChannel = supabase
+          .channel('announcements_channel')
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'announcements' }, () => {
+            loadNews();
+          })
+          .subscribe();
       }
 
-      // Подписка на изменения аутентификации через onAuthStateChange
+      // Подписка на изменения аутентификации
       if (typeof onAuthStateChange === 'function') {
         onAuthStateChange((event, session) => {
           if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
@@ -125,20 +109,20 @@
               newsSection.style.display = 'block';
               loadEvents();
               loadNews();
-              subscribeToEvents();
-              subscribeToNews();
+              initChannels(); // создаём каналы только один раз
             } else {
               eventsSection.style.display = 'none';
               newsSection.style.display = 'none';
             }
-          } else {
+          } else if (event === 'SIGNED_OUT') {
+            // Только при выходе скрываем и отписываемся
             eventsSection.style.display = 'none';
             newsSection.style.display = 'none';
             if (eventsChannel) { supabase.removeChannel(eventsChannel); eventsChannel = null; }
             if (newsChannel) { supabase.removeChannel(newsChannel); newsChannel = null; }
-            clearTimeout(newsRetryTimer);
-            clearTimeout(eventsRetryTimer);
+            channelsInitialized = false;
           }
+          // TOKEN_REFRESHED игнорируем — каналы не трогаем
         });
       } else {
         eventsSection.style.display = 'none';
@@ -198,14 +182,6 @@
         });
       }
 
-      function subscribeToEvents() {
-        const channelRef = { current: eventsChannel };
-        safeSubscribe('events_channel', 'events', 'status=eq.active', () => {
-          loadEvents();
-        }, channelRef);
-        eventsChannel = channelRef.current;
-      }
-
       // ========== НОВОСТИ ==========
       async function loadNews() {
         const now = new Date().toISOString();
@@ -249,14 +225,6 @@
             if (n) openNewsModal(n);
           });
         });
-      }
-
-      function subscribeToNews() {
-        const channelRef = { current: newsChannel };
-        safeSubscribe('announcements_channel', 'announcements', undefined, () => {
-          loadNews();
-        }, channelRef);
-        newsChannel = channelRef.current;
       }
 
       // ========== МОДАЛЬНОЕ ОКНО НОВОСТИ ==========
@@ -372,8 +340,6 @@
       window.addEventListener('beforeunload', () => {
         if (newsChannel) supabase.removeChannel(newsChannel);
         if (eventsChannel) supabase.removeChannel(eventsChannel);
-        clearTimeout(newsRetryTimer);
-        clearTimeout(eventsRetryTimer);
       });
     });
   </script>
