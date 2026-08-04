@@ -15,6 +15,7 @@
     .form-group { margin-bottom: 1rem; }
     .form-group label { display: block; margin-bottom: 0.3rem; font-weight: 500; }
     .form-group input, .form-group select { width: 100%; padding: 0.7rem; border: 1px solid #ccc; border-radius: 6px; font-size: 1rem; }
+    .form-group .hint { font-size: 0.8rem; color: #888; margin-top: 0.2rem; }
     .login-btn { width: 100%; padding: 0.8rem; background: var(--color-primary); color: white; border: none; border-radius: 6px; font-size: 1.1rem; font-weight: 600; cursor: pointer; transition: background 0.2s; }
     .login-btn:hover { background: #2980b9; }
     .auth-message { margin-top: 1rem; font-size: 0.9rem; text-align: center; }
@@ -32,7 +33,8 @@
     .faq-item { margin-bottom: 0.8rem; }
     .faq-item__question { font-weight: 600; color: var(--color-header); cursor: pointer; display: flex; justify-content: space-between; align-items: center; }
     .faq-item__answer { max-height: 0; overflow: hidden; transition: max-height 0.3s ease; color: #555; font-size: 0.9rem; padding-left: 0.5rem; }
-    .faq-item.open .faq-item__answer { max-height: 100px; margin-top: 0.3rem; }
+    .faq-item.open .faq-item__answer { max-height: 200px; margin-top: 0.3rem; }
+    .intro-text { font-size: 0.9rem; color: #555; margin-bottom: 1.5rem; text-align: center; line-height: 1.5; }
     @media (max-width: 480px) { .login-page { margin: 1rem; padding: 1.5rem; } }
   </style>
 </head>
@@ -46,7 +48,11 @@
 
   <main class="main">
     <div class="login-page">
-      <h2 style="text-align:center; margin-bottom:1.5rem;">Вход в профиль</h2>
+      <h2 style="text-align:center; margin-bottom:0.5rem;">Вход в профиль</h2>
+      <p class="intro-text">
+        Добро пожаловать на корпоративный игровой портал!<br>
+        Войдите или создайте аккаунт, чтобы играть, зарабатывать баллы и локоины, участвовать в ивентах и получать награды.
+      </p>
       
       <div class="auth-tabs">
         <button class="auth-tab active" data-tab="login">Вход</button>
@@ -58,6 +64,7 @@
         <div class="form-group">
           <label for="login-email">Email</label>
           <input type="email" id="login-email" placeholder="example@mail.ru" autocomplete="email">
+          <div class="hint">Введите адрес, который использовали при регистрации.</div>
         </div>
         <div class="form-group">
           <label for="login-password">Пароль</label>
@@ -72,19 +79,23 @@
       <div id="register-form" class="auth-form">
         <div class="form-group">
           <label for="reg-email">Email</label>
-          <input type="email" id="reg-email" placeholder="example@mail.ru" autocomplete="email">
+          <input type="email" id="reg-email" placeholder="ivan@mail.ru" autocomplete="email">
+          <div class="hint" style="color:#e67e22;">⚠️ Только личная почта (корпоративная не подходит)</div>
         </div>
         <div class="form-group">
           <label for="reg-password">Пароль</label>
           <input type="password" id="reg-password" placeholder="Минимум 6 символов" autocomplete="new-password">
+          <div class="hint">Придумайте надёжный пароль. Минимум 6 знаков.</div>
         </div>
         <div class="form-group">
           <label for="reg-username">Имя</label>
-          <input type="text" id="reg-username" placeholder="Как вас зовут" autocomplete="name">
+          <input type="text" id="reg-username" placeholder="Иванов Иван" autocomplete="name">
+          <div class="hint" style="color:#e67e22;">⚠️ Формат: Фамилия Имя (например, Иванов Иван)</div>
         </div>
         <div class="form-group">
           <label for="reg-department">Отдел</label>
           <select id="reg-department"></select>
+          <div class="hint">Выберите ваш отдел из списка.</div>
         </div>
         <button class="login-btn" id="register-btn">Зарегистрироваться</button>
         <p class="auth-message" id="register-message"></p>
@@ -92,7 +103,15 @@
 
       <!-- Блок FAQ -->
       <div class="faq-section">
-        <h3>❓ Частые вопросы</h3>
+        <h3>❓ Часто задаваемые вопросы</h3>
+        <div class="faq-item">
+          <div class="faq-item__question">Зачем нужна регистрация? <span>▼</span></div>
+          <div class="faq-item__answer">Только авторизованные пользователи могут играть, зарабатывать баллы, участвовать в ивентах и пользоваться магазином. Гостевой доступ ограничен.</div>
+        </div>
+        <div class="faq-item">
+          <div class="faq-item__question">Почему нужна личная почта? <span>▼</span></div>
+          <div class="faq-item__answer">На личную почту придёт письмо для подтверждения аккаунта. Это необходимо для безопасности и возможности восстановить пароль. Корпоративная почта часто блокирует внешние письма.</div>
+        </div>
         <div class="faq-item">
           <div class="faq-item__question">Не приходит письмо подтверждения <span>▼</span></div>
           <div class="faq-item__answer">Проверьте папку «Спам». Если письма нет, нажмите «Забыли пароль?» — придёт новое письмо. Убедитесь, что email введён без ошибок.</div>
@@ -102,8 +121,12 @@
           <div class="faq-item__answer">Нажмите «Забыли пароль?» на вкладке «Вход». На ваш email придёт ссылка для сброса пароля.</div>
         </div>
         <div class="faq-item">
-          <div class="faq-item__question">Зачем подтверждать email? <span>▼</span></div>
-          <div class="faq-item__answer">Это необходимо для безопасности аккаунта и возможности восстановить пароль. Без подтверждения некоторые функции могут быть ограничены.</div>
+          <div class="faq-item__question">Можно ли изменить имя или отдел? <span>▼</span></div>
+          <div class="faq-item__answer">Имя и отдел можно изменить только через администратора. Обратитесь к нему лично или через кнопку обратной связи на главной странице.</div>
+        </div>
+        <div class="faq-item">
+          <div class="faq-item__question">Что делать, если аккаунт заблокирован? <span>▼</span></div>
+          <div class="faq-item__answer">Если ваша учётная запись заблокирована, обратитесь к администратору для выяснения причин и разблокировки.</div>
         </div>
       </div>
 
@@ -177,12 +200,10 @@
     document.addEventListener('DOMContentLoaded', async () => {
       await loadDepartments();
 
-      // Слушатель авторизации через onAuthStateChange (глобальная функция из auth.js)
       if (typeof onAuthStateChange === 'function') {
         onAuthStateChange((event, session) => {
-          // Если пользователь вошёл — сразу редиректим на целевую страницу
           if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
-            // Не редиректим, если мы в процессе регистрации (управляем сами)
+            // Если пользователь уже вошёл, просто остаёмся на странице (редирект делают сами кнопки)
           }
         });
       }
@@ -216,10 +237,8 @@
         }
 
         try {
-          // Используем нашу функцию loginUser из auth.js
           const userData = await loginUser(email, password);
           if (userData) {
-            // Обновляем время последней активности (если функция доступна)
             if (typeof updateLastActive === 'function') {
               const { data: { user } } = await supabase.auth.getUser();
               if (user) await updateLastActive(user.id);
@@ -259,17 +278,14 @@
         }
 
         try {
-          // Вызываем нашу функцию registerUser из auth.js
           const userData = await registerUser(email, password, username, department);
           if (userData) {
-            // Проверим, что запись в таблице users существует (на всякий случай)
             const { data: checkRow } = await supabase
               .from('users')
               .select('id')
               .eq('id', userData.id)
               .single();
             if (!checkRow) {
-              // Ошибка создания профиля – удаляем auth пользователя и показываем ошибку
               await supabase.auth.signOut();
               msgEl.textContent = 'Ошибка создания профиля. Попробуйте позже или обратитесь к администратору.';
               msgEl.className = 'auth-message error';
@@ -288,7 +304,7 @@
         }
       });
 
-      // Восстановление пароля (через Supabase)
+      // Восстановление пароля
       document.getElementById('forgot-password-link').addEventListener('click', () => {
         document.getElementById('reset-modal').style.display = 'flex';
         document.getElementById('reset-email').value = document.getElementById('login-email').value;
@@ -308,7 +324,6 @@
           return;
         }
         try {
-          // Вызов Supabase для сброса пароля
           const { error } = await supabase.auth.resetPasswordForEmail(email, {
             redirectTo: window.location.origin + '/login.html'
           });
