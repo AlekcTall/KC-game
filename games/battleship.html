@@ -274,7 +274,6 @@
         let autoMisses = [];
         let gameEndProcessed = false;
 
-        // Сериализация
         function serializeBoard(board) { return JSON.stringify(board); }
         function parseBoard(data) {
             if (!data) return Array(GRID_SIZE).fill().map(() => Array(GRID_SIZE).fill(0));
@@ -288,7 +287,6 @@
             catch (e) { return []; }
         }
 
-        // Авторизация через onAuthStateChange
         if (typeof onAuthStateChange === 'function') {
             onAuthStateChange(async (event, session) => {
                 if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
@@ -352,9 +350,8 @@
             document.getElementById('play-ai-btn').addEventListener('click', () => createGame(true));
             document.getElementById('join-game-btn').addEventListener('click', joinGame);
 
-            // Подписка на открытые игры
             openGamesChannel = supabase
-                .channel('open_games')
+                .channel('open_battles')
                 .on('postgres_changes', { event: '*', schema: 'public', table: 'battles', filter: 'status=eq.waiting' }, () => {
                     loadOpenGames();
                 })
@@ -371,7 +368,6 @@
                 .from('battles')
                 .select('*')
                 .eq('status', 'waiting')
-                .eq('isAI', false)
                 .order('created_at', { ascending: false })
                 .limit(10);
 
@@ -444,7 +440,7 @@
 
                 gameId = data.id;
                 gameData = data;
-                isAI = data.isAI || false;
+                isAI = data.data?.isAI || false;
                 resetGameState();
                 gameEndProcessed = false;
                 subscribeToGame();
@@ -455,61 +451,46 @@
             }
         }
 
-        // ========== СОЗДАНИЕ / ПРИСОЕДИНЕНИЕ ==========
+        // ========== СОЗДАНИЕ ИГРЫ (исправлено) ==========
         async function createGame(aiMode = false) {
             try {
                 isAI = aiMode;
                 gameEndProcessed = false;
+                gameId = 'battle_' + Date.now() + '_' + currentUser.id.substring(0,5);
 
-                const { data, error } = await supabase
-                    .from('battles')
-                    .insert([{
-                        status: 'waiting',
+                const players = {
+                    [currentUser.id]: { username: getCurrentUser()?.username || 'Игрок', shipsData: '', ready: false }
+                };
+                if (aiMode) players['ai'] = { username: 'Компьютер', isAI: true, shipsData: '', ready: false };
+
+                const gameRecord = {
+                    id: gameId,
+                    status: aiMode ? 'active' : 'waiting',
+                    data: {
                         isAI: aiMode,
-                        participants: [currentUser.id],
-                        data: {
-                            players: {
-                                [currentUser.id]: { username: getCurrentUser()?.username || 'Игрок', shipsData: '', ready: false }
-                            },
-                            boards: { [currentUser.id]: '' },
-                            shots: {},
-                            turn: null,
-                            winner: null,
-                            setupDeadline: null
-                        },
-                        created_at: new Date().toISOString()
-                    }])
-                    .select()
-                    .single();
-
-                if (error) throw error;
-
-                gameId = data.id;
-                gameData = data;
+                        players: players,
+                        boards: { [currentUser.id]: '' },
+                        shots: {},
+                        turn: null,
+                        winner: null,
+                        setupDeadline: null,
+                        participants: [currentUser.id, ...(aiMode ? ['ai'] : [])]
+                    },
+                    participants: [currentUser.id, ...(aiMode ? ['ai'] : [])],
+                    winner: null,
+                    created_at: new Date().toISOString()
+                };
 
                 if (aiMode) {
                     const aiShips = generateAIShips();
                     const aiBoard = buildBoardFromShips(aiShips);
-                    const updatedData = {
-                        ...gameData.data,
-                        players: {
-                            ...gameData.data.players,
-                            ai: { username: 'Компьютер', isAI: true, shipsData: serializeShips(aiShips), ready: true }
-                        },
-                        boards: {
-                            ...gameData.data.boards,
-                            ai: serializeBoard(aiBoard)
-                        },
-                        setupDeadline: new Date(Date.now() + SETUP_TIME * 1000).toISOString()
-                    };
-
-                    const { error: updateError } = await supabase
-                        .from('battles')
-                        .update({ data: updatedData, participants: [currentUser.id, 'ai'], status: 'setup' })
-                        .eq('id', gameId);
-
-                    if (updateError) throw updateError;
+                    gameRecord.data.boards.ai = serializeBoard(aiBoard);
+                    gameRecord.data.players.ai.shipsData = serializeShips(aiShips);
+                    gameRecord.data.players.ai.ready = true;
                 }
+
+                const { error } = await supabase.from('battles').insert([gameRecord]);
+                if (error) throw error;
 
                 subscribeToGame();
                 showToast(aiMode ? 'Игра с ИИ создана!' : 'Игра создана! ID: ' + gameId, 'success');
@@ -528,10 +509,10 @@
 
                 if (error || !data) { showToast('Игра не найдена', 'error'); return; }
 
-                const gameData = data;
-                if (gameData.participants && gameData.participants.includes(currentUser.id)) {
-                    gameId = id;
-                    isAI = gameData.isAI || false;
+                const gData = data;
+                if (gData.participants?.includes(currentUser.id)) {
+                    gameId = gData.id;
+                    isAI = gData.data?.isAI || false;
                     subscribeToGame();
                     resetGameState();
                     gameEndProcessed = false;
@@ -539,8 +520,8 @@
                     return;
                 }
 
-                if (gameData.status !== 'waiting') { showToast('Игра уже началась или завершена', 'error'); return; }
-                const players = gameData.data?.players || {};
+                if (gData.status !== 'waiting') { showToast('Игра уже началась или завершена', 'error'); return; }
+                const players = gData.data?.players || {};
                 if (Object.keys(players).length >= 2) { showToast('Игра заполнена', 'error'); return; }
 
                 const updatedPlayers = {
@@ -548,15 +529,16 @@
                     [currentUser.id]: { username: getCurrentUser()?.username || 'Игрок', shipsData: '', ready: false }
                 };
                 const updatedBoards = {
-                    ...(gameData.data?.boards || {}),
+                    ...(gData.data?.boards || {}),
                     [currentUser.id]: ''
                 };
+                const updatedData = { ...gData.data, players: updatedPlayers, boards: updatedBoards };
 
                 const { error: updateError } = await supabase
                     .from('battles')
                     .update({
-                        data: { ...gameData.data, players: updatedPlayers, boards: updatedBoards, setupDeadline: new Date(Date.now() + SETUP_TIME * 1000).toISOString() },
-                        participants: [...(gameData.participants || []), currentUser.id],
+                        data: updatedData,
+                        participants: [...(gData.participants || []), currentUser.id],
                         status: 'setup'
                     })
                     .eq('id', id);
@@ -564,7 +546,7 @@
                 if (updateError) throw updateError;
 
                 gameId = id;
-                isAI = gameData.isAI || false;
+                isAI = gData.data?.isAI || false;
                 subscribeToGame();
                 showToast('Вы присоединились!', 'success');
                 resetGameState();
@@ -636,7 +618,7 @@
         function subscribeToGame() {
             unsubscribeFromGame();
             gameChannel = supabase
-                .channel(`game_${gameId}`)
+                .channel(`battle_${gameId}`)
                 .on('postgres_changes', { event: '*', schema: 'public', table: 'battles', filter: `id=eq.${gameId}` }, (payload) => {
                     gameData = payload.new;
                     updateGameState();
@@ -753,7 +735,6 @@
 
             if (error) { showToast('Ошибка сохранения', 'error'); return; }
 
-            // Проверяем, все ли готовы
             const allReady = Object.values(players).every(p => p.ready);
             if (allReady) {
                 const uids = Object.keys(players);
@@ -1048,7 +1029,6 @@
                 toastMsg = '🔥 Убит!';
                 addAutoMissesForShip(sunkShip);
                 if (sunkShip.length === 4) {
-                    // Обновление статистики sunk4Deck
                     const { data: userRow } = await supabase.from('users').select('data').eq('id', currentUser.id).single();
                     const userData = userRow?.data || {};
                     const newData = { ...userData, battleshipStats: { ...(userData.battleshipStats || {}), sunk4Deck: true } };
