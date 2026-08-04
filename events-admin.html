@@ -114,29 +114,78 @@
         finish: async (event) => {
           const d = event.data || {};
           const participants = d.participants || {};
-          const ranked = [];
+          const actionTypes = ['water','bugs','birds','fertilize','tie','sing','lokoin'];
+
+          // Суммарные действия по типам
+          const totalsByType = {};
+          actionTypes.forEach(k => totalsByType[k] = 0);
+
+          // Собираем статистику по пользователям
+          const userStats = [];
           for (const [uid, pdata] of Object.entries(participants)) {
             if (uid === '_lastDecay') continue;
-            const { data: userData, error: userError } = await supabase.from('users').select('data').eq('id', uid).single();
+            const { data: userData, error: userError } = await supabase
+              .from('users')
+              .select('data')
+              .eq('id', uid)
+              .single();
             if (userError || !userData) continue;
             const u = userData.data || {};
             if (u.role === 'admin') continue;
-            ranked.push({ username: u.username || 'Аноним', department: u.department || '—', total: Object.values(pdata.actions || {}).reduce((a, b) => a + b, 0) });
+
+            const actions = pdata.actions || {};
+            const total = Object.values(actions).reduce((a,b) => a+b, 0);
+            if (total === 0) continue;
+
+            // Суммируем по типам
+            for (const k of actionTypes) {
+              totalsByType[k] += actions[k] || 0;
+            }
+
+            userStats.push({
+              username: u.username || 'Аноним',
+              department: u.department || '—',
+              actions: { ...actions },
+              total
+            });
           }
-          ranked.sort((a, b) => b.total - a.total);
-          const topPlayer = ranked[0] || null;
+
+          // Сортируем пользователей по убыванию total
+          userStats.sort((a,b) => b.total - a.total);
+
+          // Статистика по отделам
           const deptMap = {};
-          ranked.forEach(p => {
-            if (!deptMap[p.department]) deptMap[p.department] = { totalActions: 0, topPlayer: '', topActions: 0 };
+          userStats.forEach(p => {
+            if (!deptMap[p.department]) {
+              deptMap[p.department] = {
+                totalActions: 0,
+                topPlayer: '',
+                topActions: 0,
+                users: []
+              };
+            }
             deptMap[p.department].totalActions += p.total;
-            if (p.total > deptMap[p.department].topActions) { deptMap[p.department].topPlayer = p.username; deptMap[p.department].topActions = p.total; }
+            deptMap[p.department].users.push(p.username);
+            if (p.total > deptMap[p.department].topActions) {
+              deptMap[p.department].topPlayer = p.username;
+              deptMap[p.department].topActions = p.total;
+            }
           });
+
+          // Сортируем отделы по убыванию действий
+          const deptList = Object.entries(deptMap)
+            .map(([name, d]) => ({ name, ...d }))
+            .sort((a,b) => b.totalActions - a.totalActions);
+
+          const totalActionsGlobal = userStats.reduce((s, p) => s + p.total, 0);
+
           return {
-            uniqueParticipants: Object.keys(participants).filter(k => k !== '_lastDecay').length,
-            totalActions: d.statistics?.totalActions || 0,
-            topPlayer,
-            departments: Object.entries(deptMap).map(([name, d]) => ({ name, totalActions: d.totalActions, topPlayer: d.topPlayer })),
-            topParticipants: ranked.slice(0, 5)
+            uniqueParticipants: userStats.length,
+            totalActions: totalActionsGlobal,
+            totalsByType,
+            topPlayer: userStats[0] || null,
+            topParticipants: userStats.slice(0, 5),
+            departments: deptList
           };
         }
       },
@@ -314,19 +363,57 @@
                   <br><small>${startStr} → ${endStr}</small>
                 </div>`;
 
+              // --- НАЧАЛО БЛОКА ДЕТАЛЬНЫХ ИТОГОВ ---
               if (ev.status === 'finished' && evData.finalStats) {
                 const fs = evData.finalStats;
                 html += `<div class="final-stats">
                   <strong>📊 Итоги:</strong>
-                  ${fs.imageData ? `<img src="${fs.imageData}" alt="Доска" style="max-width:200px; display:block; margin:0.5rem 0;">` : ''}
-                  <table>
-                    ${fs.uniqueParticipants !== undefined ? `<tr><td>Участников:</td><td><strong>${fs.uniqueParticipants}</strong></td></tr>` : ''}
-                    ${fs.totalActions !== undefined ? `<tr><td>Действий:</td><td><strong>${fs.totalActions}</strong></td></tr>` : ''}
-                    ${fs.totalPixels !== undefined ? `<tr><td>Пикселей:</td><td><strong>${fs.totalPixels}</strong></td></tr>` : ''}
-                  </table>
-                  ${fs.topPlayer ? `<p style="margin-top:0.5rem;"><strong>👑 Лучший игрок:</strong> ${fs.topPlayer.username} (${fs.topPlayer.department || '—'}) — ${fs.topPlayer.totalActions || fs.topPlayer.totalPixels || fs.topPlayer.score || 0} очков</p>` : ''}
-                </div>`;
+                  <p>👥 Участников: <strong>${fs.uniqueParticipants}</strong> | 🎯 Всего действий: <strong>${fs.totalActions}</strong></p>`;
+                
+                // Общая статистика по типам действий
+                if (fs.totalsByType) {
+                  const actionNames = {
+                    water: '💧 Полито',
+                    bugs: '🐛 Снято жуков',
+                    birds: '🦅 Отогнано птиц',
+                    fertilize: '🌿 Удобрено',
+                    tie: '🪴 Подвязано',
+                    sing: '🎵 Спето песен',
+                    lokoin: '🌞 Подарено света'
+                  };
+                  html += '<p><strong>По действиям:</strong></p><ul style="list-style:none; padding:0;">';
+                  for (const [key, name] of Object.entries(actionNames)) {
+                    html += `<li>${name}: <strong>${fs.totalsByType[key] || 0}</strong></li>`;
+                  }
+                  html += '</ul>';
+                }
+                
+                // Лучший игрок
+                if (fs.topPlayer) {
+                  html += `<p>👑 <strong>Лучший игрок:</strong> ${fs.topPlayer.username} (${fs.topPlayer.department || '—'}) — ${fs.topPlayer.total} действий</p>`;
+                }
+                
+                // Топ-5 участников
+                if (fs.topParticipants && fs.topParticipants.length > 0) {
+                  html += `<details style="margin-top:0.5rem;"><summary>🏆 Топ участников</summary><table style="width:100%; margin-top:0.5rem;"><tr><th>#</th><th>Игрок</th><th>Отдел</th><th>Действий</th></tr>`;
+                  fs.topParticipants.forEach((p, i) => {
+                    html += `<tr><td>${i+1}</td><td>${p.username}</td><td>${p.department || '—'}</td><td>${p.total}</td></tr>`;
+                  });
+                  html += '</table></details>';
+                }
+                
+                // Лучшие отделы
+                if (fs.departments && fs.departments.length > 0) {
+                  html += `<details style="margin-top:0.5rem;"><summary>🏢 Лучшие отделы</summary><table style="width:100%; margin-top:0.5rem;"><tr><th>Отдел</th><th>Действий</th><th>Лучший игрок</th></tr>`;
+                  fs.departments.forEach(d => {
+                    html += `<tr><td>${d.name}</td><td>${d.totalActions}</td><td>${d.topPlayer}</td></tr>`;
+                  });
+                  html += '</table></details>';
+                }
+                
+                html += '</div>';
               }
+              // --- КОНЕЦ БЛОКА ДЕТАЛЬНЫХ ИТОГОВ ---
 
               html += `<div class="event-actions">
                   <button class="btn btn-small edit-event-btn" data-event-id="${ev.id}">✏️</button>
