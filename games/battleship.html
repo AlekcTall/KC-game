@@ -424,7 +424,7 @@
             } catch (e) { gameContainer.innerHTML = '<p style="color:#ef4444; padding:2rem;">Ошибка загрузки рейтинга.</p>'; }
         }
 
-        // ========== АВТО-ВОССТАНОВЛЕНИЕ (исправлено) ==========
+        // ========== АВТО-ВОССТАНОВЛЕНИЕ ==========
         async function autoResumeGame() {
             if (!currentUser) return false;
             try {
@@ -458,7 +458,7 @@
             }
         }
 
-        // ========== СОЗДАНИЕ ИГРЫ ==========
+        // ========== СОЗДАНИЕ ИГРЫ (исправлено для AI) ==========
         async function createGame(aiMode = false) {
             try {
                 isAI = aiMode;
@@ -472,7 +472,8 @@
 
                 const gameRecord = {
                     id: gameId,
-                    status: aiMode ? 'active' : 'waiting',
+                    // Для AI-игр статус = 'setup', чтобы игрок мог расставить корабли
+                    status: aiMode ? 'setup' : 'waiting',
                     data: {
                         isAI: aiMode,
                         players: players,
@@ -493,14 +494,14 @@
                     const aiBoard = buildBoardFromShips(aiShips);
                     gameRecord.data.boards.ai = serializeBoard(aiBoard);
                     gameRecord.data.players.ai.shipsData = serializeShips(aiShips);
-                    gameRecord.data.players.ai.ready = true;
+                    gameRecord.data.players.ai.ready = true;   // ИИ всегда готов
                 }
 
                 const { error } = await supabase.from('battles').insert([gameRecord]);
                 if (error) throw error;
 
                 subscribeToGame();
-                showToast(aiMode ? 'Игра с ИИ создана!' : 'Игра создана! ID: ' + gameId, 'success');
+                showToast(aiMode ? 'Игра с ИИ создана! Расставьте корабли.' : 'Игра создана! ID: ' + gameId, 'success');
                 resetGameState();
                 if (aiMode) startSetupTimer();
             } catch (e) { showToast('Ошибка создания: ' + e.message, 'error'); }
