@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Рейтинг – Геймификация КЦ</title>
   <link rel="stylesheet" href="css/style.css">
+  <!-- стили страницы без изменений, оставлены как есть -->
   <style>
     .leaderboard-filters { display: flex; gap: 1rem; margin-bottom: 1.5rem; flex-wrap: wrap; align-items: flex-end; }
     .filter-group { min-width: 160px; }
@@ -37,6 +38,7 @@
     .login-prompt-leaderboard { text-align: center; padding: 3rem 1rem; }
     .login-prompt-leaderboard h3 { margin-bottom: 0.5rem; }
     .login-prompt-leaderboard p { margin-bottom: 1.5rem; color: #666; }
+    .leaderboard-container { display: none; } /* скрыт по умолчанию, покажется только после авторизации */
   </style>
 </head>
 <body>
@@ -61,7 +63,10 @@
   <main class="main">
     <div class="container">
       <h2>Таблица лидеров</h2>
-      <div id="leaderboard-container"><p class="no-results">Загрузка...</p></div>
+      <!-- Контейнер для интерфейса рейтинга, изначально скрыт -->
+      <div id="leaderboard-wrapper" class="leaderboard-container"></div>
+      <!-- Запасной контейнер для сообщений (неавторизованный, ошибка) -->
+      <div id="leaderboard-message" class="login-prompt-leaderboard" style="display: none;"></div>
     </div>
   </main>
 
@@ -90,6 +95,8 @@
 
       let filterName, filterPointsMin, filterPointsMax, filterDept, filterAch;
       let tableContainer;
+      let wrapper = document.getElementById('leaderboard-wrapper');
+      let messageEl = document.getElementById('leaderboard-message');
 
       async function loadDepartments() {
         try {
@@ -142,7 +149,6 @@
         }
 
         try {
-          // Получаем всех пользователей, кроме админов, сортируем по очкам
           const { data, error } = await supabase
             .from('users')
             .select('id, data')
@@ -251,8 +257,7 @@
       }
 
       function buildUI() {
-        const container = document.getElementById('leaderboard-container');
-        container.innerHTML = `
+        wrapper.innerHTML = `
           <div class="leaderboard-filters" id="filters-block">
             <div class="filter-group"><label>🔍 Имя</label><input type="text" id="filter-name"></div>
             <div class="filter-group"><label>📊 Баллы</label><div class="filter-range"><input type="number" id="filter-points-min" placeholder="От"><span>–</span><input type="number" id="filter-points-max" placeholder="До"></div></div>
@@ -300,19 +305,36 @@
         loadUsers();
       }
 
+      function showLoginPrompt() {
+        wrapper.style.display = 'none';
+        messageEl.style.display = 'block';
+        messageEl.innerHTML = '<h3>Войдите, чтобы увидеть рейтинг</h3><p>Пожалуйста, авторизуйтесь для просмотра таблицы лидеров.</p><a href="login.html?redirect=leaderboard.html" class="btn">Войти</a>';
+      }
+
       document.addEventListener('DOMContentLoaded', async () => {
-        // Проверяем авторизацию (ждём, пока auth.js инициализируется)
+        // Сразу скрываем оба контейнера на случай, если что-то пошло не так
+        wrapper.style.display = 'none';
+        messageEl.style.display = 'none';
+
+        // Проверяем авторизацию
         if (typeof onAuthStateChange === 'function') {
           onAuthStateChange((event, session) => {
-            if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
-              currentUid = session?.user?.id || null;
+            if (session?.user) {
+              currentUid = session.user.id;
+              // Пользователь авторизован – показываем интерфейс
+              wrapper.style.display = 'block';
+              messageEl.style.display = 'none';
               loadDepartments().then(buildUI);
             } else {
-              document.getElementById('leaderboard-container').innerHTML = '<div class="login-prompt-leaderboard"><h3>Войдите, чтобы увидеть рейтинг</h3><p>Пожалуйста, авторизуйтесь для просмотра таблицы лидеров.</p><a href="login.html?redirect=leaderboard.html" class="btn">Войти</a></div>';
+              // Нет сессии – показываем приглашение
+              currentUid = null;
+              showLoginPrompt();
             }
           });
         } else {
-          document.getElementById('leaderboard-container').innerHTML = '<p>Ошибка загрузки системы авторизации.</p>';
+          // Если система авторизации не загружена, показываем сообщение об ошибке
+          messageEl.style.display = 'block';
+          messageEl.innerHTML = '<p>Ошибка загрузки системы авторизации.</p>';
         }
       });
     })();
