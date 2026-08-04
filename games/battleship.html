@@ -424,23 +424,30 @@
             } catch (e) { gameContainer.innerHTML = '<p style="color:#ef4444; padding:2rem;">Ошибка загрузки рейтинга.</p>'; }
         }
 
-        // ========== АВТО-ВОССТАНОВЛЕНИЕ ==========
+        // ========== АВТО-ВОССТАНОВЛЕНИЕ (исправлено) ==========
         async function autoResumeGame() {
             if (!currentUser) return false;
             try {
                 const { data, error } = await supabase
                     .from('battles')
                     .select('*')
-                    .contains('participants', [currentUser.id])
                     .neq('status', 'finished')
-                    .limit(1)
-                    .single();
+                    .order('created_at', { ascending: false })
+                    .limit(10);
 
-                if (error || !data) return false;
+                if (error) throw error;
 
-                gameId = data.id;
-                gameData = data;
-                isAI = data.data?.isAI || false;
+                const activeGames = (data || []).filter(g => {
+                    const participants = g.participants || g.data?.participants || [];
+                    return participants.includes(currentUser.id);
+                });
+
+                if (activeGames.length === 0) return false;
+
+                const game = activeGames[0];
+                gameId = game.id;
+                gameData = game;
+                isAI = game.data?.isAI || false;
                 resetGameState();
                 gameEndProcessed = false;
                 subscribeToGame();
@@ -451,7 +458,7 @@
             }
         }
 
-        // ========== СОЗДАНИЕ ИГРЫ (исправлено) ==========
+        // ========== СОЗДАНИЕ ИГРЫ ==========
         async function createGame(aiMode = false) {
             try {
                 isAI = aiMode;
