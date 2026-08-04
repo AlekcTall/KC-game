@@ -346,37 +346,58 @@
         }
       });
 
-      document.addEventListener('DOMContentLoaded', async () => {
-        // Сразу показываем "Загрузка..."
+      // Инициализация магазина с немедленной проверкой сессии
+      async function initShop() {
+        // Всегда сначала показываем "Загрузка..."
         shopContainer.innerHTML = '<p style="text-align:center; padding:2rem;">Загрузка...</p>';
 
+        try {
+          // Немедленно проверяем текущую сессию, не дожидаясь событий
+          const { data: { session } } = await supabase.auth.getSession();
+          if (session?.user) {
+            await loadUserDataAndShop(session.user);
+          } else {
+            shopContainer.innerHTML = '<p style="text-align:center; padding:2rem;">Войдите, чтобы просматривать магазин. <a href="login.html?redirect=shop.html">Войти</a></p>';
+          }
+        } catch (e) {
+          console.error('Ошибка инициализации магазина:', e);
+          shopContainer.innerHTML = '<p class="shop-error">Не удалось загрузить магазин.</p>';
+        }
+
+        // Подписываемся на изменения авторизации для будущих входов/выходов
         if (typeof onAuthStateChange === 'function') {
           onAuthStateChange(async (event, session) => {
             if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
-              const { data: { user } } = await supabase.auth.getUser();
-              if (user) {
-                const { data: row } = await supabase
-                  .from('users')
-                  .select('id, email, data')
-                  .eq('id', user.id)
-                  .single();
-                if (row) {
-                  currentUserData = unpackUserData(row);
-                  setCurrentUser(currentUserData);
-                  updateAuthUI(user);
-                }
-                loadShopItems();
-              } else {
-                shopContainer.innerHTML = '<p style="text-align:center; padding:2rem;">Войдите, чтобы просматривать магазин. <a href="login.html?redirect=shop.html">Войти</a></p>';
+              if (session?.user) {
+                await loadUserDataAndShop(session.user);
               }
-            } else {
+            } else if (event === 'SIGNED_OUT') {
               shopContainer.innerHTML = '<p style="text-align:center; padding:2rem;">Войдите, чтобы просматривать магазин. <a href="login.html?redirect=shop.html">Войти</a></p>';
             }
           });
-        } else {
-          shopContainer.innerHTML = '<p style="text-align:center; padding:2rem;">Ошибка загрузки системы авторизации.</p>';
         }
-      });
+      }
+
+      async function loadUserDataAndShop(user) {
+        try {
+          const { data: row } = await supabase
+            .from('users')
+            .select('id, email, data')
+            .eq('id', user.id)
+            .single();
+          if (row) {
+            currentUserData = unpackUserData(row);
+            setCurrentUser(currentUserData);
+            updateAuthUI(user);
+          }
+          loadShopItems();
+        } catch (e) {
+          console.error('Ошибка загрузки данных пользователя:', e);
+          shopContainer.innerHTML = '<p class="shop-error">Не удалось загрузить данные профиля.</p>';
+        }
+      }
+
+      document.addEventListener('DOMContentLoaded', initShop);
     })();
   </script>
 </body>
