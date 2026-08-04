@@ -860,7 +860,7 @@
         return { win: false, winner: null };
     }
 
-    // ===== ЗАВЕРШЕНИЕ ИГРЫ =====
+    // ===== ЗАВЕРШЕНИЕ ИГРЫ (ИСПРАВЛЕНО) =====
     async function handleGameEnd(isWin, isDraw) {
         if (processedGameId === gameId) return;
         processedGameId = gameId;
@@ -869,13 +869,23 @@
         const mode = isAI ? 'pve' : 'pvp';
 
         try {
-            const { data: userRow, error } = await supabase
-                .from('users').select('data').eq('id', myUid).single();
+            // 1. Начисляем баллы (добавит историю)
+            if (isWin && typeof addPointsToCurrentUser === 'function') {
+                const points = isAI ? 3 : 5;
+                await addPointsToCurrentUser(points, 'tictactoe');
+            }
 
-            if (error || !userRow) return;
+            // 2. Заново читаем актуальные данные
+            const { data: freshRow, error: fetchErr } = await supabase
+                .from('users')
+                .select('data')
+                .eq('id', myUid)
+                .single();
 
-            const userData = userRow.data || {};
-            const stats = userData.tttStats || {};
+            if (fetchErr || !freshRow) return;
+
+            const freshData = freshRow.data || {};
+            const stats = freshData.tttStats || {};
 
             let newStreak = stats.currentWinStreak || 0;
             let bestStreak = stats.bestWinStreak || 0;
@@ -904,27 +914,26 @@
                 newStats.fiveWinStreak = true;
             }
 
-            const newData = { ...userData, tttStats: newStats };
-
-            let toastMsg = '';
-            if (isWin) {
-                const points = isAI ? 3 : 5;
-                if (typeof addPointsToCurrentUser === 'function') await addPointsToCurrentUser(points, 'tictactoe');
-                const newBalance = (userData.lokoin_balance || 0) + (isAI ? 1 : 2);
-                newData.lokoin_balance = newBalance;
-                toastMsg = `🎉 Победа! +${points} баллов, +${isAI ? 1 : 2} локоинов`;
-            } else if (isDraw) {
-                toastMsg = '🤝 Ничья';
-            } else {
-                toastMsg = '😞 Поражение';
-            }
+            // 3. Обновляем только статистику и локоины
+            const updatedData = {
+                ...freshData,
+                tttStats: newStats,
+                lokoin_balance: (freshData.lokoin_balance || 0) + (isWin ? (isAI ? 1 : 2) : 0)
+            };
 
             await supabase
                 .from('users')
-                .update({ data: newData, updated_at: new Date().toISOString() })
+                .update({ data: updatedData, updated_at: new Date().toISOString() })
                 .eq('id', myUid);
 
-            if (toastMsg) showToast(toastMsg, isWin ? 'success' : 'info');
+            if (isWin) {
+                const points = isAI ? 3 : 5;
+                showToast(`🎉 Победа! +${points} баллов, +${isAI ? 1 : 2} локоинов`, 'success');
+            } else if (isDraw) {
+                showToast('🤝 Ничья', 'info');
+            } else {
+                showToast('😞 Поражение', 'info');
+            }
 
             if (typeof checkAndAwardAchievements === 'function') await checkAndAwardAchievements();
         } catch (e) {
