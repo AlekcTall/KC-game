@@ -34,12 +34,17 @@
   <header class="header"><div class="container header__inner"><a href="index.html" class="logo">КЦ-Игры</a><button class="burger" id="burger-btn" aria-label="Меню">☰</button><nav class="nav" id="main-nav"><ul class="nav__list"><li><a href="index.html" class="nav__link active">Главная</a></li><li><a href="games.html" class="nav__link">Игры</a></li><li><a href="leaderboard.html" class="nav__link">Рейтинг</a></li><li><a href="shop.html" class="nav__link">Магазин</a></li><li><a href="profile.html" class="nav__link">Профиль</a></li><li><a href="admin.html" class="nav__link">Админ</a></li></ul></nav><div id="auth-status" class="auth-status"></div></div></header>
   <main class="main"><div class="container">
     <section class="welcome"><h1>Добро пожаловать на корпоративный игровой портал</h1><p>Играйте в знаменитые аркадные игры, участвуйте в ивентах, зарабатывайте баллы и получайте награды!</p><a href="games.html" class="btn">Перейти к играм</a><span id="secret-symbol" class="secret-symbol">🔮</span></section>
-    <section class="rules"><h2>Как заработать баллы?</h2><div class="rules__grid"><div class="rule-card"><span class="rule-card__icon">🎮</span><h3>Играйте в мини-игры</h3><p>Проходите «Кликер», «Найди пару», «Змейку», «2048» и «Сапёра» — каждая сессия приносит баллы.</p></div><div class="rule-card"><span class="rule-card__icon">🏆</span><h3>Выполняйте достижения</h3><p>Особые условия открывают достижения. Они дают баллы и украшают профиль.</p></div><div class="rule-card"><span class="rule-card__icon">🥚</span><h3>Ищите пасхалки</h3><p>Секретные символы, кнопки и коды — найдёте, получите очки и ачивки.</p></div></div></section>
+    <section class="rules"><h2>Как заработать баллы?</h2><div class="rules__grid">
+      <div class="rule-card"><span class="rule-card__icon">🎮</span><h3>Играйте в мини-игры</h3><p>Игры доступны после авторизации. Попробуйте, например, «Змейку», «2048» или «Сапёра» — каждая сессия приносит баллы.</p></div>
+      <div class="rule-card"><span class="rule-card__icon">🎪</span><h3>Участвуйте в ивентах</h3><p>Следите за анонсами на главной. Ивенты бывают разными: кооперативные задания, квизы, творческие конкурсы. За участие вы получаете баллы и локоины.</p></div>
+      <div class="rule-card"><span class="rule-card__icon">🏆</span><h3>Выполняйте достижения</h3><p>Особые условия открывают достижения. Они дают баллы и украшают профиль.</p></div>
+      <div class="rule-card"><span class="rule-card__icon">🥚</span><h3>Ищите пасхалки</h3><p>Секретные символы, кнопки и коды — найдёте, получите очки и ачивки.</p></div>
+    </div></section>
     <section id="events-section" style="display:none;"><br><h2>🎉 Текущие ивенты</h2><div id="events-grid" class="events-grid"></div></section>
     <section id="news-section" style="display:none;"><h2>📢 Новости</h2><div id="news-grid" class="news-grid"></div></section>
     <section class="faq"><h2>Часто задаваемые вопросы</h2><div class="faq__list">
       <div class="faq-item"><button class="faq-item__question"><span>Как зарегистрироваться?</span><span class="faq-item__arrow">▼</span></button><div class="faq-item__answer"><p>В «Профиле» заполните email, пароль, имя и отдел. После регистрации подтвердите email — на указанный адрес придёт письмо.</p></div></div>
-      <div class="faq-item"><button class="faq-item__question"><span>Как заработать баллы?</span><span class="faq-item__arrow">▼</span></button><div class="faq-item__answer"><p>Баллы начисляются за каждую игровую сессию: кликер, змейка, найди пару, 2048, сапёр, а также за участие в ивентах и открытие достижений.</p></div></div>
+      <div class="faq-item"><button class="faq-item__question"><span>Как заработать баллы?</span><span class="faq-item__arrow">▼</span></button><div class="faq-item__answer"><p>Баллы начисляются за каждую игровую сессию, участие в ивентах и открытие достижений. Игры становятся доступны после авторизации.</p></div></div>
       <div class="faq-item"><button class="faq-item__question"><span>Что такое локоины и как их получить?</span><span class="faq-item__arrow">▼</span></button><div class="faq-item__answer"><p>Локоины — внутренняя валюта портала. Их можно заработать за активность (каждые 10 баллов = 1 лок.) и ежедневный вход. Локоины тратятся на товары в магазине и пропуск кулдауна в ивентах.</p></div></div>
       <div class="faq-item"><button class="faq-item__question"><span>Как работают ивенты?</span><span class="faq-item__arrow">▼</span></button><div class="faq-item__answer"><p>Ивенты появляются на главной странице, когда активны. Нажмите на карточку ивента и участвуйте: поливайте дерево, рисуйте на пиксельной доске и зарабатывайте очки. Итоги подводятся после завершения ивента.</p></div></div>
       <div class="faq-item"><button class="faq-item__question"><span>Как сменить тему?</span><span class="faq-item__arrow">▼</span></button><div class="faq-item__answer"><p>Тёмная тема доступна после покупки в магазине. После приобретения товара зайдите в «Профиль» и переключите тему на тёмную.</p></div></div>
@@ -67,18 +72,15 @@
             eventsSection = document.getElementById('events-section'),
             eventsGrid = document.getElementById('events-grid');
 
-      // Сразу скрываем секции (на случай, если инлайн-стили не сработали)
       newsSection.style.display = 'none';
       eventsSection.style.display = 'none';
 
       let newsChannel = null, eventsChannel = null;
 
-      // Подписка на изменения аутентификации через onAuthStateChange
       if (typeof onAuthStateChange === 'function') {
         onAuthStateChange((event, session) => {
           if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
             if (session?.user) {
-              // Пользователь вошёл — показываем секции и загружаем данные
               eventsSection.style.display = 'block';
               newsSection.style.display = 'block';
               loadEvents();
@@ -86,26 +88,21 @@
               subscribeToEvents();
               subscribeToNews();
             } else {
-              // INITIAL_SESSION без сессии — точно скрываем
               eventsSection.style.display = 'none';
               newsSection.style.display = 'none';
             }
           } else {
-            // Любое другое событие (SIGNED_OUT, USER_UPDATED и т.д.) — скрываем
             eventsSection.style.display = 'none';
             newsSection.style.display = 'none';
-            // Отписываемся от каналов
             if (eventsChannel) { supabase.removeChannel(eventsChannel); eventsChannel = null; }
             if (newsChannel) { supabase.removeChannel(newsChannel); newsChannel = null; }
           }
         });
       } else {
-        // Если onAuthStateChange не определён, скрываем секции
         eventsSection.style.display = 'none';
         newsSection.style.display = 'none';
       }
 
-      // ========== ИВЕНТЫ ==========
       async function loadEvents() {
         const now = new Date().toISOString();
         const { data: events, error } = await supabase
@@ -160,7 +157,6 @@
 
       function subscribeToEvents() {
         if (eventsChannel) supabase.removeChannel(eventsChannel);
-        const now = new Date().toISOString();
         eventsChannel = supabase
           .channel('events_channel')
           .on('postgres_changes', {
@@ -174,7 +170,6 @@
           .subscribe();
       }
 
-      // ========== НОВОСТИ ==========
       async function loadNews() {
         const now = new Date().toISOString();
         const { data: announcements, error } = await supabase
@@ -233,7 +228,6 @@
           .subscribe();
       }
 
-      // ========== МОДАЛЬНОЕ ОКНО НОВОСТИ ==========
       let currentNewsModal = null;
       function openNewsModal(news) {
         if (currentNewsModal) {
@@ -269,7 +263,6 @@
         loadReactions(news.id);
       }
 
-      // ========== РЕАКЦИИ (через announcement_reactions) ==========
       async function loadReactions(newsId) {
         const container = document.getElementById('reactions-container');
         if (!container) return;
