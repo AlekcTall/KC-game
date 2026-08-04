@@ -108,29 +108,51 @@
         </div>`;
       }
 
-      // Загрузка наград через user_awarded с JOIN к awards
+      // ========== ИСПРАВЛЕННАЯ ЗАГРУЗКА НАГРАД ==========
       async function loadUserAwards(uid) {
         try {
-          const { data, error } = await supabase
+          const { data: awardedData, error: awardedError } = await supabase
             .from('user_awarded')
-            .select('id, awarded_at, comment, given_by, award_id, awards (id, name, description, icon, lokoin_reward)')
+            .select('award_id, awarded_at, comment, given_by')
             .eq('user_id', uid);
-          if (error) throw error;
-          if (!data || data.length === 0) return [];
-          const awards = data.map(entry => {
-            const award = entry.awards || {};
-            return {
-              id: entry.award_id,
-              name: award.name || '',
-              description: award.description || '',
-              icon: award.icon || '',
-              lokoin_reward: award.lokoin_reward || 0,
-              comment: entry.comment,
-              awardedAt: entry.awarded_at ? { seconds: new Date(entry.awarded_at).getTime() / 1000 } : null,
-              given_by: entry.given_by
-            };
+
+          if (awardedError) {
+            console.error('Ошибка загрузки user_awarded:', awardedError);
+            return [];
+          }
+          if (!awardedData || awardedData.length === 0) return [];
+
+          const awardIds = [...new Set(awardedData.map(entry => entry.award_id).filter(Boolean))];
+
+          const { data: awardsData, error: awardsError } = await supabase
+            .from('awards')
+            .select('id, name, description, icon, lokoin_reward')
+            .in('id', awardIds);
+
+          if (awardsError) {
+            console.error('Ошибка загрузки awards:', awardsError);
+            return [];
+          }
+
+          const awardsMap = {};
+          (awardsData || []).forEach(award => {
+            awardsMap[award.id] = award;
           });
-          awards.sort((x, y) => (y.awardedAt?.seconds || 0) - (x.awardedAt?.seconds || 0));
+
+          const awards = awardedData
+            .filter(entry => awardsMap[entry.award_id])
+            .map(entry => ({
+              id: entry.award_id,
+              name: awardsMap[entry.award_id].name || '',
+              description: awardsMap[entry.award_id].description || '',
+              icon: awardsMap[entry.award_id].icon || '',
+              lokoin_reward: awardsMap[entry.award_id].lokoin_reward || 0,
+              comment: entry.comment,
+              awardedAt: entry.awarded_at ? new Date(entry.awarded_at).getTime() / 1000 : null,
+              given_by: entry.given_by
+            }));
+
+          awards.sort((x, y) => (y.awardedAt || 0) - (x.awardedAt || 0));
           return awards;
         } catch (e) {
           console.error('Ошибка загрузки наград:', e);
@@ -211,7 +233,7 @@
           <div class="profile-header">${avatarHtml}<div><h2>${userData.username}</h2><span class="badge badge-${userData.role}">${userData.role}</span>${customStatus ? `<div class="custom-status-text">«${customStatus}»</div>` : ''}${userData.department ? `<p class="profile-department"><strong>Отдел:</strong> ${userData.department}</p>` : ''}</div></div>
           <div class="profile-details"><p><strong>Баллы:</strong> ${userData.points || 0}</p><p><strong>О себе:</strong> ${userData.description || '—'}</p></div>
           <div class="awards-section" id="awards-container">
-            ${userAwards ? `<h3 class="section-title">🎖️ Награды</h3>
+            ${userAwards && userAwards.length > 0 ? `<h3 class="section-title">🎖️ Награды</h3>
               <div class="awards-grid">${userAwards.map(award => `<div class="award-card" data-award-id="${award.id}"><div class="award-card-icon"><img src="img/awards/${award.icon}" alt="${award.name}" onerror="this.parentElement.innerHTML='🎖️'"></div><div class="award-card-info"><div class="award-card-name">${award.name}</div>${award.comment ? `<div class="award-card-comment">${award.comment}</div>` : ''}</div></div>`).join('')}</div>` :
               (userAwards === undefined ? '<p class="loading-note">Загрузка наград...</p>' : '<p class="no-data">Нет наград.</p>')}
           </div>
