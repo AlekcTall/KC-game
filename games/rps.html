@@ -68,6 +68,7 @@
             font-weight: bold;
             margin: 0.5rem 0;
             font-size: 1.1rem;
+            min-height: 1.5rem;
         }
         .lobby-panel {
             max-width: 550px;
@@ -178,6 +179,14 @@
         .btn:hover { transform: translateY(-1px); box-shadow: 0 4px 8px rgba(37,99,235,0.3); }
         .btn-cancel { background: linear-gradient(135deg, #ef4444, #dc2626); }
         .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .waiting-animation {
+            display: inline-block;
+            animation: pulse 1.5s infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
     </style>
 </head>
 <body>
@@ -258,9 +267,8 @@
         else console.log(`[${type}] ${msg}`);
     }
 
-    // ===== ГЛОБАЛЬНЫЙ ОБРАБОТЧИК (делегирование событий) =====
+    // ===== ГЛОБАЛЬНЫЙ ОБРАБОТЧИК =====
     gameContainer.addEventListener('click', (e) => {
-        // Кнопки выбора
         const choiceBtn = e.target.closest('.choice-btn:not(:disabled)');
         if (choiceBtn && gameData?.status === 'active') {
             submitChoice(choiceBtn.dataset.choice);
@@ -403,7 +411,7 @@
         } catch (e) { gameContainer.innerHTML = '<p>Ошибка загрузки рейтинга.</p>'; }
     }
 
-    // ===== АВТО-ВОССТАНОВЛЕНИЕ (клиентская фильтрация) =====
+    // ===== АВТО-ВОССТАНОВЛЕНИЕ =====
     async function autoResumeGame() {
         if (!currentUser) return false;
         try {
@@ -574,32 +582,51 @@
 
     // ===== ЭКРАНЫ =====
     function renderWaitingScreen() {
+        const players = gameData?.data?.players || {};
+        const hasOpponent = Object.keys(players).length > 1;
+        
         gameContainer.innerHTML = `
             <div class="lobby-panel">
-                <h3>Ожидание соперника...</h3>
+                <h3>${hasOpponent ? '🎮 Соперник подключился!' : 'Ожидание соперника...'}</h3>
                 <p>ID игры: <strong>${gameId}</strong></p>
-                <p style="color:#888;">Поделитесь этим ID с коллегой, чтобы он присоединился.</p>
-                <button class="btn btn-cancel" id="cancel-game-btn">Отменить игру</button>
+                <p style="color:#888;">
+                    ${hasOpponent 
+                        ? 'Игра начнётся автоматически. Сделайте первый ход!' 
+                        : '<span class="waiting-animation">Поделитесь этим ID с коллегой</span>'
+                    }
+                </p>
+                ${hasOpponent ? '' : '<button class="btn btn-cancel" id="cancel-game-btn">Отменить игру</button>'}
             </div>
         `;
     }
 
     function renderGameScreen() {
+        const players = gameData.data?.players || {};
+        const myPlayer = players[myUid];
+        const oppPlayer = players[opponentUid];
+        const myName = myPlayer?.username || 'Вы';
+        const oppName = oppPlayer?.username || 'Соперник';
+
         let html = '<div class="scoreboard">';
-        html += `<div class="player-score"><div>Вы</div><div class="score">${myScore}</div></div>`;
-        html += `<div class="player-score"><div>Соперник</div><div class="score">${opponentScore}</div></div>`;
+        html += `<div class="player-score"><div>${myName}</div><div class="score">${myScore}</div></div>`;
+        html += `<div class="player-score"><div>${oppName}</div><div class="score">${opponentScore}</div></div>`;
         html += '</div>';
 
         if (lastRoundResult) {
             html += '<div style="display:flex; justify-content:center; gap:2rem; margin:1rem 0;">';
-            html += `<div><div style="font-size:3rem;">${emojiFor(lastMyChoice)}</div>Вы</div>`;
+            html += `<div><div style="font-size:3rem;">${emojiFor(lastMyChoice)}</div>${myName}</div>`;
             html += `<div style="font-size:2rem; align-self:center;">VS</div>`;
-            html += `<div><div style="font-size:3rem;">${emojiFor(lastOpponentChoice)}</div>Соперник</div>`;
+            html += `<div><div style="font-size:3rem;">${emojiFor(lastOpponentChoice)}</div>${oppName}</div>`;
             html += '</div>';
             html += `<p class="status-message">${lastRoundResult === 'win' ? '🎉 Вы выиграли раунд!' : lastRoundResult === 'lose' ? '😞 Вы проиграли раунд' : '🤝 Ничья'}</p>`;
         }
 
-        if (!myChoice && !opponentChoice && !isSubmitting) {
+        // ИСПРАВЛЕНО: Показываем кнопки когда игрок ещё не выбрал, независимо от выбора соперника
+        if (!myChoice && !isSubmitting) {
+            const hint = opponentChoice 
+                ? '<p style="color:#059669; margin-bottom:0.5rem;">⚡ Соперник уже выбрал! Ваш ход:</p>'
+                : '<p style="color:#64748b; margin-bottom:0.5rem;">Выберите:</p>';
+            html += hint;
             html += '<div class="choices" id="choices">';
             const choices = ['rock', 'scissors', 'paper'];
             const emoji = { rock: '✊', scissors: '✌️', paper: '✋' };
@@ -608,9 +635,15 @@
             });
             html += '</div>';
         } else if (myChoice && !opponentChoice) {
-            html += '<p>Вы сделали выбор, ждем соперника...</p>';
-        } else if (!myChoice && opponentChoice) {
-            html += '<p>Соперник уже выбрал, ваш ход!</p>';
+            html += `<div style="font-size:4rem; margin:2rem 0;">${emojiFor(myChoice)}</div>`;
+            html += `<p class="status-message waiting-animation">Ожидание выбора соперника...</p>`;
+        } else if (myChoice && opponentChoice) {
+            html += `<div style="display:flex; justify-content:center; gap:2rem; margin:1rem 0;">`;
+            html += `<div><div style="font-size:3rem;">${emojiFor(myChoice)}</div>Вы</div>`;
+            html += `<div style="font-size:2rem; align-self:center;">VS</div>`;
+            html += `<div><div style="font-size:3rem;">${emojiFor(opponentChoice)}</div>${oppName}</div>`;
+            html += '</div>';
+            html += `<p class="status-message waiting-animation">Обработка результата...</p>`;
         }
 
         const history = gameData.data?.roundsHistory || [];
@@ -620,13 +653,13 @@
                 const my = r[myUid] || '?';
                 const op = r[opponentUid] || '?';
                 const res = r.result === 'win' ? '🏆' : (r.result === 'lose' ? '💔' : '🤝');
-                html += `<div class="round-item"><span>Раунд ${history.length - idx}:</span> <span>Вы: ${emojiFor(my)} — Соперник: ${emojiFor(op)} ${res}</span></div>`;
+                html += `<div class="round-item"><span>Раунд ${history.length - idx}:</span> <span>Вы: ${emojiFor(my)} — ${oppName}: ${emojiFor(op)} ${res}</span></div>`;
             });
             html += '</div>';
         }
 
         if (gameData.status === 'active') {
-            html += '<button class="btn btn-cancel" id="surrender-btn" style="margin-top:0.5rem;">Сдаться</button>';
+            html += '<button class="btn btn-cancel" id="surrender-btn" style="margin-top:0.5rem;">🏳️ Сдаться</button>';
         }
 
         gameContainer.innerHTML = html;
@@ -644,11 +677,20 @@
     function renderFinishedScreen() {
         const winner = gameData.winner === myUid ? 'Вы' : (gameData.data?.players?.[gameData.winner]?.username || 'Соперник');
         const isWin = gameData.winner === myUid;
+        const isDraw = gameData.winner === 'draw';
+        const isCancelled = gameData.winner === 'cancelled';
+
+        let title = '';
+        if (isCancelled) title = '⚠️ Игра отменена';
+        else if (isDraw) title = '🤝 Ничья!';
+        else if (isWin) title = '🎉 Победа!';
+        else title = '😞 Поражение';
+
         gameContainer.innerHTML = `
-            <h3>${isWin ? '🎉 Победа!' : '😞 Поражение'}</h3>
-            <p>Победитель: <strong>${winner}</strong></p>
+            <h3 style="font-size:1.8rem; margin:1rem 0;">${title}</h3>
+            ${!isCancelled && !isDraw ? `<p>Победитель: <strong>${winner}</strong></p>` : ''}
             <p>Счёт: ${myScore} - ${opponentScore}</p>
-            <button class="btn" id="new-game-btn" style="margin-top:1rem; padding:0.7rem 2rem;">Новая игра</button>
+            <button class="btn" id="new-game-btn" style="margin-top:1rem; padding:0.7rem 2rem;">🔄 Новая игра</button>
         `;
     }
 
@@ -664,7 +706,7 @@
         return 'lose';
     }
 
-    // ===== ТРАНЗАКЦИИ ХОДОВ =====
+    // ===== ХОДЫ =====
     async function submitChoice(choice) {
         if (!gameId || !myUid || !opponentUid || isSubmitting || myChoice) return;
         if (!gameData || gameData.status !== 'active') return;
@@ -721,7 +763,6 @@
 
             if (updateError) throw updateError;
 
-            // Локальное обновление
             gameData = { ...gameData, data: updatedData, status: newStatus, winner };
         } catch (e) {
             console.error('Ошибка отправки хода:', e);
@@ -915,7 +956,6 @@
         if (openGamesChannel) { supabase.removeChannel(openGamesChannel); openGamesChannel = null; }
     }
 
-    // Перед закрытием помечаем игру как заброшенную
     window.addEventListener('beforeunload', () => {
         unsubscribeFromGame();
         unsubscribeFromOpenGames();
