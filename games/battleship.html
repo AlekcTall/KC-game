@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>Морской бой – КЦ Игры</title>
     <link rel="stylesheet" href="../css/style.css">
-    <!-- стили оставлены без изменений -->
     <style>
         :root {
             --water-base: #a0c4e8;
@@ -1206,7 +1205,7 @@
             return allCells.every(cell => hitShots.some(h => h.row === cell.row && h.col === cell.col));
         }
 
-        // ========== ОБРАБОТКА КОНЦА ИГРЫ ==========
+        // ========== ОБРАБОТКА КОНЦА ИГРЫ (исправленная) ==========
         async function handleGameEnd(winnerUid) {
             if (processedGameId === gameId) return;
             processedGameId = gameId;
@@ -1217,16 +1216,22 @@
             const mode = isAI ? 'pve' : 'pvp';
 
             try {
-                const { data: userRow, error } = await supabase
+                // 1. Сначала начисляем очки через универсальную функцию (она добавит историю)
+                if (isWin && typeof addPointsToCurrentUser === 'function') {
+                    await addPointsToCurrentUser(10, 'battleship');
+                }
+
+                // 2. Заново читаем актуальные данные (с уже добавленной историей)
+                const { data: freshRow, error: fetchErr } = await supabase
                     .from('users')
                     .select('data')
                     .eq('id', myUid)
                     .single();
 
-                if (error || !userRow) return;
+                if (fetchErr || !freshRow) return;
 
-                const userData = userRow.data || {};
-                const stats = userData.battleshipStats || {};
+                const freshData = freshRow.data || {};
+                const stats = freshData.battleshipStats || {};
 
                 let newStreak = stats.currentWinStreak || 0;
                 let bestStreak = stats.bestWinStreak || 0;
@@ -1254,27 +1259,19 @@
                 if (sniper) newStats.sniperGame = true;
                 if (unsinkable) newStats.unsinkableGame = true;
 
-                let toastMsg = '';
-                if (isWin) {
-                    // Начисляем баллы через универсальную функцию (она же добавит историю)
-                    if (typeof addPointsToCurrentUser === 'function') {
-                        await addPointsToCurrentUser(10, 'battleship');
-                    }
-                    // Начисляем локоины
-                    const newBalance = (userData.lokoin_balance || 0) + 3;
-                    newStats.lokoin_balance = newBalance;
-                    userData.lokoin_balance = newBalance; // обновим локально
-                    toastMsg = '🎉 Победа! +10 баллов, +3 локоина';
-                }
+                // 3. Обновляем ТОЛЬКО статистику и баланс, не трогая историю
+                const updatedData = {
+                    ...freshData,
+                    battleshipStats: newStats,
+                    lokoin_balance: (freshData.lokoin_balance || 0) + (isWin ? 3 : 0)
+                };
 
-                // Обновляем ТОЛЬКО статистику и баланс, не трогая историю
-                const updatedData = { ...userData, battleshipStats: newStats };
                 await supabase
                     .from('users')
                     .update({ data: updatedData, updated_at: new Date().toISOString() })
                     .eq('id', myUid);
 
-                if (toastMsg) showToast(toastMsg, 'success');
+                if (isWin) showToast('🎉 Победа! +10 баллов, +3 локоина', 'success');
 
                 if (typeof checkAndAwardAchievements === 'function') await checkAndAwardAchievements();
             } catch (e) {
