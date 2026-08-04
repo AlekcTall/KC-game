@@ -76,7 +76,47 @@
       eventsSection.style.display = 'none';
 
       let newsChannel = null, eventsChannel = null;
+      let newsRetryTimer = null, eventsRetryTimer = null;
 
+      // Безопасное создание канала с очисткой предыдущего
+      function safeSubscribe(channelName, table, filter, callback, existingChannelRef) {
+        // Удаляем старый канал, если есть
+        if (existingChannelRef.current) {
+          supabase.removeChannel(existingChannelRef.current).catch(console.warn);
+          existingChannelRef.current = null;
+        }
+        try {
+          const channel = supabase
+            .channel(channelName)
+            .on('postgres_changes', { event: '*', schema: 'public', table, filter }, callback)
+            .subscribe((status) => {
+              if (status === 'SUBSCRIBED') {
+                console.log(`✅ Подписка ${channelName} активна`);
+                // Сбрасываем таймеры повторов при успехе
+                if (channelName.includes('news')) clearTimeout(newsRetryTimer);
+                if (channelName.includes('events')) clearTimeout(eventsRetryTimer);
+              } else if (status === 'CHANNEL_ERROR' || status === 'CLOSED') {
+                console.warn(`⚠️ Ошибка подписки ${channelName}, переподключаемся...`);
+                // Планируем повторную подписку через 10 секунд
+                const retryFn = () => {
+                  safeSubscribe(channelName, table, filter, callback, existingChannelRef);
+                };
+                if (channelName.includes('news')) {
+                  clearTimeout(newsRetryTimer);
+                  newsRetryTimer = setTimeout(retryFn, 10000);
+                } else {
+                  clearTimeout(eventsRetryTimer);
+                  eventsRetryTimer = setTimeout(retryFn, 10000);
+                }
+              }
+            });
+          existingChannelRef.current = channel;
+        } catch (e) {
+          console.error(`Ошибка создания канала ${channelName}:`, e);
+        }
+      }
+
+      // Подписка на изменения аутентификации через onAuthStateChange
       if (typeof onAuthStateChange === 'function') {
         onAuthStateChange((event, session) => {
           if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
@@ -96,6 +136,8 @@
             newsSection.style.display = 'none';
             if (eventsChannel) { supabase.removeChannel(eventsChannel); eventsChannel = null; }
             if (newsChannel) { supabase.removeChannel(newsChannel); newsChannel = null; }
+            clearTimeout(newsRetryTimer);
+            clearTimeout(eventsRetryTimer);
           }
         });
       } else {
@@ -103,6 +145,7 @@
         newsSection.style.display = 'none';
       }
 
+      // ========== ИВЕНТЫ ==========
       async function loadEvents() {
         const now = new Date().toISOString();
         const { data: events, error } = await supabase
@@ -156,20 +199,14 @@
       }
 
       function subscribeToEvents() {
-        if (eventsChannel) supabase.removeChannel(eventsChannel);
-        eventsChannel = supabase
-          .channel('events_channel')
-          .on('postgres_changes', {
-            event: '*',
-            schema: 'public',
-            table: 'events',
-            filter: `status=eq.active`
-          }, () => {
-            loadEvents();
-          })
-          .subscribe();
+        const channelRef = { current: eventsChannel };
+        safeSubscribe('events_channel', 'events', 'status=eq.active', () => {
+          loadEvents();
+        }, channelRef);
+        eventsChannel = channelRef.current;
       }
 
+      // ========== НОВОСТИ ==========
       async function loadNews() {
         const now = new Date().toISOString();
         const { data: announcements, error } = await supabase
@@ -215,19 +252,14 @@
       }
 
       function subscribeToNews() {
-        if (newsChannel) supabase.removeChannel(newsChannel);
-        newsChannel = supabase
-          .channel('announcements_channel')
-          .on('postgres_changes', {
-            event: '*',
-            schema: 'public',
-            table: 'announcements'
-          }, () => {
-            loadNews();
-          })
-          .subscribe();
+        const channelRef = { current: newsChannel };
+        safeSubscribe('announcements_channel', 'announcements', undefined, () => {
+          loadNews();
+        }, channelRef);
+        newsChannel = channelRef.current;
       }
 
+      // ========== МОДАЛЬНОЕ ОКНО НОВОСТИ ==========
       let currentNewsModal = null;
       function openNewsModal(news) {
         if (currentNewsModal) {
@@ -263,6 +295,7 @@
         loadReactions(news.id);
       }
 
+      // ========== РЕАКЦИИ (через announcement_reactions) ==========
       async function loadReactions(newsId) {
         const container = document.getElementById('reactions-container');
         if (!container) return;
@@ -334,6 +367,14 @@
           });
         });
       }
+
+      // Очистка при уходе со страницы
+      window.addEventListener('beforeunload', () => {
+        if (newsChannel) supabase.removeChannel(newsChannel);
+        if (eventsChannel) supabase.removeChannel(eventsChannel);
+        clearTimeout(newsRetryTimer);
+        clearTimeout(eventsRetryTimer);
+      });
     });
   </script>
 </body>
