@@ -124,15 +124,14 @@
       }
 
       async function loadUsers() {
-        // Всегда загружаем свежие данные, не используя кеш
         renderSkeletons();
 
         try {
           const { data, error } = await supabase
             .from('users')
             .select('id, data')
-            .neq('data->>role', 'admin')
-            .order('(data->>points)::int', { ascending: false });
+            .neq('data->>role', 'admin');
+            // сортировка будет на клиенте
 
           if (error) throw error;
 
@@ -150,7 +149,9 @@
             };
           });
 
-          // Обновляем кеш актуальными данными
+          // Сортируем на клиенте по убыванию баллов
+          allUsers.sort((a, b) => b.points - a.points);
+
           sessionStorage.setItem(CACHE_KEY, JSON.stringify({
             timestamp: Date.now(),
             data: allUsers
@@ -284,7 +285,6 @@
       }
 
       document.addEventListener('DOMContentLoaded', async () => {
-        // Сразу показываем "Загрузка..."
         document.getElementById('leaderboard-container').innerHTML = '<p class="no-results">Загрузка...</p>';
 
         if (typeof onAuthStateChange === 'function') {
