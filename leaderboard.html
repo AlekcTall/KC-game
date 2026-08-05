@@ -5,7 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Рейтинг – Геймификация КЦ</title>
   <link rel="stylesheet" href="css/style.css">
-  <!-- стили страницы без изменений, оставлены как есть -->
   <style>
     .leaderboard-filters { display: flex; gap: 1rem; margin-bottom: 1.5rem; flex-wrap: wrap; align-items: flex-end; }
     .filter-group { min-width: 160px; }
@@ -38,7 +37,6 @@
     .login-prompt-leaderboard { text-align: center; padding: 3rem 1rem; }
     .login-prompt-leaderboard h3 { margin-bottom: 0.5rem; }
     .login-prompt-leaderboard p { margin-bottom: 1.5rem; color: #666; }
-    .leaderboard-container { display: none; } /* скрыт по умолчанию, покажется только после авторизации */
   </style>
 </head>
 <body>
@@ -63,10 +61,7 @@
   <main class="main">
     <div class="container">
       <h2>Таблица лидеров</h2>
-      <!-- Контейнер для интерфейса рейтинга, изначально скрыт -->
-      <div id="leaderboard-wrapper" class="leaderboard-container"></div>
-      <!-- Запасной контейнер для сообщений (неавторизованный, ошибка) -->
-      <div id="leaderboard-message" class="login-prompt-leaderboard" style="display: none;"></div>
+      <div id="leaderboard-container"></div>
     </div>
   </main>
 
@@ -86,7 +81,6 @@
   <script>
     (function() {
       const CACHE_KEY = 'krugames_leaderboard';
-      const CACHE_TTL = 10 * 60 * 1000; // 10 минут
       const FILTERS_KEY = 'krugames_leaderboard_filters';
 
       let departmentsList = [];
@@ -95,8 +89,6 @@
 
       let filterName, filterPointsMin, filterPointsMax, filterDept, filterAch;
       let tableContainer;
-      let wrapper = document.getElementById('leaderboard-wrapper');
-      let messageEl = document.getElementById('leaderboard-message');
 
       async function loadDepartments() {
         try {
@@ -132,28 +124,15 @@
       }
 
       async function loadUsers() {
-        const cached = sessionStorage.getItem(CACHE_KEY);
-        if (cached) {
-          try {
-            const parsed = JSON.parse(cached);
-            if (Date.now() - parsed.timestamp < CACHE_TTL) {
-              allUsers = parsed.data;
-              renderTable();
-              return;
-            }
-          } catch (e) {}
-        }
-
-        if (!allUsers.length) {
-          renderSkeletons();
-        }
+        // Всегда загружаем свежие данные, не используя кеш
+        renderSkeletons();
 
         try {
           const { data, error } = await supabase
             .from('users')
             .select('id, data')
             .neq('data->>role', 'admin')
-            .order('data->>points', { ascending: false });
+            .order('(data->>points)::int', { ascending: false });
 
           if (error) throw error;
 
@@ -171,6 +150,7 @@
             };
           });
 
+          // Обновляем кеш актуальными данными
           sessionStorage.setItem(CACHE_KEY, JSON.stringify({
             timestamp: Date.now(),
             data: allUsers
@@ -257,7 +237,8 @@
       }
 
       function buildUI() {
-        wrapper.innerHTML = `
+        const container = document.getElementById('leaderboard-container');
+        container.innerHTML = `
           <div class="leaderboard-filters" id="filters-block">
             <div class="filter-group"><label>🔍 Имя</label><input type="text" id="filter-name"></div>
             <div class="filter-group"><label>📊 Баллы</label><div class="filter-range"><input type="number" id="filter-points-min" placeholder="От"><span>–</span><input type="number" id="filter-points-max" placeholder="До"></div></div>
@@ -275,7 +256,6 @@
         filterDept = document.getElementById('filter-department');
         filterAch = document.getElementById('filter-achievements');
 
-        // Заполняем список отделов
         departmentsList.forEach(d => {
           const opt = document.createElement('option');
           opt.value = d;
@@ -285,7 +265,6 @@
 
         restoreFilters();
 
-        // Обработчики фильтров
         [filterName, filterPointsMin, filterPointsMax, filterDept, filterAch].forEach(el => {
           el.addEventListener('input', renderTable);
           el.addEventListener('change', renderTable);
@@ -301,40 +280,28 @@
           renderTable();
         });
 
-        // Загружаем пользователей
         loadUsers();
       }
 
-      function showLoginPrompt() {
-        wrapper.style.display = 'none';
-        messageEl.style.display = 'block';
-        messageEl.innerHTML = '<h3>Войдите, чтобы увидеть рейтинг</h3><p>Пожалуйста, авторизуйтесь для просмотра таблицы лидеров.</p><a href="login.html?redirect=leaderboard.html" class="btn">Войти</a>';
-      }
-
       document.addEventListener('DOMContentLoaded', async () => {
-        // Сразу скрываем оба контейнера на случай, если что-то пошло не так
-        wrapper.style.display = 'none';
-        messageEl.style.display = 'none';
+        // Сразу показываем "Загрузка..."
+        document.getElementById('leaderboard-container').innerHTML = '<p class="no-results">Загрузка...</p>';
 
-        // Проверяем авторизацию
         if (typeof onAuthStateChange === 'function') {
           onAuthStateChange((event, session) => {
-            if (session?.user) {
-              currentUid = session.user.id;
-              // Пользователь авторизован – показываем интерфейс
-              wrapper.style.display = 'block';
-              messageEl.style.display = 'none';
-              loadDepartments().then(buildUI);
+            if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
+              currentUid = session?.user?.id || null;
+              if (currentUid) {
+                loadDepartments().then(buildUI);
+              } else {
+                document.getElementById('leaderboard-container').innerHTML = '<div class="login-prompt-leaderboard"><h3>Войдите, чтобы увидеть рейтинг</h3><p>Пожалуйста, авторизуйтесь для просмотра таблицы лидеров.</p><a href="login.html?redirect=leaderboard.html" class="btn">Войти</a></div>';
+              }
             } else {
-              // Нет сессии – показываем приглашение
-              currentUid = null;
-              showLoginPrompt();
+              document.getElementById('leaderboard-container').innerHTML = '<div class="login-prompt-leaderboard"><h3>Войдите, чтобы увидеть рейтинг</h3><p>Пожалуйста, авторизуйтесь для просмотра таблицы лидеров.</p><a href="login.html?redirect=leaderboard.html" class="btn">Войти</a></div>';
             }
           });
         } else {
-          // Если система авторизации не загружена, показываем сообщение об ошибке
-          messageEl.style.display = 'block';
-          messageEl.innerHTML = '<p>Ошибка загрузки системы авторизации.</p>';
+          document.getElementById('leaderboard-container').innerHTML = '<p>Ошибка загрузки системы авторизации.</p>';
         }
       });
     })();
