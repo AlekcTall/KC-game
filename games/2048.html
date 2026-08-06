@@ -580,22 +580,33 @@
         } 
     });
 
-    // Авторизация через onAuthStateChange
-    if (typeof onAuthStateChange === 'function') {
-        onAuthStateChange((event, session) => {
-            if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
-                if (session?.user) {
-                    currentUid = session.user.id;
-                    loadBestAndTop();
-                }
+    // Авторизация: сначала проверяем сессию напрямую, потом подписываемся на изменения
+    async function initAuth() {
+        try {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (session?.user) {
+                currentUid = session.user.id;
+                await loadBestAndTop();
             } else {
-                currentUid = null;
                 updateTopVisibility();
             }
-        });
-    } else {
-        console.warn('Система авторизации не загружена. Игра работает в демо-режиме.');
-        updateTopVisibility();
+        } catch (e) {
+            console.error('Ошибка проверки сессии:', e);
+        }
+
+        if (typeof onAuthStateChange === 'function') {
+            onAuthStateChange((event, session) => {
+                if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
+                    if (session?.user) {
+                        currentUid = session.user.id;
+                        loadBestAndTop();
+                    }
+                } else {
+                    currentUid = null;
+                    updateTopVisibility();
+                }
+            });
+        }
     }
 
     async function loadBestAndTop() { 
@@ -645,7 +656,6 @@
                 .select('id, data')
                 .neq('data->>role', 'admin')
                 .not('data->gameStats->2048->maxScore', 'is', null)
-                .order('data->gameStats->2048->maxScore', { ascending: false })
                 .limit(10);
 
             if (error) throw error;
@@ -655,6 +665,9 @@
                 username: u.data?.username || 'Аноним', 
                 score: u.data?.gameStats?.['2048']?.maxScore || 0 
             })); 
+
+            // Сортировка на клиенте
+            players.sort((a, b) => b.score - a.score);
             
             tbody.innerHTML = players.map((p, i) => { 
                 const me = (currentUid && p.uid === currentUid) ? ' class="me"' : ''; 
@@ -666,6 +679,7 @@
     // Старт
     grid = emptyGrid();
     drawGrid();
+    initAuth();
 </script>
 </body>
 </html>
