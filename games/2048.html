@@ -610,11 +610,12 @@
     }
 
     async function loadBestAndTop() { 
+        // Сначала пытаемся взять рекорд из кеша
         const cu = typeof getCurrentUser === 'function' ? getCurrentUser() : null;
-
         if (cu?.gameStats?.['2048']?.maxTile) maxTile = cu.gameStats['2048'].maxTile; 
         if (cu?.gameStats?.['2048']?.maxScore) bestScore = cu.gameStats['2048'].maxScore; 
         
+        // Затем актуальные данные из базы
         try { 
             const { data: row, error } = await supabase
                 .from('users')
@@ -627,6 +628,7 @@
                 if (stats.maxTile) maxTile = stats.maxTile; 
             } 
         } catch (e) { console.error(e); } 
+        
         updateScore(); 
         updateTopVisibility(); 
         updateTop(); 
@@ -651,29 +653,35 @@
         if (!tbody || !currentUid) return; 
         
         try { 
+            // Загружаем 50 последних активных пользователей (без фильтра по maxScore)
             const { data: users, error } = await supabase
                 .from('users')
                 .select('id, data')
                 .neq('data->>role', 'admin')
-                .not('data->gameStats->2048->maxScore', 'is', null)
-                .limit(10);
+                .limit(50);
 
             if (error) throw error;
 
-            const players = (users || []).map(u => ({ 
-                uid: u.id, 
-                username: u.data?.username || 'Аноним', 
-                score: u.data?.gameStats?.['2048']?.maxScore || 0 
-            })); 
+            // Фильтруем и сортируем на клиенте
+            const players = (users || [])
+                .map(u => ({ 
+                    uid: u.id, 
+                    username: u.data?.username || 'Аноним', 
+                    score: u.data?.gameStats?.['2048']?.maxScore || 0 
+                }))
+                .filter(p => p.score > 0)               // только те, у кого есть рекорд
+                .sort((a, b) => b.score - a.score)      // по убыванию
+                .slice(0, 10);                           // топ-10
 
-            // Сортировка на клиенте
-            players.sort((a, b) => b.score - a.score);
-            
-            tbody.innerHTML = players.map((p, i) => { 
-                const me = (currentUid && p.uid === currentUid) ? ' class="me"' : ''; 
-                return `<tr${me}><td>${i+1}</td><td>${p.username}</td><td>${p.score.toLocaleString()}</td></tr>`; 
-            }).join('') || '<tr><td colspan="3">Пока нет рекордов</td></tr>'; 
-        } catch (e) { console.error(e); } 
+            tbody.innerHTML = players.length > 0
+                ? players.map((p, i) => { 
+                    const me = (currentUid && p.uid === currentUid) ? ' class="me"' : ''; 
+                    return `<tr${me}><td>${i+1}</td><td>${p.username}</td><td>${p.score.toLocaleString()}</td></tr>`; 
+                }).join('')
+                : '<tr><td colspan="3">Пока нет рекордов</td></tr>';
+        } catch (e) { 
+            console.error('Ошибка загрузки лидерборда:', e); 
+        } 
     }
 
     // Старт
