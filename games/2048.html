@@ -653,23 +653,22 @@
         if (!tbody || !currentUid) return; 
         
         try { 
-            // Загружаем 50 последних активных пользователей (без фильтра по maxScore)
+            // Загружаем всех пользователей, кроме админов, лимит 200
             const { data: users, error } = await supabase
                 .from('users')
                 .select('id, data')
                 .neq('data->>role', 'admin')
-                .limit(50);
+                .limit(200);
 
             if (error) throw error;
 
-            // Фильтруем и сортируем на клиенте
             const players = (users || [])
                 .map(u => ({ 
                     uid: u.id, 
                     username: u.data?.username || 'Аноним', 
                     score: u.data?.gameStats?.['2048']?.maxScore || 0 
                 }))
-                .filter(p => p.score > 0)               // только те, у кого есть рекорд
+                .filter(p => p.score > 0)               // только с рекордом
                 .sort((a, b) => b.score - a.score)      // по убыванию
                 .slice(0, 10);                           // топ-10
 
