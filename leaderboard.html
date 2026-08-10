@@ -87,7 +87,7 @@
       let allUsers = [];
       let currentUid = null;
 
-      let filterName, filterPointsMin, filterPointsMax, filterDept, filterAch;
+      let filterName, filterPointsMin, filterPointsMax, filterDept, filterAch, filterGame;
       let tableContainer;
 
       async function loadDepartments() {
@@ -109,7 +109,7 @@
       }
 
       function renderSkeletons() {
-        let html = '<table class="leaderboard-table"><thead><tr><th>Место</th><th>Игрок</th><th>Баллы</th><th>Отдел</th><th>🏆</th></tr></thead><tbody>';
+        let html = '<table class="leaderboard-table"><thead><tr><th>Место</th><th>Игрок</th><th id="metric-header">Баллы</th><th>Отдел</th><th>🏆</th></tr></thead><tbody>';
         for (let i = 0; i < 10; i++) {
           html += `<tr class="skeleton-row">
             <td><div class="skeleton-cell" style="width:30px;"></div></td>
@@ -130,13 +130,17 @@
           const { data, error } = await supabase
             .from('users')
             .select('id, data')
-            .neq('data->>role', 'admin');
-            // сортировка будет на клиенте
+            .neq('data->>role', 'admin')
+            .limit(200);
 
           if (error) throw error;
 
           allUsers = (data || []).map(u => {
             const d = u.data || {};
+            const gs = d.gameStats || {};
+            const bs = d.battleshipStats || {};
+            const ttt = d.tttStats || {};
+            const rps = d.rpsStats || {};
             return {
               uid: u.id,
               id: u.id,
@@ -145,13 +149,21 @@
               points: d.points || 0,
               achievements: Array.isArray(d.achievements) ? d.achievements : [],
               purchasedItems: Array.isArray(d.purchasedItems) ? d.purchasedItems : [],
-              avatarEmoji: d.avatarEmoji || null
+              avatarEmoji: d.avatarEmoji || null,
+              // метрики игр
+              clickerClicks: gs.clicker?.totalClicks || 0,
+              snakeMaxScore: gs.snake?.maxScore || 0,
+              memoryBestTime: gs.memory?.bestTime || 9999,
+              g2048MaxScore: gs['2048']?.maxScore || 0,
+              msBestTime: gs.minesweeper?.bestTime || 9999,
+              tetrisMaxScore: gs.tetris?.maxScore || 0,
+              battleshipWins: (bs.pvpWins || 0) + (bs.pveWins || 0),
+              tictactoeWins: (ttt.pvpWins || 0) + (ttt.pveWins || 0),
+              rpsWins: (rps.pvpWins || 0) + (rps.pveWins || 0)
             };
           });
 
-          // Сортируем на клиенте по убыванию баллов
-          allUsers.sort((a, b) => b.points - a.points);
-
+          // Сохраняем в кеш
           sessionStorage.setItem(CACHE_KEY, JSON.stringify({
             timestamp: Date.now(),
             data: allUsers
@@ -167,33 +179,105 @@
       }
 
       function renderTable() {
+        const game = filterGame.value;
         let filtered = [...allUsers];
 
+        // Фильтр по отделу
         const deptVal = filterDept.value;
         if (deptVal) filtered = filtered.filter(u => u.department === deptVal);
 
+        // Фильтр по достижениям
         const achVal = filterAch.value;
         if (achVal === 'some') filtered = filtered.filter(u => u.achievements.length > 0);
         else if (achVal === 'none') filtered = filtered.filter(u => u.achievements.length === 0);
 
+        // Фильтр по имени
         const nameVal = filterName.value.trim().toLowerCase();
         if (nameVal) filtered = filtered.filter(u => u.username.toLowerCase().includes(nameVal));
 
+        // Определяем метрику и сортировку в зависимости от игры
+        let metricKey, sortDir, headerText, emptyMessage;
+        if (game === 'all') {
+          metricKey = 'points';
+          sortDir = -1; // по убыванию
+          headerText = 'Баллы';
+          emptyMessage = 'Никто не найден.';
+        } else if (game === 'clicker') {
+          metricKey = 'clickerClicks';
+          sortDir = -1;
+          headerText = 'Кликов';
+          emptyMessage = 'Нет данных по кликеру.';
+        } else if (game === 'snake') {
+          metricKey = 'snakeMaxScore';
+          sortDir = -1;
+          headerText = 'Яблок';
+          emptyMessage = 'Нет данных по змейке.';
+        } else if (game === 'memory') {
+          metricKey = 'memoryBestTime';
+          sortDir = 1; // по возрастанию (меньше = лучше)
+          headerText = 'Время (сек)';
+          emptyMessage = 'Нет данных по Найди пару.';
+        } else if (game === '2048') {
+          metricKey = 'g2048MaxScore';
+          sortDir = -1;
+          headerText = 'Очки';
+          emptyMessage = 'Нет данных по 2048.';
+        } else if (game === 'minesweeper') {
+          metricKey = 'msBestTime';
+          sortDir = 1; // по возрастанию
+          headerText = 'Время (сек)';
+          emptyMessage = 'Нет данных по сапёру.';
+        } else if (game === 'tetris') {
+          metricKey = 'tetrisMaxScore';
+          sortDir = -1;
+          headerText = 'Очки';
+          emptyMessage = 'Нет данных по тетрису.';
+        } else if (game === 'battleship') {
+          metricKey = 'battleshipWins';
+          sortDir = -1;
+          headerText = 'Побед';
+          emptyMessage = 'Нет данных по морскому бою.';
+        } else if (game === 'tictactoe') {
+          metricKey = 'tictactoeWins';
+          sortDir = -1;
+          headerText = 'Побед';
+          emptyMessage = 'Нет данных по крестикам-ноликам.';
+        } else if (game === 'rps') {
+          metricKey = 'rpsWins';
+          sortDir = -1;
+          headerText = 'Побед';
+          emptyMessage = 'Нет данных по КНБ.';
+        }
+
+        // Фильтр по диапазону (применяем к выбранной метрике)
         const pMin = parseInt(filterPointsMin.value, 10);
         const pMax = parseInt(filterPointsMax.value, 10);
-        if (!isNaN(pMin)) filtered = filtered.filter(u => u.points >= pMin);
-        if (!isNaN(pMax)) filtered = filtered.filter(u => u.points <= pMax);
+        if (!isNaN(pMin)) filtered = filtered.filter(u => u[metricKey] >= pMin);
+        if (!isNaN(pMax)) filtered = filtered.filter(u => u[metricKey] <= pMax);
 
-        filtered.sort((a, b) => b.points - a.points);
+        // Сортируем по выбранной метрике
+        filtered.sort((a, b) => {
+          if (a[metricKey] === b[metricKey]) return 0;
+          return sortDir * (a[metricKey] - b[metricKey]);
+        });
+
+        // Для игр с сортировкой по возрастанию убираем пользователей без результатов
+        if (sortDir === 1) {
+          filtered = filtered.filter(u => u[metricKey] < 9999);
+        }
 
         saveFilters();
 
+        // Обновляем заголовок колонки
+        const metricHeader = document.getElementById('metric-header');
+        if (metricHeader) metricHeader.textContent = headerText;
+
         if (!filtered.length) {
-          tableContainer.innerHTML = '<p class="no-results">Никто не найден.</p>';
+          tableContainer.innerHTML = `<p class="no-results">${emptyMessage}</p>`;
           return;
         }
 
-        let html = '<table class="leaderboard-table"><thead><tr><th>Место</th><th>Игрок</th><th>Баллы</th><th>Отдел</th><th>🏆</th></tr></thead><tbody>';
+        let html = '<table class="leaderboard-table"><thead><tr><th>Место</th><th>Игрок</th><th id="metric-header">' + headerText + '</th><th>Отдел</th><th>🏆</th></tr></thead><tbody>';
         filtered.forEach((u, i) => {
           let cls = i === 0 ? 'top-1' : i === 1 ? 'top-2' : i === 2 ? 'top-3' : '';
           const hasStar = u.purchasedItems.includes('star_rating');
@@ -204,7 +288,7 @@
           html += `<tr class="${cls}">
             <td class="place-cell">#${i + 1}</td>
             <td class="player-cell">${av}<a href="public-profile.html?id=${u.id}" class="${nameClass}">${u.username}</a></td>
-            <td>${u.points}</td>
+            <td>${u[metricKey]}</td>
             <td>${u.department || '—'}</td>
             <td>${u.achievements.length}</td>
           </tr>`;
@@ -219,7 +303,8 @@
           pointsMin: filterPointsMin.value,
           pointsMax: filterPointsMax.value,
           department: filterDept.value,
-          achievements: filterAch.value
+          achievements: filterAch.value,
+          game: filterGame.value
         };
         sessionStorage.setItem(FILTERS_KEY, JSON.stringify(filters));
       }
@@ -233,6 +318,7 @@
             filterPointsMax.value = saved.pointsMax || '';
             filterDept.value = saved.department || '';
             filterAch.value = saved.achievements || 'all';
+            filterGame.value = saved.game || 'all';
           }
         } catch (e) {}
       }
@@ -242,9 +328,21 @@
         container.innerHTML = `
           <div class="leaderboard-filters" id="filters-block">
             <div class="filter-group"><label>🔍 Имя</label><input type="text" id="filter-name"></div>
-            <div class="filter-group"><label>📊 Баллы</label><div class="filter-range"><input type="number" id="filter-points-min" placeholder="От"><span>–</span><input type="number" id="filter-points-max" placeholder="До"></div></div>
+            <div class="filter-group"><label>📊 Баллы / Очки</label><div class="filter-range"><input type="number" id="filter-points-min" placeholder="От"><span>–</span><input type="number" id="filter-points-max" placeholder="До"></div></div>
             <div class="filter-group"><label>🏢 Отдел</label><select id="filter-department"><option value="">Все</option></select></div>
             <div class="filter-group"><label>🏆 Достижения</label><select id="filter-achievements"><option value="all">Все</option><option value="some">Есть</option><option value="none">Нет</option></select></div>
+            <div class="filter-group"><label>🎮 Игра</label><select id="filter-game">
+              <option value="all">Все игры (по баллам)</option>
+              <option value="clicker">🖱️ Кликер</option>
+              <option value="snake">🐍 Змейка</option>
+              <option value="memory">🧠 Найди пару</option>
+              <option value="2048">🔢 2048</option>
+              <option value="minesweeper">💣 Сапёр</option>
+              <option value="tetris">🧱 Тетрис</option>
+              <option value="battleship">🚢 Морской бой</option>
+              <option value="tictactoe">⭕❌ Крестики-нолики</option>
+              <option value="rps">✊✋✌️ Камень-ножницы-бумага</option>
+            </select></div>
             <button class="btn btn-cancel" id="reset-filters-btn">Сбросить</button>
           </div>
           <div id="table-container"></div>
@@ -256,6 +354,7 @@
         filterPointsMax = document.getElementById('filter-points-max');
         filterDept = document.getElementById('filter-department');
         filterAch = document.getElementById('filter-achievements');
+        filterGame = document.getElementById('filter-game');
 
         departmentsList.forEach(d => {
           const opt = document.createElement('option');
@@ -266,7 +365,7 @@
 
         restoreFilters();
 
-        [filterName, filterPointsMin, filterPointsMax, filterDept, filterAch].forEach(el => {
+        [filterName, filterPointsMin, filterPointsMax, filterDept, filterAch, filterGame].forEach(el => {
           el.addEventListener('input', renderTable);
           el.addEventListener('change', renderTable);
         });
@@ -277,6 +376,7 @@
           filterPointsMax.value = '';
           filterDept.value = '';
           filterAch.value = 'all';
+          filterGame.value = 'all';
           sessionStorage.removeItem(FILTERS_KEY);
           renderTable();
         });
