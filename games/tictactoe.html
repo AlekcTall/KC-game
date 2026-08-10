@@ -39,6 +39,7 @@
             transition: all 0.15s;
             user-select: none;
             color: #1e293b;
+            position: relative;
         }
         .cell:hover:not(:disabled):not(.filled) {
             background: #f0f9ff;
@@ -50,6 +51,15 @@
         .cell.win {
             background: #fef3c7 !important;
             animation: winPulse 0.8s infinite alternate;
+        }
+        /* NEW: Анимация появления символа */
+        .cell.just-placed {
+            animation: popIn 0.25s ease-out;
+        }
+        @keyframes popIn {
+            0% { transform: scale(0.5); opacity: 0.3; }
+            70% { transform: scale(1.1); }
+            100% { transform: scale(1); opacity: 1; }
         }
         @keyframes winPulse {
             from { box-shadow: 0 0 0 0 rgba(251, 191, 36, 0.5); }
@@ -144,13 +154,27 @@
         }
         .btn:hover { transform: translateY(-1px); box-shadow: 0 4px 8px rgba(37,99,235,0.3); }
         .btn-cancel { background: linear-gradient(135deg, #ef4444, #dc2626); }
-        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+        .btn.loading { pointer-events: none; opacity: 0.7; }
+        .btn.loading::after {
+            content: '';
+            display: inline-block;
+            width: 14px; height: 14px;
+            border: 2px solid rgba(255,255,255,0.3);
+            border-top-color: white;
+            border-radius: 50%;
+            margin-left: 8px;
+            animation: spin 0.6s linear infinite;
+            vertical-align: middle;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
 
-        .symbol-select {
+        .symbol-select, .difficulty-select {
             display: flex;
-            gap: 1rem;
+            gap: 0.8rem;
             justify-content: center;
             margin: 1rem 0;
+            flex-wrap: wrap;
         }
         .symbol-btn {
             width: 80px; height: 80px;
@@ -169,6 +193,35 @@
         }
         .symbol-btn.x { color: #2563eb; }
         .symbol-btn.o { color: #dc2626; }
+
+        /* NEW: Стили для выбора сложности */
+        .difficulty-btn {
+            padding: 0.6rem 1rem;
+            border: 3px solid #cbd5e1;
+            border-radius: 10px;
+            background: white;
+            font-size: 0.95rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.2s;
+            min-width: 110px;
+        }
+        .difficulty-btn .diff-icon { font-size: 1.2rem; display: block; margin-bottom: 0.2rem; }
+        .difficulty-btn.selected {
+            border-color: #3b82f6;
+            background: #eff6ff;
+            transform: scale(1.05);
+        }
+        .difficulty-btn.easy.selected { border-color: #22c55e; background: #f0fdf4; }
+        .difficulty-btn.medium.selected { border-color: #f59e0b; background: #fffbeb; }
+        .difficulty-btn.hard.selected { border-color: #ef4444; background: #fef2f2; }
+        .difficulty-label { font-size: 0.85rem; color: #64748b; margin-top: 0.3rem; }
+
+        .section-divider {
+            border: none;
+            border-top: 1px dashed #d1d5db;
+            margin: 1.5rem 0;
+        }
     </style>
 </head>
 <body>
@@ -195,20 +248,33 @@
 <script>
 (function() {
     const WIN_LINES = [
-        [0,1,2],[3,4,5],[6,7,8], // rows
-        [0,3,6],[1,4,7],[2,5,8], // cols
-        [0,4,8],[2,4,6]          // diagonals
+        [0,1,2],[3,4,5],[6,7,8],
+        [0,3,6],[1,4,7],[2,5,8],
+        [0,4,8],[2,4,6]
     ];
+
+    // FIX: Константы сложности ИИ
+    const AI_DIFFICULTY = {
+        EASY: 'easy',
+        MEDIUM: 'medium',
+        HARD: 'hard'
+    };
 
     const gameContainer = document.getElementById('tab-content');
     let currentUser = null, gameId = null, gameData = null;
     let myUid = null, opponentUid = null;
     let isAI = false;
-    let mySymbol = 'X'; // Игрок выбирает X или O при создании ИИ-игры
+    let mySymbol = 'X';
+    let aiDifficulty = AI_DIFFICULTY.MEDIUM; // FIX: выбор сложности по умолчанию — средний
     let gameChannel = null, openGamesChannel = null;
     let isSubmitting = false;
     let processedGameId = null;
-    let aiMoveScheduled = false;
+    let aiMoveTimer = null; // FIX: заменили aiMoveScheduled на таймер, чтобы можно было отменять
+
+    function generateGameId() {
+        // FIX: Надёжная генерация ID вместо Date.now()
+        return 'ttt_' + Date.now().toString(36) + '_' + Math.random().toString(36).substring(2, 7);
+    }
 
     // ===== ИНИЦИАЛИЗАЦИЯ =====
     if (typeof onAuthStateChange === 'function') {
@@ -248,7 +314,14 @@
         else console.log(`[${type}] ${msg}`);
     }
 
-    // ===== ГЛОБАЛЬНЫЙ ОБРАБОТЧИК (делегирование) =====
+    function setLoading(btnId, loading) {
+        const btn = document.getElementById(btnId);
+        if (!btn) return;
+        btn.classList.toggle('loading', loading);
+        btn.disabled = loading;
+    }
+
+    // ===== ГЛОБАЛЬНЫЙ ОБРАБОТЧИК =====
     gameContainer.addEventListener('click', (e) => {
         const cell = e.target.closest('.cell:not(:disabled):not(.filled)');
         if (cell && gameData?.status === 'active') {
@@ -278,6 +351,15 @@
             return;
         }
 
+        // NEW: Обработчик выбора сложности
+        const diffBtn = e.target.closest('.difficulty-btn');
+        if (diffBtn) {
+            document.querySelectorAll('.difficulty-btn').forEach(b => b.classList.remove('selected'));
+            diffBtn.classList.add('selected');
+            aiDifficulty = diffBtn.dataset.difficulty;
+            return;
+        }
+
         const joinBtn = e.target.closest('.join-open-btn');
         if (joinBtn) return joinGameById(joinBtn.dataset.id);
     });
@@ -286,29 +368,60 @@
     function showLobby() {
         unsubscribeFromOpenGames();
         unsubscribeFromGame();
+        clearAiTimer(); // FIX: очищаем таймер ИИ
         gameId = null; gameData = null;
         isSubmitting = false;
         processedGameId = null;
-        aiMoveScheduled = false;
+
+        // FIX: синхронизируем UI с текущими значениями
+        const symSelected = mySymbol === 'O' ? 'o' : 'x';
+        const diffMap = { easy: 'easy', medium: 'medium', hard: 'hard' };
+        const diffSelected = diffMap[aiDifficulty] || 'medium';
 
         gameContainer.innerHTML = `
             <div class="lobby-panel">
                 <h3>Крестики-нолики</h3>
-                <p>Классическая игра 3×3. Ходят крестиками первые.</p>
+                <p>Классическая игра 3×3. Крестики ходят первыми.</p>
                 <button class="btn" id="create-pvp-btn">Играть с другом</button>
-                <div style="margin-top:1rem;">
-                    <p><strong>Игра с компьютером</strong></p>
-                    <p style="color:#64748b; font-size:0.9rem;">Выберите символ:</p>
+
+                <hr class="section-divider">
+
+                <div>
+                    <p><strong>🤖 Игра с компьютером</strong></p>
+
+                    <p style="color:#64748b; font-size:0.9rem; margin-top:0.8rem;">Ваш символ:</p>
                     <div class="symbol-select">
-                        <button class="symbol-btn x selected" data-symbol="X">X</button>
-                        <button class="symbol-btn o" data-symbol="O">O</button>
+                        <button class="symbol-btn x ${symSelected === 'x' ? 'selected' : ''}" data-symbol="X">X</button>
+                        <button class="symbol-btn o ${symSelected === 'o' ? 'selected' : ''}" data-symbol="O">O</button>
                     </div>
-                    <button class="btn" id="play-ai-btn">Начать игру</button>
+
+                    <p style="color:#64748b; font-size:0.9rem;">Сложность:</p>
+                    <div class="difficulty-select">
+                        <button class="difficulty-btn easy ${diffSelected === 'easy' ? 'selected' : ''}" data-difficulty="easy">
+                            <span class="diff-icon">🌱</span>Легко
+                            <div class="difficulty-label">Случайные ходы</div>
+                        </button>
+                        <button class="difficulty-btn medium ${diffSelected === 'medium' ? 'selected' : ''}" data-difficulty="medium">
+                            <span class="diff-icon">⚔️</span>Средне
+                            <div class="difficulty-label">Смешанная стратегия</div>
+                        </button>
+                        <button class="difficulty-btn hard ${diffSelected === 'hard' ? 'selected' : ''}" data-difficulty="hard">
+                            <span class="diff-icon">💀</span>Сложно
+                            <div class="difficulty-label">Непобедимый ИИ</div>
+                        </button>
+                    </div>
+
+                    <button class="btn" id="play-ai-btn" style="margin-top:0.5rem;">Начать игру</button>
                 </div>
-                <div style="margin-top:1rem;">
-                    <input type="text" id="join-game-id" placeholder="ID игры" style="padding:0.5rem; width:200px;">
+
+                <hr class="section-divider">
+
+                <div>
+                    <p><strong>Подключиться по ID:</strong></p>
+                    <input type="text" id="join-game-id" placeholder="ID игры" style="padding:0.5rem; width:200px; border-radius:6px; border:1px solid #cbd5e1;">
                     <button class="btn" id="join-game-btn">Присоединиться</button>
                 </div>
+
                 <h4 style="margin-top:1.5rem;">Открытые игры</h4>
                 <div id="open-games-list"><p>Загрузка...</p></div>
             </div>
@@ -367,21 +480,24 @@
                 const d = u.data || {};
                 const stats = d.tttStats || {};
                 const wins = mode === 'pvp' ? (stats.pvpWins || 0) : (stats.pveWins || 0);
-                if (wins > 0) players.push({ username: d.username || 'Аноним', wins });
+                if (wins > 0) players.push({ username: d.username || 'Аноним', wins, id: u.id });
             });
 
             players.sort((a,b) => b.wins - a.wins);
             let html = `<h3>${mode === 'pvp' ? '🏆 Лучшие игроки (PvP)' : '🤖 Лучшие игроки (PvE)'}</h3>`;
             if (players.length) {
                 html += '<table class="rating-table"><thead><tr><th>#</th><th>Игрок</th><th>Побед</th></tr></thead><tbody>';
-                players.slice(0, 20).forEach((p,i) => html += `<tr><td>${i+1}</td><td>${p.username}</td><td>${p.wins}</td></tr>`);
+                players.slice(0, 20).forEach((p,i) => {
+                    const isMe = p.id === myUid;
+                    html += `<tr style="${isMe ? 'background:#eff6ff; font-weight:700;' : ''}"><td>${i+1}</td><td>${p.username}${isMe ? ' (вы)' : ''}</td><td>${p.wins}</td></tr>`;
+                });
                 html += '</tbody></table>';
             } else html += '<p>Пока нет победителей.</p>';
             gameContainer.innerHTML = html;
         } catch (e) { gameContainer.innerHTML = '<p>Ошибка загрузки рейтинга.</p>'; }
     }
 
-    // ===== АВТО-ВОССТАНОВЛЕНИЕ (ИСПРАВЛЕНО: клиентская фильтрация) =====
+    // ===== АВТО-ВОССТАНОВЛЕНИЕ =====
     async function autoResumeGame() {
         if (!currentUser) return false;
         try {
@@ -390,12 +506,11 @@
                 .select('*')
                 .neq('status', 'finished')
                 .order('created_at', { ascending: false })
-                .limit(10);
+                .limit(20);
 
             if (error) throw error;
             if (!data || data.length === 0) return false;
 
-            // Фильтрация на клиенте — работает с ЛЮБЫМ типом колонки participants (jsonb/text[]/и т.д.)
             const activeGame = data.find(g => {
                 const participants = g.participants || g.data?.participants || [];
                 return Array.isArray(participants) && participants.includes(currentUser.id);
@@ -406,6 +521,7 @@
             gameId = activeGame.id;
             gameData = activeGame;
             isAI = activeGame.data?.isAI || false;
+            aiDifficulty = activeGame.data?.aiDifficulty || AI_DIFFICULTY.MEDIUM;
             const players = activeGame.data?.players || {};
             opponentUid = Object.keys(players).find(uid => uid !== currentUser.id) || 'ai';
             mySymbol = players[currentUser.id]?.symbol || 'X';
@@ -422,9 +538,11 @@
     async function createGame(aiMode = false) {
         if (!currentUser) { showToast('Войдите, чтобы играть', 'error'); return; }
         try {
+            setLoading(aiMode ? 'play-ai-btn' : 'create-pvp-btn', true);
+
             isAI = aiMode;
             processedGameId = null;
-            gameId = 'ttt_' + Date.now() + '_' + myUid.substring(0,5);
+            gameId = generateGameId();
 
             const username = (typeof getCurrentUser === 'function' ? getCurrentUser()?.username : null)
                 || currentUser.user_metadata?.username || 'Игрок';
@@ -442,12 +560,14 @@
                 status: aiMode ? 'active' : 'waiting',
                 data: {
                     isAI: aiMode,
+                    aiDifficulty: aiMode ? aiDifficulty : null, // NEW: сохраняем сложность
                     players: players,
                     board: Array(9).fill(null),
-                    turn: 'X', // Крестики ходят первыми
+                    turn: 'X',
                     winner: null,
                     winLine: null,
-                    moveCount: 0
+                    moveCount: 0,
+                    lastMove: null // NEW: для подсветки последнего хода
                 },
                 participants: [myUid, ...(aiMode ? ['ai'] : [])],
                 winner: null,
@@ -458,8 +578,12 @@
             if (error) throw error;
 
             subscribeToGame();
-            showToast(aiMode ? 'Игра с ИИ началась!' : 'Игра создана! ID: ' + gameId, 'success');
-        } catch (e) { showToast('Ошибка создания: ' + e.message, 'error'); }
+            showToast(aiMode ? `Игра с ИИ (${aiDifficulty}) началась!` : 'Игра создана! ID: ' + gameId, 'success');
+        } catch (e) {
+            showToast('Ошибка создания: ' + e.message, 'error');
+        } finally {
+            setLoading(aiMode ? 'play-ai-btn' : 'create-pvp-btn', false);
+        }
     }
 
     async function joinGameById(id) {
@@ -476,6 +600,7 @@
             if (data.participants?.includes(myUid)) {
                 gameId = data.id;
                 isAI = data.data?.isAI || false;
+                aiDifficulty = data.data?.aiDifficulty || AI_DIFFICULTY.MEDIUM;
                 const players = data.data?.players || {};
                 opponentUid = Object.keys(players).find(uid => uid !== myUid) || 'ai';
                 mySymbol = players[myUid]?.symbol || 'X';
@@ -486,6 +611,13 @@
             }
 
             if (data.status !== 'waiting') { showToast('Игра уже началась или завершена', 'error'); return; }
+
+            // FIX: проверка что игра ещё не заполнена
+            const existingPlayers = data.data?.players || {};
+            if (Object.keys(existingPlayers).length >= 2) {
+                showToast('Игра уже заполнена', 'error');
+                return;
+            }
 
             const username = (typeof getCurrentUser === 'function' ? getCurrentUser()?.username : null)
                 || currentUser.user_metadata?.username || 'Игрок';
@@ -516,6 +648,7 @@
     function joinGame() {
         const id = document.getElementById('join-game-id')?.value.trim();
         if (id) joinGameById(id);
+        else showToast('Введите ID игры', 'error');
     }
 
     function subscribeToGame() {
@@ -540,10 +673,13 @@
         if (gameData.status === 'waiting') return renderWaitingScreen();
         if (gameData.status === 'active') return renderGameScreen();
         if (gameData.status === 'finished') {
+            // FIX: атомарная проверка-установка для processedGameId
             if (processedGameId !== gameId) {
+                const savedId = gameId;
+                processedGameId = gameId;
                 const isWin = gameData.winner === myUid;
                 const isDraw = gameData.winner === 'draw';
-                handleGameEnd(isWin, isDraw);
+                handleGameEnd(isWin, isDraw, savedId);
             }
             renderFinishedScreen();
         }
@@ -565,13 +701,26 @@
         const board = gameData.data?.board || Array(9).fill(null);
         const turn = gameData.data?.turn;
         const winLine = gameData.data?.winLine || [];
+        const lastMove = gameData.data?.lastMove;
         const players = gameData.data?.players || {};
         const opponentSymbol = players[opponentUid]?.symbol || 'O';
 
         const isMyTurn = turn === mySymbol;
-        const statusMsg = turn
-            ? (isMyTurn ? '🟢 Ваш ход!' : '🔴 Ход соперника...')
-            : 'Игра завершена';
+        let statusMsg = '';
+        if (gameData.status !== 'active') {
+            statusMsg = 'Игра завершена';
+        } else if (isMyTurn) {
+            statusMsg = '🟢 Ваш ход!';
+        } else if (isAI && turn === opponentSymbol) {
+            statusMsg = '🤔 Компьютер думает...';
+        } else {
+            statusMsg = '🔴 Ход соперника...';
+        }
+
+        const difficultyLabel = gameData.data?.aiDifficulty
+            ? `<span style="font-size:0.85rem; color:#64748b; display:block; margin-top:0.3rem;">
+                ${gameData.data.aiDifficulty === 'easy' ? '🌱 Легко' : gameData.data.aiDifficulty === 'medium' ? '⚔️ Средне' : '💀 Сложно'}
+               </span>` : '';
 
         let html = `
             <div class="player-info">
@@ -582,6 +731,7 @@
                 <div class="player-card o ${turn === 'O' ? 'active' : ''}">
                     <div class="symbol">O</div>
                     <div>${players[getPlayerBySymbol('O')]?.username || 'Игрок O'}</div>
+                    ${difficultyLabel}
                 </div>
             </div>
             <p class="status-message">${statusMsg}</p>
@@ -593,21 +743,22 @@
             const filled = v ? 'filled' : '';
             const symbol = v ? v.toLowerCase() : '';
             const win = winLine.includes(i) ? 'win' : '';
+            const justPlaced = lastMove === i ? 'just-placed' : '';
             const disabled = !isMyTurn || v ? 'disabled' : '';
-            html += `<button class="cell ${filled} ${symbol} ${win}" data-index="${i}" ${disabled}>${v || ''}</button>`;
+            html += `<button class="cell ${filled} ${symbol} ${win} ${justPlaced}" data-index="${i}" ${disabled}>${v || ''}</button>`;
         }
         html += '</div>';
         html += `<button class="btn btn-cancel" id="surrender-btn">🏳️ Сдаться</button>`;
 
         gameContainer.innerHTML = html;
 
-        // ИИ ходит только когда его очередь
-        if (isAI && gameData.data?.turn === opponentSymbol && gameData.status === 'active' && !aiMoveScheduled && !isSubmitting) {
-            aiMoveScheduled = true;
-            setTimeout(async () => {
+        // FIX: ИИ ходит с правильным таймером (можно отменить)
+        if (isAI && gameData.data?.turn === opponentSymbol && gameData.status === 'active' && !isSubmitting) {
+            clearAiTimer();
+            aiMoveTimer = setTimeout(async () => {
+                aiMoveTimer = null;
                 await aiMove();
-                aiMoveScheduled = false;
-            }, 600 + Math.random() * 600);
+            }, 500 + Math.random() * 700);
         }
     }
 
@@ -619,7 +770,7 @@
     function renderFinishedScreen() {
         const winner = gameData.winner;
         const isDraw = winner === 'draw';
-        const isCancelled = winner === 'cancelled';
+        const isCancelled = winner === 'cancelled' || winner === 'abandoned';
         const players = gameData.data?.players || {};
         const board = gameData.data?.board || Array(9).fill(null);
         const winLine = gameData.data?.winLine || [];
@@ -627,7 +778,7 @@
         let title = '', subtitle = '';
         if (isCancelled) {
             title = '⚠️ Игра отменена';
-            subtitle = '';
+            subtitle = gameData.data?.abandoned ? 'Соперник покинул игру' : '';
         } else if (isDraw) {
             title = '🤝 Ничья!';
             subtitle = 'Достойная партия';
@@ -705,7 +856,8 @@
                 board: newBoard,
                 turn: nextTurn,
                 moveCount,
-                winLine
+                winLine,
+                lastMove: idx
             };
 
             const { error } = await supabase
@@ -715,7 +867,6 @@
 
             if (error) throw error;
 
-            // Локальное обновление для мгновенной реакции
             gameData = { ...gameData, data: updatedData, status: newStatus, winner };
         } catch (e) {
             console.error('Ошибка хода:', e);
@@ -725,7 +876,7 @@
         }
     }
 
-    // ===== ХОД ИИ (MINIMAX — непобедимый) =====
+    // ===== ХОД ИИ (С УЧЕТОМ СЛОЖНОСТИ) =====
     async function aiMove() {
         if (!gameId || !gameData || gameData.status !== 'active') return;
         if (!opponentUid || isSubmitting) return;
@@ -744,7 +895,9 @@
             if (error || !current || current.status !== 'active') return;
             if (current.data?.turn !== aiSym) return;
 
-            const aiIdx = minimaxMove(current.data.board, aiSym);
+            // NEW: выбор стратегии в зависимости от сложности
+            const difficulty = current.data?.aiDifficulty || AI_DIFFICULTY.MEDIUM;
+            const aiIdx = chooseAiMove(current.data.board, aiSym, difficulty);
             if (aiIdx < 0) return;
 
             const newBoard = [...current.data.board];
@@ -770,7 +923,7 @@
                 nextTurn = null;
             }
 
-            const updatedData = { ...current.data, board: newBoard, turn: nextTurn, moveCount, winLine };
+            const updatedData = { ...current.data, board: newBoard, turn: nextTurn, moveCount, winLine, lastMove: aiIdx };
 
             const { error: updErr } = await supabase
                 .from('tictactoe_games')
@@ -786,12 +939,95 @@
         }
     }
 
+    // NEW: Диспетчер стратегий ИИ
+    function chooseAiMove(board, aiSym, difficulty) {
+        switch (difficulty) {
+            case AI_DIFFICULTY.EASY:
+                return aiMoveEasy(board);
+            case AI_DIFFICULTY.MEDIUM:
+                return aiMoveMedium(board, aiSym);
+            case AI_DIFFICULTY.HARD:
+            default:
+                return aiMoveHard(board, aiSym);
+        }
+    }
+
+    // NEW: Лёгкий ИИ — случайные ходы (но блокирует немедленный проигрыш)
+    function aiMoveEasy(board) {
+        const playerSym = 'X'; // не важно для easy, но нужен для findImmediateThreat
+        const empty = board.map((v,i) => v ? -1 : i).filter(i => i >= 0);
+        if (empty.length === 0) return -1;
+
+        // На easy ИИ всё-таки блокирует мгновенный проигрыш, иначе игра слишком глупая
+        const threat = findImmediateThreat(board, playerSym, playerSym);
+        if (threat >= 0 && Math.random() < 0.4) return threat;
+
+        return empty[Math.floor(Math.random() * empty.length)];
+    }
+
+    // NEW: Средний ИИ — смесь умных и случайных ходов
+    function aiMoveMedium(board, aiSym) {
+        const playerSym = aiSym === 'X' ? 'O' : 'X';
+
+        // 1. Всегда выигрываем, если можем (немедленная победа)
+        const winningMove = findImmediateWin(board, aiSym);
+        if (winningMove >= 0) return winningMove;
+
+        // 2. Блокируем победу противника в 70% случаев
+        const blockingMove = findImmediateWin(board, playerSym);
+        if (blockingMove >= 0 && Math.random() < 0.7) return blockingMove;
+
+        // 3. В 40% случаев играем оптимально (minimax)
+        if (Math.random() < 0.4) {
+            return minimaxMove(board, aiSym);
+        }
+
+        // 4. Иначе — эвристика (центр > углы > стороны)
+        return aiMoveHeuristic(board, aiSym);
+    }
+
+    // NEW: Сложный ИИ — полный minimax (непобедимый)
+    function aiMoveHard(board, aiSym) {
+        return minimaxMove(board, aiSym);
+    }
+
+    // Ищем немедленный выигрышный ход для указанного символа
+    function findImmediateWin(board, sym) {
+        for (let i = 0; i < 9; i++) {
+            if (!board[i]) {
+                const test = [...board];
+                test[i] = sym;
+                const { win } = checkWinner(test);
+                if (win) return i;
+            }
+        }
+        return -1;
+    }
+
+    function findImmediateThreat(board, playerSym) {
+        return findImmediateWin(board, playerSym);
+    }
+
+    // Эвристический выбор: центр > углы > стороны
+    function aiMoveHeuristic(board) {
+        const center = 4;
+        const corners = [0, 2, 6, 8];
+        const sides = [1, 3, 5, 7];
+
+        const pick = (arr) => {
+            const empty = arr.filter(i => !board[i]);
+            return empty.length ? empty[Math.floor(Math.random() * empty.length)] : -1;
+        };
+
+        if (!board[center]) return center;
+        const c = pick(corners);
+        if (c >= 0) return c;
+        return pick(sides);
+    }
+
     function minimaxMove(board, aiSym) {
         const playerSym = aiSym === 'X' ? 'O' : 'X';
         let bestScore = -Infinity;
-        let bestMove = -1;
-
-        // Случайный выбор среди равных лучших ходов (для разнообразия)
         const equalMoves = [];
 
         for (let i = 0; i < 9; i++) {
@@ -812,7 +1048,8 @@
         return equalMoves.length > 0 ? equalMoves[Math.floor(Math.random() * equalMoves.length)] : -1;
     }
 
-    function minimax(board, isMax, aiSym, playerSym, depth) {
+    // Minimax с альфа-бета отсечением (оптимизация)
+    function minimax(board, isMax, aiSym, playerSym, depth, alpha = -Infinity, beta = Infinity) {
         const { win, winner } = checkWinnerFull(board);
         if (win) return winner === aiSym ? 10 - depth : depth - 10;
         if (board.every(c => c)) return 0;
@@ -822,8 +1059,10 @@
             for (let i = 0; i < 9; i++) {
                 if (!board[i]) {
                     board[i] = aiSym;
-                    best = Math.max(best, minimax(board, false, aiSym, playerSym, depth + 1));
+                    best = Math.max(best, minimax(board, false, aiSym, playerSym, depth + 1, alpha, beta));
                     board[i] = null;
+                    alpha = Math.max(alpha, best);
+                    if (beta <= alpha) break; // отсечение
                 }
             }
             return best;
@@ -832,8 +1071,10 @@
             for (let i = 0; i < 9; i++) {
                 if (!board[i]) {
                     board[i] = playerSym;
-                    best = Math.min(best, minimax(board, true, aiSym, playerSym, depth + 1));
+                    best = Math.min(best, minimax(board, true, aiSym, playerSym, depth + 1, alpha, beta));
                     board[i] = null;
+                    beta = Math.min(beta, best);
+                    if (beta <= alpha) break; // отсечение
                 }
             }
             return best;
@@ -860,22 +1101,17 @@
         return { win: false, winner: null };
     }
 
-    // ===== ЗАВЕРШЕНИЕ ИГРЫ (ИСПРАВЛЕНО) =====
-    async function handleGameEnd(isWin, isDraw) {
-        if (processedGameId === gameId) return;
-        processedGameId = gameId;
-
+    // ===== ЗАВЕРШЕНИЕ ИГРЫ =====
+    async function handleGameEnd(isWin, isDraw, savedGameId) {
         if (!currentUser) return;
         const mode = isAI ? 'pve' : 'pvp';
 
         try {
-            // 1. Начисляем баллы (добавит историю)
             if (isWin && typeof addPointsToCurrentUser === 'function') {
-                const points = isAI ? 3 : 5;
+                const points = isAI ? (aiDifficulty === 'hard' ? 5 : aiDifficulty === 'medium' ? 3 : 1) : 5;
                 await addPointsToCurrentUser(points, 'tictactoe');
             }
 
-            // 2. Заново читаем актуальные данные
             const { data: freshRow, error: fetchErr } = await supabase
                 .from('users')
                 .select('data')
@@ -905,20 +1141,16 @@
                 [`${mode}Draws`]: (stats[`${mode}Draws`] || 0) + (isDraw ? 1 : 0)
             };
 
-            // Достижение: выиграть у ИИ, играя за O
-            if (isWin && isAI && mySymbol === 'O') {
-                newStats.beatAIasO = true;
-            }
-            // Достижение: 5 побед подряд
-            if (bestStreak >= 5) {
-                newStats.fiveWinStreak = true;
-            }
+            if (isWin && isAI && mySymbol === 'O') newStats.beatAIasO = true;
+            if (bestStreak >= 5) newStats.fiveWinStreak = true;
+            // NEW: достижение — победить сложного ИИ
+            if (isWin && isAI && aiDifficulty === 'hard') newStats.beatHardAI = true;
 
-            // 3. Обновляем только статистику и локоины
+            const lokoinReward = isWin ? (isAI ? (aiDifficulty === 'hard' ? 3 : aiDifficulty === 'medium' ? 2 : 1) : 2) : 0;
             const updatedData = {
                 ...freshData,
                 tttStats: newStats,
-                lokoin_balance: (freshData.lokoin_balance || 0) + (isWin ? (isAI ? 1 : 2) : 0)
+                lokoin_balance: (freshData.lokoin_balance || 0) + lokoinReward
             };
 
             await supabase
@@ -927,8 +1159,8 @@
                 .eq('id', myUid);
 
             if (isWin) {
-                const points = isAI ? 3 : 5;
-                showToast(`🎉 Победа! +${points} баллов, +${isAI ? 1 : 2} локоинов`, 'success');
+                const points = isAI ? (aiDifficulty === 'hard' ? 5 : aiDifficulty === 'medium' ? 3 : 1) : 5;
+                showToast(`🎉 Победа! +${points} баллов, +${lokoinReward} локоинов`, 'success');
             } else if (isDraw) {
                 showToast('🤝 Ничья', 'info');
             } else {
@@ -965,7 +1197,12 @@
     }
 
     // ===== ПОДПИСКИ =====
+    function clearAiTimer() {
+        if (aiMoveTimer) { clearTimeout(aiMoveTimer); aiMoveTimer = null; }
+    }
+
     function unsubscribeFromGame() {
+        clearAiTimer();
         if (gameChannel) { supabase.removeChannel(gameChannel); gameChannel = null; }
     }
 
