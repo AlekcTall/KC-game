@@ -109,13 +109,8 @@
     const DARK_COLORS = ['#009f9f', '#9f9f00', '#60009f', '#009f00', '#9f0000', '#00009f', '#9f6000'];
 
     const SHAPES = [
-        [[1,1,1,1]],                         // I
-        [[1,1],[1,1]],                       // O
-        [[0,1,0],[1,1,1]],                   // T
-        [[1,0,0],[1,1,1]],                   // J
-        [[0,0,1],[1,1,1]],                   // L
-        [[0,1,1],[1,1,0]],                   // S
-        [[1,1,0],[0,1,1]]                    // Z
+        [[1,1,1,1]], [[1,1],[1,1]], [[0,1,0],[1,1,1]], [[1,0,0],[1,1,1]],
+        [[0,0,1],[1,1,1]], [[0,1,1],[1,1,0]], [[1,1,0],[0,1,1]]
     ];
 
     const gameContainer = document.getElementById('tab-content');
@@ -129,10 +124,7 @@
     let clearingRows = [], clearingTimer = null, flashOn = false;
     let bgCanvas = null;
     
-    // Сохранение состояния при переключении вкладок
     let gameStartedEver = false;
-    let wasActiveBeforeSwitch = false;
-    let wasPausedBeforeSwitch = false;
 
     // === АВТОРИЗАЦИЯ ===
     if (typeof onAuthStateChange === 'function') {
@@ -151,14 +143,14 @@
 
     document.querySelectorAll('.tab').forEach(tab => {
         tab.addEventListener('click', () => {
+            const previousTab = document.querySelector('.tab.active')?.dataset.tab;
+            const targetTab = tab.dataset.tab;
+
             document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
             tab.classList.add('active');
             
-            const targetTab = tab.dataset.tab;
-            const currentActiveTab = document.querySelector('.tab.active')?.dataset.tab;
-            
             // Если уходим с вкладки "Игра" — ставим на паузу
-            if (currentActiveTab === 'game' && targetTab !== 'game') {
+            if (previousTab === 'game' && targetTab !== 'game') {
                 pauseOnTabSwitch();
             }
             
@@ -166,24 +158,8 @@
         });
     });
 
-    function switchTab(tab) {
-        if (tab === 'game') {
-            renderGameTab();
-            // Если игра была активна до переключения — возобновляем
-            if (gameStartedEver && wasActiveBeforeSwitch && !wasPausedBeforeSwitch) {
-                resumeFromTabSwitch();
-            }
-        } else if (tab === 'leaderboard') {
-            renderLeaderboardTab();
-        }
-    }
-
     function pauseOnTabSwitch() {
-        if (!gameActive) return;
-        wasActiveBeforeSwitch = gameActive;
-        wasPausedBeforeSwitch = gamePaused;
-        
-        if (!gamePaused) {
+        if (gameActive && !gamePaused && clearingRows.length === 0) {
             gamePaused = true;
             if (gameInterval) {
                 clearInterval(gameInterval);
@@ -192,13 +168,9 @@
         }
     }
 
-    function resumeFromTabSwitch() {
-        if (!gameStartedEver || !wasActiveBeforeSwitch) return;
-        gamePaused = false;
-        startGameLoop();
-        updatePauseButton();
-        updateMobileButtonsState();
-        draw();
+    function switchTab(tab) {
+        if (tab === 'game') renderGameTab();
+        else if (tab === 'leaderboard') renderLeaderboardTab();
     }
 
     async function loadBestResults() {
@@ -244,17 +216,12 @@
     }
 
     function renderGameTab() {
-        // Если игра уже была начата — не перерисовываем полностью, просто восстанавливаем
-        if (gameStartedEver) {
-            restoreGameState();
-            return;
-        }
-        
+        // ВСЕГДА пересоздаем разметку, так как она могла быть удалена при переходе на вкладку Рекорды
         gameContainer.innerHTML = `
             <div class="tetris-stats">
-                <div class="stat-card"><span class="stat-icon">🏆</span><span>Очки: <span id="score" class="stat-value">0</span></span></div>
-                <div class="stat-card"><span class="stat-icon">📏</span><span>Линии: <span id="lines" class="stat-value">0</span></span></div>
-                <div class="stat-card"><span class="stat-icon">⬆️</span><span>Уровень: <span id="level" class="stat-value">1</span></span></div>
+                <div class="stat-card"><span class="stat-icon">🏆</span><span>Очки: <span id="score" class="stat-value">${score}</span></span></div>
+                <div class="stat-card"><span class="stat-icon">📏</span><span>Линии: <span id="lines" class="stat-value">${lines}</span></span></div>
+                <div class="stat-card"><span class="stat-icon">⬆️</span><span>Уровень: <span id="level" class="stat-value">${level}</span></span></div>
             </div>
             <div style="display:flex; justify-content:center; gap:1.5rem; flex-wrap:wrap;">
                 <div class="canvas-wrapper" id="canvas-wrapper">
@@ -280,6 +247,7 @@
             </div>
         `;
 
+        // Получаем свежие ссылки на DOM элементы
         canvas = document.getElementById('tetris-canvas');
         ctx = canvas.getContext('2d');
         nextCanvas = document.getElementById('next-canvas');
@@ -301,41 +269,21 @@
             else if (act === 'drop') hardDrop();
         });
 
-        updateMobileButtonsState();
-        newGame();
-    }
-
-    function restoreGameState() {
-        // Восстанавливаем canvas и обработчики
-        canvas = document.getElementById('tetris-canvas');
-        ctx = canvas.getContext('2d');
-        nextCanvas = document.getElementById('next-canvas');
-        nextCtx = nextCanvas.getContext('2d');
-        
-        document.getElementById('new-game-btn').addEventListener('click', newGame);
-        document.getElementById('pause-btn').addEventListener('click', togglePause);
-        document.getElementById('mobile-controls').addEventListener('click', (e) => {
-            const btn = e.target.closest('button');
-            if (!btn) return;
-            const act = btn.dataset.act;
-            if (!gameActive || gamePaused || clearingRows.length > 0) return;
-            if (act === 'up') rotatePiece();
-            else if (act === 'down') moveDown(true);
-            else if (act === 'left') moveLeft();
-            else if (act === 'right') moveRight();
-            else if (act === 'drop') hardDrop();
-        });
-        
-        updateStats();
-        updatePauseButton();
-        updateMobileButtonsState();
-        draw();
-        
-        // Если игра была на паузе — показываем оверлей
-        if (gamePaused && gameActive) {
-            renderPauseOverlay();
-        } else if (gameActive && !gamePaused) {
-            startGameLoop();
+        // Если игра уже была начата и не завершена — восстанавливаем её состояние
+        if (gameStartedEver && gameActive) {
+            updatePauseButton();
+            updateMobileButtonsState();
+            draw();
+            
+            if (gamePaused) {
+                renderPauseOverlay();
+            } else {
+                startGameLoop();
+            }
+        } else {
+            // Иначе запускаем новую игру
+            updateMobileButtonsState();
+            newGame();
         }
     }
 
@@ -343,7 +291,6 @@
     document.addEventListener('keydown', handleKeyDown);
 
     function handleKeyDown(e) {
-        // Space во время паузы — продолжить
         if (gamePaused && gameActive) {
             if (e.code === 'Space' || e.code === 'KeyP' || e.code === 'Enter') {
                 e.preventDefault();
@@ -379,7 +326,6 @@
     }
 
     function newGame() {
-        // Снимаем оверлеи
         const wrapper = document.getElementById('canvas-wrapper');
         if (wrapper) {
             wrapper.querySelectorAll('.game-over-overlay, .pause-overlay').forEach(o => o.remove());
@@ -389,8 +335,6 @@
         score = 0; lines = 0; level = 1; fallSpeed = 500;
         gameActive = true; gamePaused = false;
         clearingRows = [];
-        wasActiveBeforeSwitch = false;
-        wasPausedBeforeSwitch = false;
         gameStartedEver = true;
         
         if (clearingTimer) { clearInterval(clearingTimer); clearingTimer = null; }
@@ -719,7 +663,7 @@
     async function endGame() {
         gameActive = false;
         gamePaused = false;
-        gameStartedEver = false;
+        gameStartedEver = false; // Сбрасываем флаг, чтобы при следующем входе началась новая игра
         if (gameInterval) clearInterval(gameInterval);
         updatePauseButton();
         updateMobileButtonsState();
