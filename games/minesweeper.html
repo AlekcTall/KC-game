@@ -10,8 +10,8 @@
         .ms-stats { display: flex; justify-content: space-around; align-items: center; margin-bottom: 0.75rem; font-weight: 600; background: #f7f7f7; border-radius: 8px; padding: 0.5rem 1rem; gap: 0.5rem; }
         .ms-stats span { font-size: 1.1rem; }
         #minesCount { color: #e74c3c; }
-        #diffLabel { 
-            padding: 0.25rem 0.6rem; border-radius: 12px; font-size: 0.85rem; 
+        #diffLabel {
+            padding: 0.25rem 0.6rem; border-radius: 12px; font-size: 0.85rem;
             background: #27ae60; color: white; transition: background 0.2s;
         }
         #diffLabel.medium { background: #f39c12; }
@@ -22,8 +22,8 @@
             transition: transform 0.2s ease; display: inline-block;
         }
         #smileyBtn:active { transform: scale(1.3); }
-        .ms-toolbar { 
-            display: flex; justify-content: space-between; align-items: center; 
+        .ms-toolbar {
+            display: flex; justify-content: space-between; align-items: center;
             margin-bottom: 0.75rem; gap: 0.5rem; flex-wrap: wrap;
         }
         .difficulty-select {
@@ -33,12 +33,12 @@
         }
         .difficulty-select:hover { border-color: #3498db; }
         .ms-points {
-            font-size: 0.85rem; color: #666; background: #f0f0f0; 
+            font-size: 0.85rem; color: #666; background: #f0f0f0;
             padding: 0.25rem 0.7rem; border-radius: 12px;
         }
         .ms-points strong { color: #f39c12; }
-        .canvas-wrapper { 
-            position: relative; display: inline-block; border-radius: 8px; 
+        .canvas-wrapper {
+            position: relative; display: inline-block; border-radius: 8px;
             overflow: hidden; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
             transition: all 0.3s ease;
         }
@@ -62,34 +62,34 @@
         .modal button { margin: 0.3rem; padding: 0.6rem 1.4rem; border: none; border-radius: 6px; cursor: pointer; font-size: 1rem; transition: all 0.2s; }
         .btn-play { background: #27ae60; color: white; } .btn-play:hover { background: #219a52; transform: translateY(-2px); box-shadow: 0 4px 12px rgba(39, 174, 96, 0.3); }
         .btn-back { background: #ccc; } .btn-back:hover { background: #b3b3b3; }
-        
+
         .difficulty-selector { margin: 1.2rem 0; }
         .difficulty-selector > label { display: block; margin-bottom: 0.6rem; font-weight: 600; color: #2c3e50; font-size: 1rem; }
         .difficulty-options { display: flex; gap: 0.5rem; justify-content: center; flex-wrap: wrap; }
         .diff-btn {
-            flex: 1; min-width: 100px; padding: 0.7rem 0.5rem; border: 2px solid #ddd; 
+            flex: 1; min-width: 100px; padding: 0.7rem 0.5rem; border: 2px solid #ddd;
             border-radius: 10px; background: white; cursor: pointer; transition: all 0.2s;
             font-size: 0.95rem; font-weight: 500; color: #2c3e50;
         }
         .diff-btn:hover { border-color: #3498db; background: #f8f9fa; transform: translateY(-1px); }
-        .diff-btn.active { 
+        .diff-btn.active {
             border-color: #3498db; background: #3498db; color: white;
             box-shadow: 0 4px 10px rgba(52, 152, 219, 0.3);
         }
         .diff-btn.active:hover { background: #2980b9; }
         .diff-btn small { display: block; font-size: 0.72rem; opacity: 0.75; margin-top: 0.25rem; font-weight: 400; }
-        .diff-btn .diff-points { 
-            display: inline-block; margin-top: 0.3rem; padding: 0.1rem 0.4rem; 
-            background: rgba(243, 156, 18, 0.2); color: #f39c12; border-radius: 8px; 
+        .diff-btn .diff-points {
+            display: inline-block; margin-top: 0.3rem; padding: 0.1rem 0.4rem;
+            background: rgba(243, 156, 18, 0.2); color: #f39c12; border-radius: 8px;
             font-size: 0.7rem; font-weight: 700;
         }
         .diff-btn.active .diff-points { background: rgba(255,255,255,0.25); color: white; }
-        
-        .leaderboard-ms { margin-top: 1.5rem; text-align: left; } 
+
+        .leaderboard-ms { margin-top: 1.5rem; text-align: left; }
         .leaderboard-ms h3 { text-align: center; margin-bottom: 0.5rem; font-size: 1.1rem; }
-        .leaderboard-ms table { width: 100%; border-collapse: collapse; font-size: 0.9rem; } 
-        .leaderboard-ms th, .leaderboard-ms td { padding: 0.4rem 0.5rem; border-bottom: 1px solid #eee; } 
-        .leaderboard-ms th { background: #f5f5f5; font-weight: 600; } 
+        .leaderboard-ms table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+        .leaderboard-ms th, .leaderboard-ms td { padding: 0.4rem 0.5rem; border-bottom: 1px solid #eee; }
+        .leaderboard-ms th { background: #f5f5f5; font-weight: 600; }
         .leaderboard-ms .me { background: #e6f7ff; font-weight: 600; }
         @media (max-width: 600px) { .ms-controls { font-size: 0.8rem; } }
         .mobile-warning { display: none; padding: 2rem; text-align: center; color: #e67e22; font-weight: 600; font-size: 1.1rem; line-height: 1.6; }
@@ -120,7 +120,7 @@
             <strong>ЛКМ</strong> — открыть клетку.<br>
             <strong>ПКМ</strong> — поставить/снять флаг 🚩.<br>
             <strong>Клик по цифре</strong> — автооткрытие соседей.</p>
-            
+
             <div class="difficulty-selector">
                 <label>Выберите сложность:</label>
                 <div class="difficulty-options">
@@ -141,7 +141,7 @@
                     </button>
                 </div>
             </div>
-            
+
             <button class="btn-play" id="btnPlay">Играть</button>
             <button class="btn-back" id="btnBack">Назад</button>
             <p style="margin-top:0.8rem;color:#888;">или нажмите <strong>Enter</strong></p>
@@ -199,9 +199,9 @@
                 return;
             }
 
-            const isMobile = /Android|iPhone|iPad|iPod|webOS/i.test(navigator.userAgent) || 
+            const isMobile = /Android|iPhone|iPad|iPod|webOS/i.test(navigator.userAgent) ||
                              ('ontouchstart' in window && navigator.maxTouchPoints > 0);
-            
+
             if (isMobile) {
                 document.getElementById('mobileWarning').style.display = 'block';
                 document.getElementById('gameContent').style.display = 'none';
@@ -213,20 +213,20 @@
 
             // === Уровни сложности ===
             const DIFFICULTIES = {
-                easy: { 
-                    cols: 9, rows: 9, mines: 10, points: 3, 
+                easy: {
+                    cols: 9, rows: 9, mines: 10, points: 3,
                     name: 'Лёгкий', cssClass: '',
-                    cellSize: 40, canvasW: 360, canvasH: 360 
+                    cellSize: 40, canvasW: 360, canvasH: 360
                 },
-                medium: { 
-                    cols: 16, rows: 16, mines: 40, points: 5, 
+                medium: {
+                    cols: 16, rows: 16, mines: 40, points: 5,
                     name: 'Средний', cssClass: 'medium',
-                    cellSize: 24, canvasW: 384, canvasH: 384 
+                    cellSize: 24, canvasW: 384, canvasH: 384
                 },
-                hard: { 
-                    cols: 30, rows: 16, mines: 99, points: 7, 
+                hard: {
+                    cols: 30, rows: 16, mines: 99, points: 7,
                     name: 'Сложный', cssClass: 'hard',
-                    cellSize: 16, canvasW: 480, canvasH: 256 
+                    cellSize: 16, canvasW: 480, canvasH: 256
                 }
             };
 
@@ -374,7 +374,7 @@
                 cell.revealed = true;
                 cell.isAnimating = true;
                 cell.animationProgress = 0;
-                
+
                 if (cell.mine) {
                     gameActive = false; gameOver = true; gameWin = false;
                     stopTimer();
@@ -471,15 +471,19 @@
                 const diff = DIFFICULTIES[currentDifficulty];
                 try {
                     sessionStorage.removeItem('minesweeper_losses');
-                    const result = typeof addPointsToCurrentUser === 'function' ? await addPointsToCurrentUser(diff.points, 'minesweeper') : null;
+                    const result = typeof addPointsToCurrentUser === 'function'
+                        ? await addPointsToCurrentUser(diff.points, 'minesweeper')
+                        : null;
                     if (result && result.success) {
                         const earned = result.points;
                         const hasDouble = earned > diff.points;
                         showToast(`+${earned} балла${hasDouble ? ' (x2 бонус)' : ''}!`, 'success');
                     }
                     await updateBestTime(currentDifficulty, elapsedSeconds);
-                    if (typeof checkAndAwardAchievements === 'function') await checkAndAwardAchievements();
-                } catch (e) { console.error(e); }
+                    if (typeof checkAndAwardAchievements === 'function') {
+                        await checkAndAwardAchievements();
+                    }
+                } catch (e) { console.error('syncWin error:', e); }
             }
 
             async function updateBestTime(difficulty, time) {
@@ -490,40 +494,60 @@
                         .select('data')
                         .eq('id', currentUid)
                         .single();
-                    
+
                     if (fetchError || !row) return;
-                    
+
                     const data = row.data || {};
                     if (!data.gameStats) data.gameStats = {};
                     if (!data.gameStats.minesweeper) data.gameStats.minesweeper = {};
-                    if (!data.gameStats.minesweeper[difficulty]) data.gameStats.minesweeper[difficulty] = {};
-                    
+                    if (!data.gameStats.minesweeper[difficulty]) {
+                        data.gameStats.minesweeper[difficulty] = {};
+                    }
+
+                    // Обновляем рекорд для конкретной сложности
                     const currentBest = data.gameStats.minesweeper[difficulty].bestTime;
                     if (currentBest === undefined || time < currentBest) {
                         data.gameStats.minesweeper[difficulty].bestTime = time;
-                        bestTime = time;
                     }
                     data.gameStats.minesweeper[difficulty].completed = true;
-                    
-                    await supabase.from('users').update({ data }).eq('id', currentUid);
-                    
-                    if (typeof syncGameStats === 'function') {
-                        await syncGameStats('minesweeper', { 
-                            difficulty, 
-                            bestTime: time, 
-                            completed: true 
-                        });
+
+                    // Обновляем общий bestTime (для глобального рейтинга)
+                    const globalBest = data.gameStats.minesweeper.bestTime;
+                    if (!globalBest || time < globalBest) {
+                        data.gameStats.minesweeper.bestTime = time;
                     }
-                } catch (e) { console.error('updateBestTime error:', e); }
+
+                    await supabase.from('users').update({ data }).eq('id', currentUid);
+
+                    // Обновляем кеш текущего пользователя (если функции доступны)
+                    if (typeof getCurrentUser === 'function' && typeof setCurrentUser === 'function') {
+                        try {
+                            const user = getCurrentUser();
+                            if (user && user.id === currentUid) {
+                                user._rawData = data;
+                                if (!user.gameStats) user.gameStats = {};
+                                user.gameStats.minesweeper = data.gameStats.minesweeper;
+                                setCurrentUser(user);
+                            }
+                        } catch (cacheErr) {
+                            console.warn('Не удалось обновить кеш пользователя:', cacheErr);
+                        }
+                    }
+
+                    bestTime = data.gameStats.minesweeper[difficulty].bestTime;
+                } catch (e) {
+                    console.error('updateBestTime error:', e);
+                }
             }
 
             async function syncLoss() {
                 if (!currentUid) return;
                 try {
-                    if (typeof syncGameStats === 'function') await syncGameStats('minesweeper', { loss: true, difficulty: currentDifficulty });
                     if (typeof checkMeteorism === 'function') await checkMeteorism();
-                    if (typeof checkAndAwardAchievements === 'function') await checkAndAwardAchievements();
-                } catch (e) { console.error(e); }
+                    if (typeof checkAndAwardAchievements === 'function') {
+                        await checkAndAwardAchievements();
+                    }
+                } catch (e) { console.error('syncLoss error:', e); }
             }
 
             function showGameOverOverlay() {
@@ -568,12 +592,12 @@
                 ctx.beginPath();
                 ctx.arc(cx, cy, size * 0.6, 0, Math.PI * 2);
                 ctx.fill();
-                
+
                 ctx.fillStyle = 'rgba(255,255,255,0.3)';
                 ctx.beginPath();
                 ctx.arc(cx - size * 0.2, cy - size * 0.2, size * 0.15, 0, Math.PI * 2);
                 ctx.fill();
-                
+
                 ctx.strokeStyle = '#2c3e50';
                 ctx.lineWidth = 2;
                 const spikeLength = size * 0.3;
@@ -597,7 +621,7 @@
                 ctx.moveTo(cx, cy - size * 0.5);
                 ctx.lineTo(cx, cy + size * 0.5);
                 ctx.stroke();
-                
+
                 ctx.fillStyle = '#e74c3c';
                 ctx.beginPath();
                 ctx.moveTo(cx, cy - size * 0.4);
@@ -605,7 +629,7 @@
                 ctx.lineTo(cx, cy);
                 ctx.closePath();
                 ctx.fill();
-                
+
                 ctx.fillStyle = 'rgba(0,0,0,0.2)';
                 ctx.beginPath();
                 ctx.moveTo(cx, cy - size * 0.2);
@@ -618,7 +642,7 @@
             function drawClosedCell(x, y, isHovered) {
                 const w = CELL_SIZE - 2, h = CELL_SIZE - 2;
                 const sx = x + 1, sy = y + 1;
-                
+
                 const gradient = ctx.createLinearGradient(sx, sy, sx + w, sy + h);
                 if (isHovered) {
                     gradient.addColorStop(0, '#e8e8e8');
@@ -633,19 +657,19 @@
                 }
                 ctx.fillStyle = gradient;
                 ctx.fillRect(sx, sy, w, h);
-                
+
                 ctx.fillStyle = 'rgba(255,255,255,0.6)';
                 ctx.fillRect(sx, sy, w, Math.max(1, 3 * (CELL_SIZE / 40)));
                 ctx.fillRect(sx, sy, Math.max(1, 3 * (CELL_SIZE / 40)), h);
-                
+
                 ctx.fillStyle = 'rgba(0,0,0,0.15)';
                 ctx.fillRect(sx, sy + h - Math.max(1, 2 * (CELL_SIZE / 40)), w, Math.max(1, 2 * (CELL_SIZE / 40)));
                 ctx.fillRect(sx + w - Math.max(1, 2 * (CELL_SIZE / 40)), sy, Math.max(1, 2 * (CELL_SIZE / 40)), h);
-                
+
                 ctx.strokeStyle = isHovered ? '#666' : '#777';
                 ctx.lineWidth = 1;
                 ctx.strokeRect(x + 0.5, y + 0.5, CELL_SIZE - 1, CELL_SIZE - 1);
-                
+
                 if (isHovered) {
                     ctx.fillStyle = 'rgba(255,255,255,0.1)';
                     ctx.fillRect(sx, sy, w, h);
@@ -654,21 +678,21 @@
 
             function drawOpenedCell(x, y, progress) {
                 const alpha = Math.min(progress, 1);
-                
+
                 ctx.save();
                 ctx.globalAlpha = alpha;
-                
+
                 ctx.fillStyle = '#dcdcdc';
                 ctx.fillRect(x + 1, y + 1, CELL_SIZE - 2, CELL_SIZE - 2);
-                
+
                 ctx.fillStyle = 'rgba(0,0,0,0.08)';
                 ctx.fillRect(x + 1, y + 1, CELL_SIZE - 3, Math.max(1, 2 * (CELL_SIZE / 40)));
                 ctx.fillRect(x + 1, y + 1, Math.max(1, 2 * (CELL_SIZE / 40)), CELL_SIZE - 3);
-                
+
                 ctx.strokeStyle = '#bbb';
                 ctx.lineWidth = 0.5;
                 ctx.strokeRect(x + 0.5, y + 0.5, CELL_SIZE - 1, CELL_SIZE - 1);
-                
+
                 ctx.restore();
             }
 
@@ -702,9 +726,9 @@
                                     hasAnimating = true;
                                 }
                             }
-                            
+
                             drawOpenedCell(x, y, cell.animationProgress);
-                            
+
                             if (cell.mine) {
                                 drawMine(cx, cy, mineSize);
                             } else if (cell.neighborMines > 0) {
@@ -725,7 +749,7 @@
                         }
                     }
                 }
-                
+
                 if (hasAnimating) {
                     animationFrameId = requestAnimationFrame(drawBoard);
                 }
@@ -747,7 +771,7 @@
             function applyDifficulty(diffKey, skipRestart = false) {
                 if (!DIFFICULTIES[diffKey]) diffKey = 'easy';
                 currentDifficulty = diffKey;
-                
+
                 const d = DIFFICULTIES[diffKey];
                 COLS = d.cols;
                 ROWS = d.rows;
@@ -756,30 +780,30 @@
                 LOGICAL_WIDTH = d.canvasW;
                 LOGICAL_HEIGHT = d.canvasH;
                 SAFE_CELLS = COLS * ROWS - MINES_TOTAL;
-                
+
                 canvas.width = LOGICAL_WIDTH * DPR;
                 canvas.height = LOGICAL_HEIGHT * DPR;
                 canvas.style.width = LOGICAL_WIDTH + 'px';
                 canvas.style.height = LOGICAL_HEIGHT + 'px';
                 ctx.setTransform(1, 0, 0, 1, 0, 0);
                 ctx.scale(DPR, DPR);
-                
+
                 bgCanvas = null;
                 createBackground();
-                
+
                 localStorage.setItem('minesweeper_difficulty', diffKey);
-                
+
                 // Обновить UI
                 diffLabel.textContent = d.name;
                 diffLabel.className = d.cssClass;
                 pointsDisplay.textContent = d.points;
                 difficultySelect.value = diffKey;
                 leaderboardTitle.textContent = `🏆 Лучшие сапёры — ${d.name} (время)`;
-                
+
                 document.querySelectorAll('.diff-btn').forEach(btn => {
                     btn.classList.toggle('active', btn.dataset.diff === diffKey);
                 });
-                
+
                 if (!skipRestart) {
                     restartGame();
                 }
@@ -844,11 +868,11 @@
             canvas.addEventListener('contextmenu', (e) => e.preventDefault());
 
             smileyBtn.addEventListener('click', restartGame);
-            
+
             difficultySelect.addEventListener('change', (e) => {
                 changeDifficulty(e.target.value);
             });
-            
+
             document.querySelectorAll('.diff-btn').forEach(btn => {
                 btn.addEventListener('click', () => {
                     applyDifficulty(btn.dataset.diff);
