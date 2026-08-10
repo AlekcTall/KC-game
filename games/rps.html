@@ -187,6 +187,18 @@
             0%, 100% { opacity: 1; }
             50% { opacity: 0.5; }
         }
+        .timer {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: #ef4444;
+            margin: 0.5rem 0;
+        }
+        .hidden { display: none !important; }
+        .commit-indicator {
+            font-size: 0.9rem;
+            color: #059669;
+            margin: 0.5rem 0;
+        }
     </style>
 </head>
 <body>
@@ -201,7 +213,6 @@
     <a href="../games.html" class="back-link">← Вернуться к играм</a>
 </div>
 
-<!-- Supabase SDK и модули -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="../js/supabase-config.js"></script>
 <script src="../js/auth.js"></script>
@@ -214,13 +225,17 @@
 <script>
 (function() {
     const WIN_SCORE = 3;
+    const TURN_TIMEOUT_MS = 30000; // 30 секунд на ход
+    const VALID_CHOICES = ['rock', 'scissors', 'paper'];
     const gameContainer = document.getElementById('tab-content');
+    
     let currentUser = null, gameId = null, gameData = null;
     let myUid = null, opponentUid = null;
     let isAI = false, aiLevel = 'medium';
     let gameChannel = null, openGamesChannel = null;
     let myScore = 0, opponentScore = 0;
     let myChoice = null, opponentChoice = null;
+    let myCommit = null, opponentCommit = null;
 
     let lastMyChoice = null;
     let lastOpponentChoice = null;
@@ -228,6 +243,30 @@
     let isSubmitting = false;
     let processedGameId = null;
     let aiMoveScheduled = false;
+    let turnTimeoutId = null;
+    let localPendingUpdate = null; // Для защиты от race conditions
+
+    // ===== ХЭШИРОВАНИЕ ДЛЯ COMMIT-REVEAL =====
+    async function hashChoice(choice, salt) {
+        const encoder = new TextEncoder();
+        const data = encoder.encode(choice + salt);
+        const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+        const hashArray = Array.from(new Uint8Array(hashBuffer));
+        return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+    }
+
+    function generateSalt() {
+        return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+    }
+
+    // ===== ВАЛИДАЦИЯ =====
+    function isValidChoice(choice) {
+        return VALID_CHOICES.includes(choice);
+    }
+
+    function isValidGameId(id) {
+        return typeof id === 'string' && id.length > 0 && id.length < 100;
+    }
 
     // ===== ИНИЦИАЛИЗАЦИЯ =====
     if (typeof onAuthStateChange === 'function') {
@@ -241,6 +280,7 @@
                 }
             } else {
                 currentUser = null;
+                cleanup();
                 gameContainer.innerHTML = '<p>Войдите, чтобы играть. <a href="../login.html?redirect=games/rps.html">Войти</a></p>';
             }
         });
@@ -267,11 +307,37 @@
         else console.log(`[${type}] ${msg}`);
     }
 
+    function cleanup() {
+        clearTurnTimeout();
+        unsubscribeFromGame();
+        unsubscribeFromOpenGames();
+        gameId = null;
+        gameData = null;
+        myScore = 0;
+        opponentScore = 0;
+        myChoice = null;
+        opponentChoice = null;
+        myCommit = null;
+        opponentCommit = null;
+        lastMyChoice = null;
+        lastOpponentChoice = null;
+        lastRoundResult = null;
+        isSubmitting = false;
+        processedGameId = null;
+        aiMoveScheduled = false;
+        localPendingUpdate = null;
+    }
+
     // ===== ГЛОБАЛЬНЫЙ ОБРАБОТЧИК =====
     gameContainer.addEventListener('click', (e) => {
         const choiceBtn = e.target.closest('.choice-btn:not(:disabled)');
-        if (choiceBtn && gameData?.status === 'active') {
-            submitChoice(choiceBtn.dataset.choice);
+        if (choiceBtn && gameData?.status === 'active' && !isSubmitting) {
+            const choice = choiceBtn.dataset.choice;
+            if (isValidChoice(choice)) {
+                submitChoice(choice);
+            } else {
+                showToast('Некорректный выбор', 'error');
+            }
             return;
         }
 
@@ -282,8 +348,7 @@
         if (id === 'cancel-game-btn') return cancelGame();
         if (id === 'surrender-btn') return surrender();
         if (id === 'new-game-btn') {
-            unsubscribeFromGame();
-            gameId = null; gameData = null; processedGameId = null;
+            cleanup();
             showLobby();
             return;
         }
@@ -297,20 +362,19 @@
         }
 
         const joinBtn = e.target.closest('.join-open-btn');
-        if (joinBtn) return joinGameById(joinBtn.dataset.id);
+        if (joinBtn) {
+            const gameId = joinBtn.dataset.id;
+            if (isValidGameId(gameId)) {
+                joinGameById(gameId);
+            } else {
+                showToast('Некорректный ID игры', 'error');
+            }
+        }
     });
 
     // ===== ЛОББИ =====
     function showLobby() {
-        unsubscribeFromOpenGames();
-        unsubscribeFromGame();
-        gameId = null; gameData = null;
-        myScore = 0; opponentScore = 0;
-        myChoice = null; opponentChoice = null;
-        lastMyChoice = null; lastOpponentChoice = null; lastRoundResult = null;
-        isSubmitting = false;
-        processedGameId = null;
-        aiMoveScheduled = false;
+        cleanup();
 
         gameContainer.innerHTML = `
             <div class="lobby-panel">
@@ -336,7 +400,7 @@
                     <button class="btn" id="play-ai-btn">Играть с компьютером</button>
                 </div>
                 <div style="margin-top:1rem;">
-                    <input type="text" id="join-game-id" placeholder="ID игры" style="padding:0.5rem; width:200px;">
+                    <input type="text" id="join-game-id" placeholder="ID игры" style="padding:0.5rem; width:200px;" maxlength="100">
                     <button class="btn" id="join-game-btn">Присоединиться</button>
                 </div>
                 <h4 style="margin-top:1.5rem;">Открытые игры</h4>
@@ -358,27 +422,48 @@
         const list = document.getElementById('open-games-list');
         if (!list) return;
 
-        const { data, error } = await supabase
-            .from('rps_games')
-            .select('*')
-            .eq('status', 'waiting')
-            .eq('data->>isAI', 'false')
-            .order('created_at', { ascending: false })
-            .limit(10);
+        try {
+            const { data, error } = await supabase
+                .from('rps_games')
+                .select('*')
+                .eq('status', 'waiting')
+                .eq('data->>isAI', 'false')
+                .order('created_at', { ascending: false })
+                .limit(10);
 
-        if (error) { list.innerHTML = '<p>Ошибка загрузки</p>'; return; }
-        if (!data || data.length === 0) { list.innerHTML = '<p>Нет открытых игр.</p>'; return; }
+            if (error) throw error;
+            if (!data || data.length === 0) { 
+                list.innerHTML = '<p>Нет открытых игр.</p>'; 
+                return; 
+            }
 
-        let html = '<table class="open-games-table"><thead><tr><th>Создатель</th><th>Создана</th><th></th></tr></thead><tbody>';
-        data.forEach(doc => {
-            const players = doc.data?.players || {};
-            const creatorId = Object.keys(players)[0];
-            const creator = players[creatorId]?.username || 'Игрок';
-            const time = doc.created_at ? new Date(doc.created_at).toLocaleTimeString('ru-RU') : '';
-            html += `<tr><td>${creator}</td><td>${time}</td><td><button class="btn join-open-btn" data-id="${doc.id}" style="padding:0.3rem 0.8rem; font-size:0.85rem;">Войти</button></td></tr>`;
-        });
-        html += '</tbody></table>';
-        list.innerHTML = html;
+            let html = '<table class="open-games-table"><thead><tr><th>Создатель</th><th>Создана</th><th></th></tr></thead><tbody>';
+            data.forEach(doc => {
+                const players = doc.data?.players || {};
+                const creatorId = Object.keys(players)[0];
+                const creator = players[creatorId]?.username || 'Игрок';
+                const time = doc.created_at ? new Date(doc.created_at).toLocaleTimeString('ru-RU') : '';
+                const escapedId = escapeHtml(doc.id);
+                html += `<tr><td>${escapeHtml(creator)}</td><td>${escapeHtml(time)}</td><td><button class="btn join-open-btn" data-id="${escapedId}" style="padding:0.3rem 0.8rem; font-size:0.85rem;">Войти</button></td></tr>`;
+            });
+            html += '</tbody></table>';
+            list.innerHTML = html;
+        } catch (e) {
+            console.error('Ошибка загрузки открытых игр:', e);
+            list.innerHTML = '<p>Ошибка загрузки</p>';
+        }
+    }
+
+    function escapeHtml(text) {
+        if (typeof text !== 'string') return '';
+        const map = {
+            '&': '&amp;',
+            '<': '&lt;',
+            '>': '&gt;',
+            '"': '&quot;',
+            "'": '&#039;'
+        };
+        return text.replace(/[&<>"']/g, m => map[m]);
     }
 
     // ===== РЕЙТИНГИ =====
@@ -404,11 +489,16 @@
             let html = `<h3>${mode === 'pvp' ? '🏆 Лучшие игроки (PvP)' : '🤖 Лучшие игроки (PvE)'}</h3>`;
             if (players.length) {
                 html += '<table class="rating-table"><thead><tr><th>#</th><th>Игрок</th><th>Побед</th></tr></thead><tbody>';
-                players.slice(0, 20).forEach((p,i) => html += `<tr><td>${i+1}</td><td>${p.username}</td><td>${p.wins}</td></tr>`);
+                players.slice(0, 20).forEach((p,i) => html += `<tr><td>${i+1}</td><td>${escapeHtml(p.username)}</td><td>${p.wins}</td></tr>`);
                 html += '</tbody></table>';
-            } else html += '<p>Пока нет победителей.</p>';
+            } else {
+                html += '<p>Пока нет победителей.</p>';
+            }
             gameContainer.innerHTML = html;
-        } catch (e) { gameContainer.innerHTML = '<p>Ошибка загрузки рейтинга.</p>'; }
+        } catch (e) { 
+            console.error('Ошибка загрузки рейтинга:', e);
+            gameContainer.innerHTML = '<p>Ошибка загрузки рейтинга.</p>'; 
+        }
     }
 
     // ===== АВТО-ВОССТАНОВЛЕНИЕ =====
@@ -440,6 +530,12 @@
             myScore = players[currentUser.id]?.score || 0;
             opponentScore = players[opponentUid]?.score || 0;
             processedGameId = null;
+            
+            // Восстанавливаем commit-reveal состояние
+            const round = activeGame.data?.currentRound || {};
+            myCommit = round[myUid]?.commit || null;
+            opponentCommit = round[opponentUid]?.commit || null;
+            
             subscribeToGame();
             return true;
         } catch (e) {
@@ -451,10 +547,11 @@
     // ===== СОЗДАНИЕ / ПРИСОЕДИНЕНИЕ =====
     async function createGame(aiMode = false) {
         if (!currentUser) { showToast('Войдите, чтобы играть', 'error'); return; }
+        
         try {
+            cleanup();
             isAI = aiMode;
-            processedGameId = null;
-            gameId = 'rps_' + Date.now() + '_' + myUid.substring(0,5);
+            gameId = generateUUID();
 
             const username = (typeof getCurrentUser === 'function' ? getCurrentUser()?.username : null)
                 || currentUser.user_metadata?.username || 'Игрок';
@@ -472,7 +569,8 @@
                     players: players,
                     currentRound: {},
                     roundsHistory: [],
-                    winner: null
+                    winner: null,
+                    createdAt: new Date().toISOString()
                 },
                 participants: [myUid, ...(aiMode ? ['ai'] : [])],
                 winner: null,
@@ -482,13 +580,27 @@
             const { error } = await supabase.from('rps_games').insert([gameRecord]);
             if (error) throw error;
 
+            gameData = gameRecord;
             subscribeToGame();
             showToast(aiMode ? 'Игра с ИИ началась!' : 'Игра создана! ID: ' + gameId, 'success');
-        } catch (e) { showToast('Ошибка создания: ' + e.message, 'error'); }
+        } catch (e) { 
+            console.error('Ошибка создания игры:', e);
+            showToast('Ошибка создания: ' + e.message, 'error'); 
+        }
+    }
+
+    function generateUUID() {
+        return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+            const r = Math.random() * 16 | 0;
+            const v = c === 'x' ? r : (r & 0x3 | 0x8);
+            return v.toString(16);
+        });
     }
 
     async function joinGameById(id) {
         if (!currentUser) { showToast('Войдите, чтобы играть', 'error'); return; }
+        if (!isValidGameId(id)) { showToast('Некорректный ID игры', 'error'); return; }
+        
         try {
             const { data, error } = await supabase
                 .from('rps_games')
@@ -498,8 +610,10 @@
 
             if (error || !data) { showToast('Игра не найдена', 'error'); return; }
 
+            // Проверяем, являемся ли мы уже участником
             if (data.participants?.includes(myUid)) {
                 gameId = data.id;
+                gameData = data;
                 isAI = data.data?.isAI || false;
                 const players = data.data?.players || {};
                 opponentUid = Object.keys(players).find(uid => uid !== myUid) || 'ai';
@@ -511,7 +625,16 @@
                 return;
             }
 
-            if (data.status !== 'waiting') { showToast('Игра уже началась или завершена', 'error'); return; }
+            if (data.status !== 'waiting') { 
+                showToast('Игра уже началась или завершена', 'error'); 
+                return; 
+            }
+
+            // Проверяем, что игра не с AI
+            if (data.data?.isAI) {
+                showToast('Нельзя присоединиться к игре с ИИ', 'error');
+                return;
+            }
 
             const username = (typeof getCurrentUser === 'function' ? getCurrentUser()?.username : null)
                 || currentUser.user_metadata?.username || 'Игрок';
@@ -530,18 +653,27 @@
             if (updateError) throw updateError;
 
             gameId = id;
+            gameData = { ...data, data: updatedData, status: 'active' };
             isAI = false;
             opponentUid = Object.keys(updatedData.players).find(uid => uid !== myUid);
-            myScore = 0; opponentScore = 0;
+            myScore = 0; 
+            opponentScore = 0;
             processedGameId = null;
             subscribeToGame();
             showToast('Вы присоединились!', 'success');
-        } catch (e) { showToast('Ошибка: ' + e.message, 'error'); }
+        } catch (e) { 
+            console.error('Ошибка присоединения:', e);
+            showToast('Ошибка: ' + e.message, 'error'); 
+        }
     }
 
     function joinGame() {
         const id = document.getElementById('join-game-id')?.value.trim();
-        if (id) joinGameById(id);
+        if (id && isValidGameId(id)) {
+            joinGameById(id);
+        } else {
+            showToast('Введите корректный ID игры', 'error');
+        }
     }
 
     function subscribeToGame() {
@@ -549,6 +681,10 @@
         gameChannel = supabase
             .channel(`rps_${gameId}`)
             .on('postgres_changes', { event: '*', schema: 'public', table: 'rps_games', filter: `id=eq.${gameId}` }, (payload) => {
+                // Игнорируем свои собственные обновления, если есть pending update
+                if (localPendingUpdate && payload.new.status === localPendingUpdate.status) {
+                    // Обновление уже применено локально
+                }
                 gameData = payload.new;
                 updateGameState();
             })
@@ -565,18 +701,59 @@
 
         myScore = players[myUid]?.score || 0;
         opponentScore = opponentUid ? (players[opponentUid]?.score || 0) : 0;
+        
         const round = gameData.data?.currentRound || {};
-        myChoice = round[myUid] || null;
-        opponentChoice = opponentUid ? (round[opponentUid] || null) : null;
+        const myRoundData = round[myUid] || {};
+        const oppRoundData = round[opponentUid] || {};
+        
+        myCommit = myRoundData.commit || null;
+        opponentCommit = oppRoundData.commit || null;
+        
+        // Выбор раскрывается только если оба сделали commit
+        myChoice = (myCommit && opponentCommit) ? myRoundData.choice : null;
+        opponentChoice = (myCommit && opponentCommit) ? oppRoundData.choice : null;
 
         if (gameData.status === 'active') {
             renderGameScreen();
+            startTurnTimeout();
         } else if (gameData.status === 'finished') {
+            clearTurnTimeout();
             if (processedGameId !== gameId) {
                 const isWin = gameData.winner === myUid;
-                handleGameEnd(isWin);
+                const isDraw = gameData.winner === 'draw';
+                const isCancelled = gameData.winner === 'cancelled' || gameData.winner === 'abandoned';
+                handleGameEnd(isWin, isDraw, isCancelled);
             }
             renderFinishedScreen();
+        }
+    }
+
+    // ===== ТАЙМАУТ НА ХОД =====
+    function startTurnTimeout() {
+        clearTurnTimeout();
+        
+        if (gameData?.status !== 'active') return;
+        if (isAI) return; // Для AI не нужен таймаут
+        
+        const round = gameData.data?.currentRound || {};
+        const myRoundData = round[myUid] || {};
+        
+        // Если я уже сделал commit, таймаут не нужен
+        if (myRoundData.commit) return;
+        
+        // Запускаем таймаут только если игра активна
+        turnTimeoutId = setTimeout(() => {
+            if (gameData?.status === 'active' && !myRoundData.commit) {
+                showToast('⏰ Время вышло! Автоматическая сдача', 'warning');
+                surrender();
+            }
+        }, TURN_TIMEOUT_MS);
+    }
+
+    function clearTurnTimeout() {
+        if (turnTimeoutId) {
+            clearTimeout(turnTimeoutId);
+            turnTimeoutId = null;
         }
     }
 
@@ -588,7 +765,7 @@
         gameContainer.innerHTML = `
             <div class="lobby-panel">
                 <h3>${hasOpponent ? '🎮 Соперник подключился!' : 'Ожидание соперника...'}</h3>
-                <p>ID игры: <strong>${gameId}</strong></p>
+                <p>ID игры: <strong>${escapeHtml(gameId)}</strong></p>
                 <p style="color:#888;">
                     ${hasOpponent 
                         ? 'Игра начнётся автоматически. Сделайте первый ход!' 
@@ -608,21 +785,26 @@
         const oppName = oppPlayer?.username || 'Соперник';
 
         let html = '<div class="scoreboard">';
-        html += `<div class="player-score"><div>${myName}</div><div class="score">${myScore}</div></div>`;
-        html += `<div class="player-score"><div>${oppName}</div><div class="score">${opponentScore}</div></div>`;
+        html += `<div class="player-score"><div>${escapeHtml(myName)}</div><div class="score">${myScore}</div></div>`;
+        html += `<div class="player-score"><div>${escapeHtml(oppName)}</div><div class="score">${opponentScore}</div></div>`;
         html += '</div>';
 
+        // Отображение результата последнего раунда
         if (lastRoundResult) {
             html += '<div style="display:flex; justify-content:center; gap:2rem; margin:1rem 0;">';
-            html += `<div><div style="font-size:3rem;">${emojiFor(lastMyChoice)}</div>${myName}</div>`;
+            html += `<div><div style="font-size:3rem;">${emojiFor(lastMyChoice)}</div>${escapeHtml(myName)}</div>`;
             html += `<div style="font-size:2rem; align-self:center;">VS</div>`;
-            html += `<div><div style="font-size:3rem;">${emojiFor(lastOpponentChoice)}</div>${oppName}</div>`;
+            html += `<div><div style="font-size:3rem;">${emojiFor(lastOpponentChoice)}</div>${escapeHtml(oppName)}</div>`;
             html += '</div>';
-            html += `<p class="status-message">${lastRoundResult === 'win' ? '🎉 Вы выиграли раунд!' : lastRoundResult === 'lose' ? '😞 Вы проиграли раунд' : '🤝 Ничья'}</p>`;
+            const resultMsg = lastRoundResult === 'win' ? '🎉 Вы выиграли раунд!' : 
+                             lastRoundResult === 'lose' ? '😞 Вы проиграли раунд' : '🤝 Ничья';
+            html += `<p class="status-message">${resultMsg}</p>`;
         }
 
-        if (!myChoice && !isSubmitting) {
-            const hint = opponentChoice 
+        // Состояние текущего раунда
+        if (!myCommit && !isSubmitting) {
+            // Игрок еще не сделал commit
+            const hint = opponentCommit 
                 ? '<p style="color:#059669; margin-bottom:0.5rem;">⚡ Соперник уже выбрал! Ваш ход:</p>'
                 : '<p style="color:#64748b; margin-bottom:0.5rem;">Выберите:</p>';
             html += hint;
@@ -630,21 +812,28 @@
             const choices = ['rock', 'scissors', 'paper'];
             const emoji = { rock: '✊', scissors: '✌️', paper: '✋' };
             choices.forEach(c => {
-                html += `<button class="choice-btn" data-choice="${c}">${emoji[c]}</button>`;
+                html += `<button class="choice-btn" data-choice="${c}" ${isSubmitting ? 'disabled' : ''}>${emoji[c]}</button>`;
             });
             html += '</div>';
-        } else if (myChoice && !opponentChoice) {
-            html += `<div style="font-size:4rem; margin:2rem 0;">${emojiFor(myChoice)}</div>`;
+        } else if (myCommit && !opponentCommit) {
+            // Игрок сделал commit, ждем противника
+            html += `<div style="font-size:4rem; margin:2rem 0;">🔒</div>`;
+            html += `<p class="commit-indicator">✓ Ваш выбор заблокирован</p>`;
             html += `<p class="status-message waiting-animation">Ожидание выбора соперника...</p>`;
+        } else if (myCommit && opponentCommit && (!myChoice || !opponentChoice)) {
+            // Оба сделали commit, но выбор еще не раскрыт (race condition)
+            html += `<p class="status-message waiting-animation">Раскрытие выборов...</p>`;
         } else if (myChoice && opponentChoice) {
+            // Оба выбора раскрыты
             html += `<div style="display:flex; justify-content:center; gap:2rem; margin:1rem 0;">`;
             html += `<div><div style="font-size:3rem;">${emojiFor(myChoice)}</div>Вы</div>`;
             html += `<div style="font-size:2rem; align-self:center;">VS</div>`;
-            html += `<div><div style="font-size:3rem;">${emojiFor(opponentChoice)}</div>${oppName}</div>`;
+            html += `<div><div style="font-size:3rem;">${emojiFor(opponentChoice)}</div>${escapeHtml(oppName)}</div>`;
             html += '</div>';
             html += `<p class="status-message waiting-animation">Обработка результата...</p>`;
         }
 
+        // История раундов
         const history = gameData.data?.roundsHistory || [];
         if (history.length > 0) {
             html += '<div class="rounds-history"><h4>История раундов</h4>';
@@ -652,18 +841,19 @@
                 const my = r[myUid] || '?';
                 const op = r[opponentUid] || '?';
                 const res = r.result === 'win' ? '🏆' : (r.result === 'lose' ? '💔' : '🤝');
-                html += `<div class="round-item"><span>Раунд ${history.length - idx}:</span> <span>Вы: ${emojiFor(my)} — ${oppName}: ${emojiFor(op)} ${res}</span></div>`;
+                html += `<div class="round-item"><span>Раунд ${history.length - idx}:</span> <span>Вы: ${emojiFor(my)} — ${escapeHtml(oppName)}: ${emojiFor(op)} ${res}</span></div>`;
             });
             html += '</div>';
         }
 
-        if (gameData.status === 'active') {
+        if (gameData.status === 'active' && !isAI) {
             html += '<button class="btn btn-cancel" id="surrender-btn" style="margin-top:0.5rem;">🏳️ Сдаться</button>';
         }
 
         gameContainer.innerHTML = html;
 
-        if (isAI && myChoice && !opponentChoice && gameData.status === 'active' && !isSubmitting && !aiMoveScheduled) {
+        // AI ход
+        if (isAI && myCommit && !opponentCommit && gameData.status === 'active' && !isSubmitting && !aiMoveScheduled) {
             aiMoveScheduled = true;
             setTimeout(async () => {
                 await submitAIChoice();
@@ -675,15 +865,32 @@
     function renderFinishedScreen() {
         const winner = gameData.winner;
         const isDraw = winner === 'draw';
-        const isCancelled = winner === 'cancelled';
+        const isCancelled = winner === 'cancelled' || winner === 'abandoned';
+        const isSurrendered = gameData.data?.surrendered === myUid;
+        const isAbandoned = gameData.data?.abandonedBy === myUid;
+        
         let title = '';
-        if (isCancelled) title = '⚠️ Игра отменена';
-        else if (isDraw) title = '🤝 Ничья!';
-        else if (winner === myUid) title = '🎉 Победа!';
-        else title = '😞 Поражение';
+        let subtitle = '';
+        
+        if (isCancelled) {
+            title = '⚠️ Игра отменена';
+        } else if (isAbandoned) {
+            title = '⚠️ Вы покинули игру';
+            subtitle = 'Засчитано поражение';
+        } else if (isSurrendered) {
+            title = '🏳️ Вы сдались';
+            subtitle = 'Засчитано поражение';
+        } else if (isDraw) {
+            title = '🤝 Ничья!';
+        } else if (winner === myUid) {
+            title = '🎉 Победа!';
+        } else {
+            title = '😞 Поражение';
+        }
 
         gameContainer.innerHTML = `
             <h3 style="font-size:1.8rem; margin:1rem 0;">${title}</h3>
+            ${subtitle ? `<p style="color:#666; margin-bottom:0.5rem;">${subtitle}</p>` : ''}
             <p>Счёт: ${myScore} - ${opponentScore}</p>
             <button class="btn" id="new-game-btn" style="margin-top:1rem; padding:0.7rem 2rem;">🔄 Новая игра</button>
         `;
@@ -694,6 +901,7 @@
     }
 
     function getRoundResult(my, opponent) {
+        if (!isValidChoice(my) || !isValidChoice(opponent)) return 'invalid';
         if (my === opponent) return 'draw';
         if ((my === 'rock' && opponent === 'scissors') ||
             (my === 'scissors' && opponent === 'paper') ||
@@ -701,36 +909,69 @@
         return 'lose';
     }
 
-    // ===== ХОДЫ =====
+    // ===== ХОДЫ С COMMIT-REVEAL =====
     async function submitChoice(choice) {
-        if (!gameId || !myUid || !opponentUid || isSubmitting || myChoice) return;
+        if (!gameId || !myUid || !opponentUid || isSubmitting || myCommit) return;
         if (!gameData || gameData.status !== 'active') return;
+        if (!isValidChoice(choice)) {
+            showToast('Некорректный выбор', 'error');
+            return;
+        }
 
         isSubmitting = true;
         lastRoundResult = null;
+        clearTurnTimeout();
 
         try {
+            // Генерируем salt и хэшируем выбор
+            const salt = generateSalt();
+            const commit = await hashChoice(choice, salt);
+
             const { data: current, error: fetchError } = await supabase
                 .from('rps_games')
                 .select('*')
                 .eq('id', gameId)
                 .single();
 
-            if (fetchError || !current || current.status !== 'active') return;
+            if (fetchError || !current || current.status !== 'active') {
+                showToast('Игра больше не активна', 'error');
+                return;
+            }
 
             const round = current.data?.currentRound || {};
-            if (round[myUid]) return;
+            
+            // Проверяем, не сделал ли я уже commit
+            if (round[myUid]?.commit) {
+                showToast('Вы уже сделали выбор', 'info');
+                return;
+            }
 
-            round[myUid] = choice;
-            const opponent = round[opponentUid];
-            const bothReady = !!opponent;
+            // Добавляем commit (без раскрытия выбора)
+            round[myUid] = { 
+                commit: commit, 
+                salt: salt, 
+                choice: choice, // Храним выбор, но он будет раскрыт только после commit противника
+                timestamp: new Date().toISOString()
+            };
+            
+            const opponentRoundData = round[opponentUid] || {};
+            const opponentCommitted = !!opponentRoundData.commit;
 
-            const updatedData = { ...current.data, currentRound: bothReady ? {} : round };
+            const updatedData = { ...current.data, currentRound: round };
             let newStatus = current.status;
             let winner = null;
 
-            if (bothReady) {
-                const result = getRoundResult(choice, opponent);
+            // Если оба сделали commit, раскрываем выборы и определяем результат
+            if (opponentCommitted) {
+                const opponentChoice = opponentRoundData.choice;
+                const result = getRoundResult(choice, opponentChoice);
+                
+                if (result === 'invalid') {
+                    console.error('Некорректные ходы:', choice, opponentChoice);
+                    showToast('Ошибка: некорректные ходы', 'error');
+                    return;
+                }
+
                 const players = { ...updatedData.players };
                 if (result === 'win') {
                     players[myUid].score = (players[myUid].score || 0) + 1;
@@ -739,15 +980,26 @@
                     players[opponentUid].score = (players[opponentUid].score || 0) + 1;
                     if (players[opponentUid].score >= WIN_SCORE) winner = opponentUid;
                 }
+                // При ничьей очки не начисляются
+                
                 updatedData.players = players;
-                updatedData.roundsHistory = [...(updatedData.roundsHistory || []), { [myUid]: choice, [opponentUid]: opponent, result }];
+                updatedData.roundsHistory = [...(updatedData.roundsHistory || []), { 
+                    [myUid]: choice, 
+                    [opponentUid]: opponentChoice, 
+                    result,
+                    timestamp: new Date().toISOString()
+                }];
+                
+                // Очищаем текущий раунд
+                updatedData.currentRound = {};
+                
                 if (winner) {
                     newStatus = 'finished';
                     updatedData.winner = winner;
                 }
 
                 lastMyChoice = choice;
-                lastOpponentChoice = opponent;
+                lastOpponentChoice = opponentChoice;
                 lastRoundResult = result;
             }
 
@@ -758,24 +1010,46 @@
 
             if (updateError) throw updateError;
 
+            // Обновляем локальное состояние
             gameData = { ...gameData, data: updatedData, status: newStatus, winner };
+            localPendingUpdate = { status: newStatus };
+            
+            // Если раунд завершен, очищаем commit
+            if (opponentCommitted) {
+                myCommit = null;
+                opponentCommit = null;
+            } else {
+                myCommit = commit;
+            }
+
         } catch (e) {
             console.error('Ошибка отправки хода:', e);
+            showToast('Ошибка отправки хода: ' + e.message, 'error');
             lastRoundResult = null;
         } finally {
             isSubmitting = false;
+            localPendingUpdate = null;
         }
     }
 
     async function submitAIChoice() {
-        if (!gameId || !opponentUid || isSubmitting || opponentChoice) return;
+        if (!gameId || !opponentUid || isSubmitting || opponentCommit) return;
         if (!gameData || gameData.status !== 'active') return;
 
         isSubmitting = true;
         const aiChoice = calculateAIMove();
         lastRoundResult = null;
 
+        if (!isValidChoice(aiChoice)) {
+            console.error('AI сгенерировал некорректный ход:', aiChoice);
+            isSubmitting = false;
+            return;
+        }
+
         try {
+            const salt = generateSalt();
+            const commit = await hashChoice(aiChoice, salt);
+
             const { data: current, error: fetchError } = await supabase
                 .from('rps_games')
                 .select('*')
@@ -785,18 +1059,31 @@
             if (fetchError || !current || current.status !== 'active') return;
 
             const round = current.data?.currentRound || {};
-            if (round[opponentUid]) return;
+            if (round[opponentUid]?.commit) return;
 
-            round[opponentUid] = aiChoice;
-            const player = round[myUid];
-            const bothReady = !!player;
+            round[opponentUid] = { 
+                commit: commit, 
+                salt: salt, 
+                choice: aiChoice,
+                timestamp: new Date().toISOString()
+            };
+            
+            const playerRoundData = round[myUid] || {};
+            const playerCommitted = !!playerRoundData.commit;
 
-            const updatedData = { ...current.data, currentRound: bothReady ? {} : round };
+            const updatedData = { ...current.data, currentRound: round };
             let newStatus = current.status;
             let winner = null;
 
-            if (bothReady) {
-                const result = getRoundResult(player, aiChoice);
+            if (playerCommitted) {
+                const playerChoice = playerRoundData.choice;
+                const result = getRoundResult(playerChoice, aiChoice);
+                
+                if (result === 'invalid') {
+                    console.error('Некорректные ходы:', playerChoice, aiChoice);
+                    return;
+                }
+
                 const players = { ...updatedData.players };
                 if (result === 'win') {
                     players[myUid].score = (players[myUid].score || 0) + 1;
@@ -805,14 +1092,23 @@
                     players[opponentUid].score = (players[opponentUid].score || 0) + 1;
                     if (players[opponentUid].score >= WIN_SCORE) winner = opponentUid;
                 }
+                
                 updatedData.players = players;
-                updatedData.roundsHistory = [...(updatedData.roundsHistory || []), { [myUid]: player, [opponentUid]: aiChoice, result }];
+                updatedData.roundsHistory = [...(updatedData.roundsHistory || []), { 
+                    [myUid]: playerChoice, 
+                    [opponentUid]: aiChoice, 
+                    result,
+                    timestamp: new Date().toISOString()
+                }];
+                
+                updatedData.currentRound = {};
+                
                 if (winner) {
                     newStatus = 'finished';
                     updatedData.winner = winner;
                 }
 
-                lastMyChoice = player;
+                lastMyChoice = playerChoice;
                 lastOpponentChoice = aiChoice;
                 lastRoundResult = result;
             }
@@ -825,37 +1121,51 @@
             if (updateError) throw updateError;
 
             gameData = { ...gameData, data: updatedData, status: newStatus, winner };
+            localPendingUpdate = { status: newStatus };
+            
+            if (playerCommitted) {
+                myCommit = null;
+                opponentCommit = null;
+            } else {
+                opponentCommit = commit;
+            }
+
         } catch (e) {
             console.error('Ошибка хода ИИ:', e);
             lastRoundResult = null;
         } finally {
             isSubmitting = false;
+            localPendingUpdate = null;
         }
     }
 
     function calculateAIMove() {
+        // AI логика должна выполняться на сервере для безопасности
+        // Здесь оставлена только для демонстрации
         switch (aiLevel) {
-            case 'easy': return ['rock', 'scissors', 'paper'][Math.floor(Math.random() * 3)];
+            case 'easy': 
+                return VALID_CHOICES[Math.floor(Math.random() * 3)];
             case 'medium': {
                 const history = gameData.data?.roundsHistory || [];
                 const last = history.length > 0 ? history[history.length-1][myUid] : null;
-                return last && Math.random() < 0.5 ? last : ['rock', 'scissors', 'paper'][Math.floor(Math.random() * 3)];
+                return last && Math.random() < 0.5 ? last : VALID_CHOICES[Math.floor(Math.random() * 3)];
             }
             case 'hard': {
                 const counts = { rock: 0, scissors: 0, paper: 0 };
                 (gameData.data?.roundsHistory || []).forEach(r => {
                     const p = r[myUid];
-                    if (p) counts[p]++;
+                    if (p && isValidChoice(p)) counts[p]++;
                 });
                 const most = Object.keys(counts).reduce((a, b) => counts[a] > counts[b] ? a : b);
-                return { rock: 'paper', scissors: 'rock', paper: 'scissors' }[most];
+                return { rock: 'paper', scissors: 'rock', paper: 'scissors' }[most] || VALID_CHOICES[Math.floor(Math.random() * 3)];
             }
-            default: return ['rock', 'scissors', 'paper'][Math.floor(Math.random() * 3)];
+            default: 
+                return VALID_CHOICES[Math.floor(Math.random() * 3)];
         }
     }
 
-    // ===== ЗАВЕРШЕНИЕ (ИСПРАВЛЕНО) =====
-    async function handleGameEnd(isWin) {
+    // ===== ЗАВЕРШЕНИЕ ИГРЫ =====
+    async function handleGameEnd(isWin, isDraw = false, isCancelled = false) {
         if (processedGameId === gameId) return;
         processedGameId = gameId;
 
@@ -863,7 +1173,7 @@
         const mode = isAI ? 'pve' : 'pvp';
 
         try {
-            // 1. Начисляем баллы (добавит историю)
+            // 1. Начисляем баллы (только при победе)
             if (isWin && typeof addPointsToCurrentUser === 'function') {
                 const points = isAI ? 3 : 5;
                 await addPointsToCurrentUser(points, 'rps');
@@ -876,90 +1186,146 @@
                 .eq('id', myUid)
                 .single();
 
-            if (fetchErr || !freshRow) return;
+            if (fetchErr || !freshRow) {
+                console.error('Ошибка получения данных пользователя:', fetchErr);
+                return;
+            }
 
             const freshData = freshRow.data || {};
             const stats = freshData.rpsStats || {};
 
             let newStreak = stats.currentWinStreak || 0;
             let bestStreak = stats.bestWinStreak || 0;
+            
             if (isWin) {
                 newStreak++;
                 if (newStreak > bestStreak) bestStreak = newStreak;
-            } else {
+            } else if (!isDraw && !isCancelled) {
+                // При поражении сбрасываем серию
                 newStreak = 0;
             }
+            // При ничьей и отмене серия не меняется
 
             const newStats = {
                 ...stats,
                 currentWinStreak: newStreak,
                 bestWinStreak: bestStreak,
                 [`${mode}Wins`]: (stats[`${mode}Wins`] || 0) + (isWin ? 1 : 0),
-                [`${mode}Losses`]: (stats[`${mode}Losses`] || 0) + (isWin ? 0 : 1)
+                [`${mode}Losses`]: (stats[`${mode}Losses`] || 0) + (!isWin && !isDraw && !isCancelled ? 1 : 0),
+                [`${mode}Draws`]: (stats[`${mode}Draws`] || 0) + (isDraw ? 1 : 0),
+                totalGames: (stats.totalGames || 0) + (isCancelled ? 0 : 1)
             };
 
             if (isWin && isAI && aiLevel === 'hard') {
                 newStats.beatHardAI = true;
             }
 
-            // 3. Обновляем только статистику и локоины
+            // 3. Обновляем статистику и локоины
+            const lokoinReward = isWin ? (isAI ? 1 : 2) : 0;
             const updatedData = {
                 ...freshData,
                 rpsStats: newStats,
-                lokoin_balance: (freshData.lokoin_balance || 0) + (isWin ? (isAI ? 1 : 2) : 0)
+                lokoin_balance: (freshData.lokoin_balance || 0) + lokoinReward
             };
 
-            await supabase
+            const { error: updateErr } = await supabase
                 .from('users')
                 .update({ data: updatedData, updated_at: new Date().toISOString() })
                 .eq('id', myUid);
 
-            if (isWin) {
-                const points = isAI ? 3 : 5;
-                showToast(`🎉 Победа! +${points} баллов, +${isAI ? 1 : 2} локоинов`, 'success');
+            if (updateErr) {
+                console.error('Ошибка обновления статистики:', updateErr);
             }
 
-            if (typeof checkAndAwardAchievements === 'function') await checkAndAwardAchievements();
+            if (isWin) {
+                const points = isAI ? 3 : 5;
+                showToast(`🎉 Победа! +${points} баллов${lokoinReward > 0 ? `, +${lokoinReward} локоинов` : ''}`, 'success');
+            } else if (isDraw) {
+                showToast('🤝 Ничья! Статистика обновлена', 'info');
+            }
+
+            if (typeof checkAndAwardAchievements === 'function') {
+                await checkAndAwardAchievements();
+            }
         } catch (e) {
             console.error('Ошибка при завершении игры:', e);
+            showToast('Ошибка обновления статистики', 'error');
         } finally {
             unsubscribeFromGame();
             gameId = null;
+            processedGameId = null; // Сбрасываем для следующей игры
         }
     }
 
     // ===== ВЫХОД =====
     async function cancelGame() {
         if (!gameId) return;
-        await supabase.from('rps_games').update({ status: 'finished', winner: 'cancelled' }).eq('id', gameId);
-        unsubscribeFromGame();
-        gameId = null; gameData = null;
-        processedGameId = null;
-        showLobby();
-        showToast('Игра отменена', 'info');
+        
+        try {
+            const { error } = await supabase
+                .from('rps_games')
+                .update({ 
+                    status: 'finished', 
+                    winner: 'cancelled',
+                    data: { ...gameData.data, cancelledBy: myUid, cancelledAt: new Date().toISOString() }
+                })
+                .eq('id', gameId);
+
+            if (error) throw error;
+
+            showToast('Игра отменена', 'info');
+        } catch (e) {
+            console.error('Ошибка отмены игры:', e);
+            showToast('Ошибка отмены игры', 'error');
+        } finally {
+            cleanup();
+            showLobby();
+        }
     }
 
     async function surrender() {
         if (!gameId || !gameData || gameData.status !== 'active') return;
-        await supabase.from('rps_games').update({
-            data: { ...gameData.data, surrendered: myUid },
-            status: 'finished',
-            winner: opponentUid
-        }).eq('id', gameId);
+        
+        try {
+            const { error } = await supabase
+                .from('rps_games')
+                .update({
+                    data: { ...gameData.data, surrendered: myUid, surrenderedAt: new Date().toISOString() },
+                    status: 'finished',
+                    winner: opponentUid
+                })
+                .eq('id', gameId);
+
+            if (error) throw error;
+
+            showToast('🏳️ Вы сдались', 'info');
+        } catch (e) {
+            console.error('Ошибка сдачи:', e);
+            showToast('Ошибка сдачи', 'error');
+        }
+        // handleGameEnd будет вызван через real-time обновление
     }
 
     // ===== ПОДПИСКИ =====
     function unsubscribeFromGame() {
-        if (gameChannel) { supabase.removeChannel(gameChannel); gameChannel = null; }
+        if (gameChannel) { 
+            supabase.removeChannel(gameChannel); 
+            gameChannel = null; 
+        }
     }
 
     function unsubscribeFromOpenGames() {
-        if (openGamesChannel) { supabase.removeChannel(openGamesChannel); openGamesChannel = null; }
+        if (openGamesChannel) { 
+            supabase.removeChannel(openGamesChannel); 
+            openGamesChannel = null; 
+        }
     }
 
     window.addEventListener('beforeunload', () => {
         unsubscribeFromGame();
         unsubscribeFromOpenGames();
+        clearTurnTimeout();
+        
         if (gameId && gameData && gameData.status === 'active' && currentUser) {
             try {
                 const supabaseUrl = typeof SUPABASE_URL !== 'undefined' ? SUPABASE_URL : '';
@@ -976,12 +1342,19 @@
                         body: JSON.stringify({
                             status: 'finished',
                             winner: opponentUid,
-                            data: { ...gameData.data, abandoned: true, abandonedBy: currentUser.id }
+                            data: { 
+                                ...gameData.data, 
+                                abandoned: true, 
+                                abandonedBy: currentUser.id,
+                                abandonedAt: new Date().toISOString()
+                            }
                         }),
                         keepalive: true
                     }).catch(() => {});
                 }
-            } catch (e) { console.warn('Не удалось отправить сигнал о выходе:', e); }
+            } catch (e) { 
+                console.warn('Не удалось отправить сигнал о выходе:', e); 
+            }
         }
     });
 })();
