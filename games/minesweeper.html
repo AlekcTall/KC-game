@@ -6,18 +6,43 @@
     <title>Сапёр – КЦ Игры</title>
     <link rel="stylesheet" href="../css/style.css">
     <style>
-        .minesweeper-game { max-width: 480px; margin: 2rem auto; text-align: center; background: white; padding: 2rem; border-radius: var(--border-radius); box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05); }
-        .ms-stats { display: flex; justify-content: space-around; align-items: center; margin-bottom: 1rem; font-weight: 600; background: #f7f7f7; border-radius: 8px; padding: 0.5rem 1rem; gap: 0.5rem; }
+        .minesweeper-game { max-width: 520px; margin: 2rem auto; text-align: center; background: white; padding: 2rem; border-radius: var(--border-radius); box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05); }
+        .ms-stats { display: flex; justify-content: space-around; align-items: center; margin-bottom: 0.75rem; font-weight: 600; background: #f7f7f7; border-radius: 8px; padding: 0.5rem 1rem; gap: 0.5rem; }
         .ms-stats span { font-size: 1.1rem; }
         #minesCount { color: #e74c3c; }
+        #diffLabel { 
+            padding: 0.25rem 0.6rem; border-radius: 12px; font-size: 0.85rem; 
+            background: #27ae60; color: white; transition: background 0.2s;
+        }
+        #diffLabel.medium { background: #f39c12; }
+        #diffLabel.hard { background: #e74c3c; }
         #timerDisplay { font-family: monospace; font-size: 1.2rem; background: #fff; padding: 0.2rem 0.8rem; border-radius: 6px; border: 1px solid #ccc; }
         #smileyBtn {
             font-size: 2rem; cursor: pointer; background: none; border: none; line-height: 1; padding: 0 0.5rem;
             transition: transform 0.2s ease; display: inline-block;
         }
         #smileyBtn:active { transform: scale(1.3); }
-        .canvas-wrapper { position: relative; display: inline-block; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1); }
-        canvas { display: block; touch-action: manipulation; }
+        .ms-toolbar { 
+            display: flex; justify-content: space-between; align-items: center; 
+            margin-bottom: 0.75rem; gap: 0.5rem; flex-wrap: wrap;
+        }
+        .difficulty-select {
+            padding: 0.35rem 0.6rem; border: 1px solid #ccc; border-radius: 6px;
+            background: white; font-size: 0.85rem; cursor: pointer; font-weight: 500;
+            transition: border-color 0.2s;
+        }
+        .difficulty-select:hover { border-color: #3498db; }
+        .ms-points {
+            font-size: 0.85rem; color: #666; background: #f0f0f0; 
+            padding: 0.25rem 0.7rem; border-radius: 12px;
+        }
+        .ms-points strong { color: #f39c12; }
+        .canvas-wrapper { 
+            position: relative; display: inline-block; border-radius: 8px; 
+            overflow: hidden; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            transition: all 0.3s ease;
+        }
+        canvas { display: block; touch-action: manipulation; cursor: pointer; }
         .ms-controls { margin-bottom: 1rem; color: #666; font-size: 0.9rem; }
         .ms-message { font-weight: bold; min-height: 1.5rem; margin: 0.5rem 0; color: #2c3e50; }
         .ms-back { display: inline-block; margin-top: 0.5rem; color: var(--color-primary); text-decoration: none; }
@@ -25,18 +50,47 @@
             position: fixed; top: 0; left: 0; right: 0; bottom: 0;
             background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 1000;
             backdrop-filter: blur(4px);
+            animation: fadeIn 0.3s ease;
         }
         .modal {
-            background: white; padding: 2rem; border-radius: 12px; max-width: 360px; text-align: center;
+            background: white; padding: 2rem; border-radius: 12px; max-width: 420px; text-align: center;
             box-shadow: 0 8px 30px rgba(0,0,0,0.2);
+            animation: scaleIn 0.3s ease;
         }
         .modal h3 { margin-bottom: 1rem; font-size: 1.5rem; }
         .modal p { margin-bottom: 1rem; font-size: 0.95rem; line-height: 1.6; }
-        .modal button { margin: 0.3rem; padding: 0.6rem 1.4rem; border: none; border-radius: 6px; cursor: pointer; font-size: 1rem; transition: background 0.2s; }
-        .btn-play { background: #27ae60; color: white; } .btn-play:hover { background: #219a52; }
+        .modal button { margin: 0.3rem; padding: 0.6rem 1.4rem; border: none; border-radius: 6px; cursor: pointer; font-size: 1rem; transition: all 0.2s; }
+        .btn-play { background: #27ae60; color: white; } .btn-play:hover { background: #219a52; transform: translateY(-2px); box-shadow: 0 4px 12px rgba(39, 174, 96, 0.3); }
         .btn-back { background: #ccc; } .btn-back:hover { background: #b3b3b3; }
-        .leaderboard-ms { margin-top: 1.5rem; text-align: left; } .leaderboard-ms h3 { text-align: center; margin-bottom: 0.5rem; font-size: 1.1rem; }
-        .leaderboard-ms table { width: 100%; border-collapse: collapse; font-size: 0.9rem; } .leaderboard-ms th, .leaderboard-ms td { padding: 0.4rem 0.5rem; border-bottom: 1px solid #eee; } .leaderboard-ms th { background: #f5f5f5; font-weight: 600; } .leaderboard-ms .me { background: #e6f7ff; font-weight: 600; }
+        
+        .difficulty-selector { margin: 1.2rem 0; }
+        .difficulty-selector > label { display: block; margin-bottom: 0.6rem; font-weight: 600; color: #2c3e50; font-size: 1rem; }
+        .difficulty-options { display: flex; gap: 0.5rem; justify-content: center; flex-wrap: wrap; }
+        .diff-btn {
+            flex: 1; min-width: 100px; padding: 0.7rem 0.5rem; border: 2px solid #ddd; 
+            border-radius: 10px; background: white; cursor: pointer; transition: all 0.2s;
+            font-size: 0.95rem; font-weight: 500; color: #2c3e50;
+        }
+        .diff-btn:hover { border-color: #3498db; background: #f8f9fa; transform: translateY(-1px); }
+        .diff-btn.active { 
+            border-color: #3498db; background: #3498db; color: white;
+            box-shadow: 0 4px 10px rgba(52, 152, 219, 0.3);
+        }
+        .diff-btn.active:hover { background: #2980b9; }
+        .diff-btn small { display: block; font-size: 0.72rem; opacity: 0.75; margin-top: 0.25rem; font-weight: 400; }
+        .diff-btn .diff-points { 
+            display: inline-block; margin-top: 0.3rem; padding: 0.1rem 0.4rem; 
+            background: rgba(243, 156, 18, 0.2); color: #f39c12; border-radius: 8px; 
+            font-size: 0.7rem; font-weight: 700;
+        }
+        .diff-btn.active .diff-points { background: rgba(255,255,255,0.25); color: white; }
+        
+        .leaderboard-ms { margin-top: 1.5rem; text-align: left; } 
+        .leaderboard-ms h3 { text-align: center; margin-bottom: 0.5rem; font-size: 1.1rem; }
+        .leaderboard-ms table { width: 100%; border-collapse: collapse; font-size: 0.9rem; } 
+        .leaderboard-ms th, .leaderboard-ms td { padding: 0.4rem 0.5rem; border-bottom: 1px solid #eee; } 
+        .leaderboard-ms th { background: #f5f5f5; font-weight: 600; } 
+        .leaderboard-ms .me { background: #e6f7ff; font-weight: 600; }
         @media (max-width: 600px) { .ms-controls { font-size: 0.8rem; } }
         .mobile-warning { display: none; padding: 2rem; text-align: center; color: #e67e22; font-weight: 600; font-size: 1.1rem; line-height: 1.6; }
         .game-over-overlay {
@@ -45,14 +99,17 @@
             align-items: center; justify-content: center; border-radius: 8px;
             animation: fadeIn 0.4s ease; z-index: 10;
         }
-        .game-over-overlay .game-over-text { color: white; font-size: 2rem; font-weight: bold; margin-bottom: 0.5rem; text-shadow: 2px 2px 4px rgba(0,0,0,0.5); }
+        .game-over-overlay .game-over-text { color: white; font-size: 2rem; font-weight: bold; margin-bottom: 0.5rem; text-shadow: 2px 2px 4px rgba(0,0,0,0.5); animation: pulse 1s ease infinite; }
         .game-over-overlay .game-over-reason { color: #ddd; font-size: 1rem; margin-bottom: 1rem; }
         .game-over-overlay .game-over-score { color: #f1c40f; font-size: 1.2rem; margin-bottom: 1.5rem; }
         .game-over-overlay .btn {
             background: white; color: #333; font-weight: 600; padding: 0.6rem 2rem;
-            border-radius: 20px; cursor: pointer; border: none;
+            border-radius: 20px; cursor: pointer; border: none; transition: all 0.2s;
         }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .game-over-overlay .btn:hover { transform: scale(1.05); box-shadow: 0 4px 12px rgba(255,255,255,0.3); }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes scaleIn { from { transform: scale(0.9); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+        @keyframes pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.05); } }
     </style>
 </head>
 <body>
@@ -60,10 +117,31 @@
         <div class="modal">
             <h3>💣 Сапёр</h3>
             <p>Открывайте ячейки, избегая мин.<br>
-            <strong>Левая кнопка мыши</strong> — открыть клетку.<br>
-            <strong>Правая кнопка мыши</strong> — поставить/снять флаг 🚩.<br>
-            <strong>Клик по цифре</strong> (когда вокруг достаточно флагов) — автоматически открыть соседей.</p>
-            <p><small>Поле 9×9, 10 мин</small></p>
+            <strong>ЛКМ</strong> — открыть клетку.<br>
+            <strong>ПКМ</strong> — поставить/снять флаг 🚩.<br>
+            <strong>Клик по цифре</strong> — автооткрытие соседей.</p>
+            
+            <div class="difficulty-selector">
+                <label>Выберите сложность:</label>
+                <div class="difficulty-options">
+                    <button class="diff-btn active" data-diff="easy">
+                        🟢 Лёгкий
+                        <small>9×9 · 10 мин</small>
+                        <span class="diff-points">+3 балла</span>
+                    </button>
+                    <button class="diff-btn" data-diff="medium">
+                        🟡 Средний
+                        <small>16×16 · 40 мин</small>
+                        <span class="diff-points">+5 баллов</span>
+                    </button>
+                    <button class="diff-btn" data-diff="hard">
+                        🔴 Сложный
+                        <small>30×16 · 99 мин</small>
+                        <span class="diff-points">+7 баллов</span>
+                    </button>
+                </div>
+            </div>
+            
             <button class="btn-play" id="btnPlay">Играть</button>
             <button class="btn-back" id="btnBack">Назад</button>
             <p style="margin-top:0.8rem;color:#888;">или нажмите <strong>Enter</strong></p>
@@ -78,9 +156,18 @@
         </div>
         <div id="gameContent">
             <div class="ms-stats">
+                <span id="diffLabel">Лёгкий</span>
                 <span>💣 <span id="minesCount">10</span></span>
                 <button id="smileyBtn" title="Новая игра">😊</button>
                 <span>⏱️ <span id="timerDisplay">00:00</span></span>
+            </div>
+            <div class="ms-toolbar">
+                <select id="difficultySelect" class="difficulty-select">
+                    <option value="easy">🟢 Лёгкий (9×9)</option>
+                    <option value="medium">🟡 Средний (16×16)</option>
+                    <option value="hard">🔴 Сложный (30×16)</option>
+                </select>
+                <div class="ms-points">Награда: <strong id="pointsDisplay">3</strong> баллов</div>
             </div>
             <div class="canvas-wrapper" id="canvas-wrapper">
                 <canvas id="gameCanvas" width="360" height="360"></canvas>
@@ -89,14 +176,13 @@
             <p class="ms-message" id="message"></p>
         </div>
         <div class="leaderboard-ms" id="ms-leaderboard">
-            <h3>🏆 Лучшие сапёры (время)</h3>
+            <h3 id="leaderboard-title">🏆 Лучшие сапёры — Лёгкий (время)</h3>
             <table id="top-table"><thead><tr><th>#</th><th>Игрок</th><th>Время</th></tr></thead><tbody></tbody></table>
             <p id="auth-warning" style="text-align:center; display:none;">Войдите, чтобы увидеть рейтинг.</p>
         </div>
         <a href="../games.html" class="ms-back">← Вернуться к играм</a>
     </div>
 
-    <!-- Supabase SDK и модули -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="../js/supabase-config.js"></script>
     <script src="../js/auth.js"></script>
@@ -125,6 +211,28 @@
                 return;
             }
 
+            // === Уровни сложности ===
+            const DIFFICULTIES = {
+                easy: { 
+                    cols: 9, rows: 9, mines: 10, points: 3, 
+                    name: 'Лёгкий', cssClass: '',
+                    cellSize: 40, canvasW: 360, canvasH: 360 
+                },
+                medium: { 
+                    cols: 16, rows: 16, mines: 40, points: 5, 
+                    name: 'Средний', cssClass: 'medium',
+                    cellSize: 24, canvasW: 384, canvasH: 384 
+                },
+                hard: { 
+                    cols: 30, rows: 16, mines: 99, points: 7, 
+                    name: 'Сложный', cssClass: 'hard',
+                    cellSize: 16, canvasW: 480, canvasH: 256 
+                }
+            };
+
+            let currentDifficulty = localStorage.getItem('minesweeper_difficulty') || 'easy';
+            if (!DIFFICULTIES[currentDifficulty]) currentDifficulty = 'easy';
+
             const startModal = document.getElementById('startModal'),
                   btnPlay = document.getElementById('btnPlay'),
                   btnBack = document.getElementById('btnBack');
@@ -133,28 +241,27 @@
             const minesCountSpan = document.getElementById('minesCount'),
                   timerDisplay = document.getElementById('timerDisplay'),
                   messageEl = document.getElementById('message'),
-                  smileyBtn = document.getElementById('smileyBtn');
-            const COLS = 9, ROWS = 9, MINES_TOTAL = 10;
-            const DPR = window.devicePixelRatio || 1;
-            const LOGICAL_WIDTH = 360, LOGICAL_HEIGHT = 360;
-            const CELL_SIZE = LOGICAL_WIDTH / COLS;
-            const SAFE_CELLS = COLS * ROWS - MINES_TOTAL;
+                  smileyBtn = document.getElementById('smileyBtn'),
+                  diffLabel = document.getElementById('diffLabel'),
+                  pointsDisplay = document.getElementById('pointsDisplay'),
+                  difficultySelect = document.getElementById('difficultySelect'),
+                  leaderboardTitle = document.getElementById('leaderboard-title');
 
-            canvas.width = LOGICAL_WIDTH * DPR;
-            canvas.height = LOGICAL_HEIGHT * DPR;
-            canvas.style.width = LOGICAL_WIDTH + 'px';
-            canvas.style.height = LOGICAL_HEIGHT + 'px';
-            ctx.scale(DPR, DPR);
+            const DPR = window.devicePixelRatio || 1;
+            let COLS, ROWS, MINES_TOTAL, CELL_SIZE, LOGICAL_WIDTH, LOGICAL_HEIGHT, SAFE_CELLS;
 
             let board = [], minesPlanted = false, gameActive = false, gameWin = false, gameOver = false;
             let flagsPlaced = 0, safeRevealed = 0;
             let timerStart = null, timerInterval = null, elapsedSeconds = 0;
             let bestTime = Infinity, currentUid = null;
             let bgCanvas = null;
+            let hoverCell = null;
+            let animationFrameId = null;
 
             class Cell {
                 constructor(row, col) {
                     this.row = row; this.col = col; this.mine = false; this.revealed = false; this.flagged = false; this.neighborMines = 0;
+                    this.animationProgress = 1; this.isAnimating = false;
                 }
             }
 
@@ -265,6 +372,9 @@
                 const cell = board[row][col];
                 if (!cell || cell.revealed || cell.flagged || !gameActive) return;
                 cell.revealed = true;
+                cell.isAnimating = true;
+                cell.animationProgress = 0;
+                
                 if (cell.mine) {
                     gameActive = false; gameOver = true; gameWin = false;
                     stopTimer();
@@ -358,23 +468,59 @@
 
             async function syncWin() {
                 if (!currentUid) return;
+                const diff = DIFFICULTIES[currentDifficulty];
                 try {
                     sessionStorage.removeItem('minesweeper_losses');
-                    const result = typeof addPointsToCurrentUser === 'function' ? await addPointsToCurrentUser(3, 'minesweeper') : null;
+                    const result = typeof addPointsToCurrentUser === 'function' ? await addPointsToCurrentUser(diff.points, 'minesweeper') : null;
                     if (result && result.success) {
                         const earned = result.points;
-                        const hasDouble = earned > 3;
+                        const hasDouble = earned > diff.points;
                         showToast(`+${earned} балла${hasDouble ? ' (x2 бонус)' : ''}!`, 'success');
                     }
-                    if (typeof syncGameStats === 'function') await syncGameStats('minesweeper', { bestTime: elapsedSeconds, completed: true });
+                    await updateBestTime(currentDifficulty, elapsedSeconds);
                     if (typeof checkAndAwardAchievements === 'function') await checkAndAwardAchievements();
                 } catch (e) { console.error(e); }
+            }
+
+            async function updateBestTime(difficulty, time) {
+                if (!currentUid) return;
+                try {
+                    const { data: row, error: fetchError } = await supabase
+                        .from('users')
+                        .select('data')
+                        .eq('id', currentUid)
+                        .single();
+                    
+                    if (fetchError || !row) return;
+                    
+                    const data = row.data || {};
+                    if (!data.gameStats) data.gameStats = {};
+                    if (!data.gameStats.minesweeper) data.gameStats.minesweeper = {};
+                    if (!data.gameStats.minesweeper[difficulty]) data.gameStats.minesweeper[difficulty] = {};
+                    
+                    const currentBest = data.gameStats.minesweeper[difficulty].bestTime;
+                    if (currentBest === undefined || time < currentBest) {
+                        data.gameStats.minesweeper[difficulty].bestTime = time;
+                        bestTime = time;
+                    }
+                    data.gameStats.minesweeper[difficulty].completed = true;
+                    
+                    await supabase.from('users').update({ data }).eq('id', currentUid);
+                    
+                    if (typeof syncGameStats === 'function') {
+                        await syncGameStats('minesweeper', { 
+                            difficulty, 
+                            bestTime: time, 
+                            completed: true 
+                        });
+                    }
+                } catch (e) { console.error('updateBestTime error:', e); }
             }
 
             async function syncLoss() {
                 if (!currentUid) return;
                 try {
-                    if (typeof syncGameStats === 'function') await syncGameStats('minesweeper', { loss: true });
+                    if (typeof syncGameStats === 'function') await syncGameStats('minesweeper', { loss: true, difficulty: currentDifficulty });
                     if (typeof checkMeteorism === 'function') await checkMeteorism();
                     if (typeof checkAndAwardAchievements === 'function') await checkAndAwardAchievements();
                 } catch (e) { console.error(e); }
@@ -411,43 +557,134 @@
                 board = createEmptyBoard();
                 minesCountSpan.textContent = MINES_TOTAL;
                 timerDisplay.textContent = '00:00';
-                messageEl.textContent = bestTime < Infinity ? `Личный рекорд: ${formatTime(bestTime)}` : '';
+                messageEl.textContent = bestTime < Infinity ? `Рекорд (${DIFFICULTIES[currentDifficulty].name}): ${formatTime(bestTime)}` : '';
                 smileyBtn.textContent = '😊';
+                hoverCell = null;
                 drawBoard();
             }
 
-            function drawClosedCell(x, y) {
-                const w = CELL_SIZE - 2, h = CELL_SIZE - 2;
-                const sx = x + 1, sy = y + 1;
-                const gradient = ctx.createLinearGradient(sx, sy, sx + w, sy + h);
-                gradient.addColorStop(0, '#f0f0f0');
-                gradient.addColorStop(0.3, '#d0d0d0');
-                gradient.addColorStop(0.7, '#b0b0b0');
-                gradient.addColorStop(1, '#909090');
-                ctx.fillStyle = gradient;
-                ctx.fillRect(sx, sy, w, h);
-                ctx.fillStyle = 'rgba(255,255,255,0.5)';
-                ctx.fillRect(sx, sy, w, 3);
-                ctx.fillRect(sx, sy, 3, h);
-                ctx.strokeStyle = '#777';
-                ctx.lineWidth = 1;
-                ctx.strokeRect(x + 0.5, y + 0.5, CELL_SIZE - 1, CELL_SIZE - 1);
+            function drawMine(cx, cy, size) {
+                ctx.fillStyle = '#2c3e50';
+                ctx.beginPath();
+                ctx.arc(cx, cy, size * 0.6, 0, Math.PI * 2);
+                ctx.fill();
+                
+                ctx.fillStyle = 'rgba(255,255,255,0.3)';
+                ctx.beginPath();
+                ctx.arc(cx - size * 0.2, cy - size * 0.2, size * 0.15, 0, Math.PI * 2);
+                ctx.fill();
+                
+                ctx.strokeStyle = '#2c3e50';
+                ctx.lineWidth = 2;
+                const spikeLength = size * 0.3;
+                for (let i = 0; i < 8; i++) {
+                    const angle = (i / 8) * Math.PI * 2;
+                    const x1 = cx + Math.cos(angle) * size * 0.6;
+                    const y1 = cy + Math.sin(angle) * size * 0.6;
+                    const x2 = cx + Math.cos(angle) * (size * 0.6 + spikeLength);
+                    const y2 = cy + Math.sin(angle) * (size * 0.6 + spikeLength);
+                    ctx.beginPath();
+                    ctx.moveTo(x1, y1);
+                    ctx.lineTo(x2, y2);
+                    ctx.stroke();
+                }
             }
 
-            function drawOpenedCell(x, y) {
+            function drawFlag(cx, cy, size) {
+                ctx.strokeStyle = '#8b4513';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(cx, cy - size * 0.5);
+                ctx.lineTo(cx, cy + size * 0.5);
+                ctx.stroke();
+                
+                ctx.fillStyle = '#e74c3c';
+                ctx.beginPath();
+                ctx.moveTo(cx, cy - size * 0.4);
+                ctx.lineTo(cx + size * 0.4, cy - size * 0.2);
+                ctx.lineTo(cx, cy);
+                ctx.closePath();
+                ctx.fill();
+                
+                ctx.fillStyle = 'rgba(0,0,0,0.2)';
+                ctx.beginPath();
+                ctx.moveTo(cx, cy - size * 0.2);
+                ctx.lineTo(cx + size * 0.3, cy - size * 0.1);
+                ctx.lineTo(cx, cy);
+                ctx.closePath();
+                ctx.fill();
+            }
+
+            function drawClosedCell(x, y, isHovered) {
+                const w = CELL_SIZE - 2, h = CELL_SIZE - 2;
+                const sx = x + 1, sy = y + 1;
+                
+                const gradient = ctx.createLinearGradient(sx, sy, sx + w, sy + h);
+                if (isHovered) {
+                    gradient.addColorStop(0, '#e8e8e8');
+                    gradient.addColorStop(0.3, '#d8d8d8');
+                    gradient.addColorStop(0.7, '#b8b8b8');
+                    gradient.addColorStop(1, '#989898');
+                } else {
+                    gradient.addColorStop(0, '#f0f0f0');
+                    gradient.addColorStop(0.3, '#d0d0d0');
+                    gradient.addColorStop(0.7, '#b0b0b0');
+                    gradient.addColorStop(1, '#909090');
+                }
+                ctx.fillStyle = gradient;
+                ctx.fillRect(sx, sy, w, h);
+                
+                ctx.fillStyle = 'rgba(255,255,255,0.6)';
+                ctx.fillRect(sx, sy, w, Math.max(1, 3 * (CELL_SIZE / 40)));
+                ctx.fillRect(sx, sy, Math.max(1, 3 * (CELL_SIZE / 40)), h);
+                
+                ctx.fillStyle = 'rgba(0,0,0,0.15)';
+                ctx.fillRect(sx, sy + h - Math.max(1, 2 * (CELL_SIZE / 40)), w, Math.max(1, 2 * (CELL_SIZE / 40)));
+                ctx.fillRect(sx + w - Math.max(1, 2 * (CELL_SIZE / 40)), sy, Math.max(1, 2 * (CELL_SIZE / 40)), h);
+                
+                ctx.strokeStyle = isHovered ? '#666' : '#777';
+                ctx.lineWidth = 1;
+                ctx.strokeRect(x + 0.5, y + 0.5, CELL_SIZE - 1, CELL_SIZE - 1);
+                
+                if (isHovered) {
+                    ctx.fillStyle = 'rgba(255,255,255,0.1)';
+                    ctx.fillRect(sx, sy, w, h);
+                }
+            }
+
+            function drawOpenedCell(x, y, progress) {
+                const alpha = Math.min(progress, 1);
+                
+                ctx.save();
+                ctx.globalAlpha = alpha;
+                
                 ctx.fillStyle = '#dcdcdc';
                 ctx.fillRect(x + 1, y + 1, CELL_SIZE - 2, CELL_SIZE - 2);
-                ctx.fillStyle = 'rgba(0,0,0,0.06)';
-                ctx.fillRect(x + 1, y + 1, CELL_SIZE - 3, 2);
-                ctx.fillRect(x + 1, y + 1, 2, CELL_SIZE - 3);
+                
+                ctx.fillStyle = 'rgba(0,0,0,0.08)';
+                ctx.fillRect(x + 1, y + 1, CELL_SIZE - 3, Math.max(1, 2 * (CELL_SIZE / 40)));
+                ctx.fillRect(x + 1, y + 1, Math.max(1, 2 * (CELL_SIZE / 40)), CELL_SIZE - 3);
+                
                 ctx.strokeStyle = '#bbb';
                 ctx.lineWidth = 0.5;
                 ctx.strokeRect(x + 0.5, y + 0.5, CELL_SIZE - 1, CELL_SIZE - 1);
+                
+                ctx.restore();
             }
 
             function drawBoard() {
+                if (animationFrameId) {
+                    cancelAnimationFrame(animationFrameId);
+                    animationFrameId = null;
+                }
+
                 ctx.clearRect(0, 0, LOGICAL_WIDTH, LOGICAL_HEIGHT);
                 if (bgCanvas) ctx.drawImage(bgCanvas, 0, 0);
+
+                let hasAnimating = false;
+                const fontSize = Math.max(12, Math.floor(CELL_SIZE * 0.55));
+                const flagSize = CELL_SIZE * 0.6;
+                const mineSize = CELL_SIZE * 0.7;
 
                 for (let r = 0; r < ROWS; r++) {
                     for (let c = 0; c < COLS; c++) {
@@ -456,33 +693,41 @@
                         const cx = x + CELL_SIZE / 2, cy = y + CELL_SIZE / 2;
 
                         if (cell.revealed) {
-                            drawOpenedCell(x, y);
+                            if (cell.isAnimating) {
+                                cell.animationProgress += 0.15;
+                                if (cell.animationProgress >= 1) {
+                                    cell.animationProgress = 1;
+                                    cell.isAnimating = false;
+                                } else {
+                                    hasAnimating = true;
+                                }
+                            }
+                            
+                            drawOpenedCell(x, y, cell.animationProgress);
+                            
                             if (cell.mine) {
-                                ctx.font = 'bold 18px serif';
-                                ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-                                ctx.fillStyle = '#333';
-                                ctx.fillText('💣', cx, cy);
+                                drawMine(cx, cy, mineSize);
                             } else if (cell.neighborMines > 0) {
                                 const colors = ['', '#1a6fc4', '#2e7d32', '#d84315', '#6a1b9a', '#b8860b', '#c62828', '#444', '#333'];
-                                ctx.font = 'bold 20px "Segoe UI", sans-serif';
+                                ctx.font = `bold ${fontSize}px "Segoe UI", sans-serif`;
                                 ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
                                 ctx.fillStyle = colors[cell.neighborMines] || '#000';
-                                ctx.shadowColor = 'rgba(0,0,0,0.15)'; ctx.shadowBlur = 1;
+                                ctx.shadowColor = 'rgba(0,0,0,0.2)'; ctx.shadowBlur = 2;
                                 ctx.fillText(cell.neighborMines, cx, cy);
                                 ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0;
                             }
                         } else {
-                            drawClosedCell(x, y);
+                            const isHovered = hoverCell && hoverCell.row === r && hoverCell.col === c;
+                            drawClosedCell(x, y, isHovered);
                             if (cell.flagged) {
-                                ctx.font = '20px serif';
-                                ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-                                ctx.fillStyle = '#c0392b';
-                                ctx.shadowColor = 'rgba(0,0,0,0.25)'; ctx.shadowBlur = 1;
-                                ctx.fillText('🚩', cx, cy);
-                                ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0;
+                                drawFlag(cx, cy, flagSize);
                             }
                         }
                     }
+                }
+                
+                if (hasAnimating) {
+                    animationFrameId = requestAnimationFrame(drawBoard);
                 }
             }
 
@@ -498,6 +743,62 @@
                 return null;
             }
 
+            // === Применение сложности ===
+            function applyDifficulty(diffKey, skipRestart = false) {
+                if (!DIFFICULTIES[diffKey]) diffKey = 'easy';
+                currentDifficulty = diffKey;
+                
+                const d = DIFFICULTIES[diffKey];
+                COLS = d.cols;
+                ROWS = d.rows;
+                MINES_TOTAL = d.mines;
+                CELL_SIZE = d.cellSize;
+                LOGICAL_WIDTH = d.canvasW;
+                LOGICAL_HEIGHT = d.canvasH;
+                SAFE_CELLS = COLS * ROWS - MINES_TOTAL;
+                
+                canvas.width = LOGICAL_WIDTH * DPR;
+                canvas.height = LOGICAL_HEIGHT * DPR;
+                canvas.style.width = LOGICAL_WIDTH + 'px';
+                canvas.style.height = LOGICAL_HEIGHT + 'px';
+                ctx.setTransform(1, 0, 0, 1, 0, 0);
+                ctx.scale(DPR, DPR);
+                
+                bgCanvas = null;
+                createBackground();
+                
+                localStorage.setItem('minesweeper_difficulty', diffKey);
+                
+                // Обновить UI
+                diffLabel.textContent = d.name;
+                diffLabel.className = d.cssClass;
+                pointsDisplay.textContent = d.points;
+                difficultySelect.value = diffKey;
+                leaderboardTitle.textContent = `🏆 Лучшие сапёры — ${d.name} (время)`;
+                
+                document.querySelectorAll('.diff-btn').forEach(btn => {
+                    btn.classList.toggle('active', btn.dataset.diff === diffKey);
+                });
+                
+                if (!skipRestart) {
+                    restartGame();
+                }
+            }
+
+            async function changeDifficulty(newDiff) {
+                if (newDiff === currentDifficulty) return;
+                if (gameActive) {
+                    if (!confirm(`Сменить сложность на "${DIFFICULTIES[newDiff].name}"? Текущая игра будет сброшена.`)) {
+                        difficultySelect.value = currentDifficulty;
+                        return;
+                    }
+                }
+                applyDifficulty(newDiff);
+                bestTime = Infinity;
+                await loadBestAndTop();
+            }
+
+            // === События ===
             canvas.addEventListener('mousedown', (e) => {
                 e.preventDefault();
                 if (gameOver) return;
@@ -521,9 +822,38 @@
                 }
             });
 
+            canvas.addEventListener('mousemove', (e) => {
+                if (gameOver || !gameActive) return;
+                const pos = getCellFromEvent(e);
+                if (pos && (!hoverCell || hoverCell.row !== pos.row || hoverCell.col !== pos.col)) {
+                    hoverCell = pos;
+                    drawBoard();
+                } else if (!pos && hoverCell) {
+                    hoverCell = null;
+                    drawBoard();
+                }
+            });
+
+            canvas.addEventListener('mouseleave', () => {
+                if (hoverCell) {
+                    hoverCell = null;
+                    drawBoard();
+                }
+            });
+
             canvas.addEventListener('contextmenu', (e) => e.preventDefault());
 
             smileyBtn.addEventListener('click', restartGame);
+            
+            difficultySelect.addEventListener('change', (e) => {
+                changeDifficulty(e.target.value);
+            });
+            
+            document.querySelectorAll('.diff-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    applyDifficulty(btn.dataset.diff);
+                });
+            });
 
             document.addEventListener('keydown', (e) => {
                 if (e.code === 'Space') {
@@ -544,7 +874,7 @@
                 }
             });
 
-            // Авторизация и загрузка рекордов
+            // === Авторизация ===
             if (typeof onAuthStateChange === 'function') {
                 onAuthStateChange((event, session) => {
                     if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
@@ -560,7 +890,11 @@
             }
 
             async function loadBestAndTop() {
-                if (!currentUid) return;
+                if (!currentUid) {
+                    updateTopVisibility();
+                    updateTop();
+                    return;
+                }
                 try {
                     const { data: row, error } = await supabase
                         .from('users')
@@ -568,13 +902,14 @@
                         .eq('id', currentUid)
                         .single();
                     if (!error && row) {
-                        const stats = row.data?.gameStats?.minesweeper;
+                        const stats = row.data?.gameStats?.minesweeper?.[currentDifficulty];
                         if (stats?.bestTime) bestTime = stats.bestTime;
+                        else bestTime = Infinity;
                     }
                 } catch (e) {}
                 updateTopVisibility();
                 updateTop();
-                messageEl.textContent = bestTime < Infinity ? `Личный рекорд: ${formatTime(bestTime)}` : '';
+                messageEl.textContent = bestTime < Infinity ? `Рекорд (${DIFFICULTIES[currentDifficulty].name}): ${formatTime(bestTime)}` : '';
             }
 
             function updateTopVisibility() {
@@ -587,12 +922,13 @@
                 const tbody = document.querySelector('#top-table tbody');
                 if (!tbody) return;
                 try {
+                    const path = `data->gameStats->minesweeper->${currentDifficulty}->bestTime`;
                     const { data, error } = await supabase
                         .from('users')
                         .select('id, data')
                         .neq('data->>role', 'admin')
-                        .not('data->gameStats->minesweeper->bestTime', 'is', null)
-                        .order('data->gameStats->minesweeper->bestTime', { ascending: true })
+                        .not(path, 'is', null)
+                        .order(path, { ascending: true })
                         .limit(10);
 
                     if (error) throw error;
@@ -600,17 +936,19 @@
                     const players = (data || []).map(u => ({
                         uid: u.id,
                         username: u.data?.username || 'Аноним',
-                        time: u.data?.gameStats?.minesweeper?.bestTime || 0
+                        time: u.data?.gameStats?.minesweeper?.[currentDifficulty]?.bestTime || 0
                     }));
 
                     tbody.innerHTML = players.map((p, i) => {
                         const me = p.uid === currentUid ? ' class="me"' : '';
                         return `<tr${me}><td>${i+1}</td><td>${p.username}</td><td>${formatTime(p.time)}</td></tr>`;
                     }).join('');
-                    if (!players.length) tbody.innerHTML = '<tr><td colspan="3">Пока нет рекордов</td></tr>';
+                    if (!players.length) tbody.innerHTML = '<tr><td colspan="3">Пока нет рекордов на этом уровне</td></tr>';
                 } catch (e) {}
             }
 
+            // === Инициализация ===
+            applyDifficulty(currentDifficulty, true);
             board = createEmptyBoard();
             createBackground();
             drawBoard();
