@@ -18,7 +18,7 @@
             display: none;
             grid-template-areas:
                 ". up ."
-                "left pause right"
+                "left . right"
                 ". down ."
                 ". space .";
             gap: 0.5rem; justify-content: center; margin-top: 1rem;
@@ -30,7 +30,7 @@
         .mobile-controls button:active { background: #bbada0; color: white; }
         .mobile-controls button:disabled { opacity: 0.4; cursor: not-allowed; }
         .up { grid-area: up; } .down { grid-area: down; } .left { grid-area: left; }
-        .right { grid-area: right; } .space { grid-area: space; } .pause-btn { grid-area: pause; }
+        .right { grid-area: right; } .space { grid-area: space; }
         @media (max-width: 600px) { .mobile-controls { display: grid; } }
         .leaderboard-tetris { margin-top: 1.5rem; text-align: left; }
         .leaderboard-tetris h3 { text-align: center; margin-bottom: 0.5rem; font-size: 1.1rem; }
@@ -62,8 +62,22 @@
         }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
         .canvas-wrapper { position: relative; display: inline-block; }
-        .controls-bar { display: flex; gap: 0.5rem; justify-content: center; margin-top: 0.5rem; }
+        .controls-bar { display: flex; gap: 0.5rem; justify-content: center; margin-top: 0.5rem; flex-wrap: wrap; }
         .controls-bar .btn { padding: 0.5rem 1.2rem; }
+        .pause-btn-desktop {
+            background: #f39c12 !important;
+            color: white !important;
+            font-weight: 700 !important;
+            padding: 0.6rem 1.5rem !important;
+            border-radius: 8px !important;
+            border: none;
+            cursor: pointer;
+            font-size: 1rem !important;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.15);
+            transition: all 0.2s;
+        }
+        .pause-btn-desktop:hover { background: #e67e22 !important; transform: translateY(-1px); }
+        .pause-btn-desktop:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
     </style>
 </head>
 <body>
@@ -108,12 +122,17 @@
     let canvas, ctx, nextCanvas, nextCtx;
     let board = [], currentPiece = null, nextPiece = null;
     let score = 0, lines = 0, level = 1;
-    let gameActive = false, gamePaused = false, gameRendered = false;
+    let gameActive = false, gamePaused = false;
     let gameInterval = null, fallSpeed = 500;
     let bestScore = 0, bestLines = 0, bestLevel = 1;
     let currentUid = null;
     let clearingRows = [], clearingTimer = null, flashOn = false;
     let bgCanvas = null;
+    
+    // Сохранение состояния при переключении вкладок
+    let gameStartedEver = false;
+    let wasActiveBeforeSwitch = false;
+    let wasPausedBeforeSwitch = false;
 
     // === АВТОРИЗАЦИЯ ===
     if (typeof onAuthStateChange === 'function') {
@@ -134,13 +153,52 @@
         tab.addEventListener('click', () => {
             document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
             tab.classList.add('active');
-            switchTab(tab.dataset.tab);
+            
+            const targetTab = tab.dataset.tab;
+            const currentActiveTab = document.querySelector('.tab.active')?.dataset.tab;
+            
+            // Если уходим с вкладки "Игра" — ставим на паузу
+            if (currentActiveTab === 'game' && targetTab !== 'game') {
+                pauseOnTabSwitch();
+            }
+            
+            switchTab(targetTab);
         });
     });
 
     function switchTab(tab) {
-        if (tab === 'game') renderGameTab();
-        else if (tab === 'leaderboard') renderLeaderboardTab();
+        if (tab === 'game') {
+            renderGameTab();
+            // Если игра была активна до переключения — возобновляем
+            if (gameStartedEver && wasActiveBeforeSwitch && !wasPausedBeforeSwitch) {
+                resumeFromTabSwitch();
+            }
+        } else if (tab === 'leaderboard') {
+            renderLeaderboardTab();
+        }
+    }
+
+    function pauseOnTabSwitch() {
+        if (!gameActive) return;
+        wasActiveBeforeSwitch = gameActive;
+        wasPausedBeforeSwitch = gamePaused;
+        
+        if (!gamePaused) {
+            gamePaused = true;
+            if (gameInterval) {
+                clearInterval(gameInterval);
+                gameInterval = null;
+            }
+        }
+    }
+
+    function resumeFromTabSwitch() {
+        if (!gameStartedEver || !wasActiveBeforeSwitch) return;
+        gamePaused = false;
+        startGameLoop();
+        updatePauseButton();
+        updateMobileButtonsState();
+        draw();
     }
 
     async function loadBestResults() {
@@ -186,6 +244,12 @@
     }
 
     function renderGameTab() {
+        // Если игра уже была начата — не перерисовываем полностью, просто восстанавливаем
+        if (gameStartedEver) {
+            restoreGameState();
+            return;
+        }
+        
         gameContainer.innerHTML = `
             <div class="tetris-stats">
                 <div class="stat-card"><span class="stat-icon">🏆</span><span>Очки: <span id="score" class="stat-value">0</span></span></div>
@@ -201,16 +265,15 @@
                         <strong>Следующая</strong>
                         <canvas id="next-canvas" width="${4 * CELL_SIZE}" height="${4 * CELL_SIZE}"></canvas>
                     </div>
-                    <div class="controls-bar">
+                    <div class="controls-bar" style="flex-direction: column; gap: 0.5rem;">
                         <button class="btn" id="new-game-btn">Новая игра</button>
-                        <button class="btn" id="pause-btn">⏸ Пауза</button>
+                        <button class="pause-btn-desktop" id="pause-btn">⏸ Пауза</button>
                     </div>
                 </div>
             </div>
             <div class="mobile-controls" id="mobile-controls">
                 <button class="up" data-act="up">▲</button>
                 <button class="left" data-act="left">◀</button>
-                <button class="pause-btn" data-act="pause">⏸</button>
                 <button class="right" data-act="right">▶</button>
                 <button class="down" data-act="down">▼</button>
                 <button class="space" data-act="drop">⏬</button>
@@ -230,7 +293,6 @@
             const btn = e.target.closest('button');
             if (!btn) return;
             const act = btn.dataset.act;
-            if (act === 'pause') { togglePause(); return; }
             if (!gameActive || gamePaused || clearingRows.length > 0) return;
             if (act === 'up') rotatePiece();
             else if (act === 'down') moveDown(true);
@@ -240,8 +302,41 @@
         });
 
         updateMobileButtonsState();
-        gameRendered = true;
         newGame();
+    }
+
+    function restoreGameState() {
+        // Восстанавливаем canvas и обработчики
+        canvas = document.getElementById('tetris-canvas');
+        ctx = canvas.getContext('2d');
+        nextCanvas = document.getElementById('next-canvas');
+        nextCtx = nextCanvas.getContext('2d');
+        
+        document.getElementById('new-game-btn').addEventListener('click', newGame);
+        document.getElementById('pause-btn').addEventListener('click', togglePause);
+        document.getElementById('mobile-controls').addEventListener('click', (e) => {
+            const btn = e.target.closest('button');
+            if (!btn) return;
+            const act = btn.dataset.act;
+            if (!gameActive || gamePaused || clearingRows.length > 0) return;
+            if (act === 'up') rotatePiece();
+            else if (act === 'down') moveDown(true);
+            else if (act === 'left') moveLeft();
+            else if (act === 'right') moveRight();
+            else if (act === 'drop') hardDrop();
+        });
+        
+        updateStats();
+        updatePauseButton();
+        updateMobileButtonsState();
+        draw();
+        
+        // Если игра была на паузе — показываем оверлей
+        if (gamePaused && gameActive) {
+            renderPauseOverlay();
+        } else if (gameActive && !gamePaused) {
+            startGameLoop();
+        }
     }
 
     // === ГЛОБАЛЬНЫЙ ОБРАБОТЧИК КЛАВИАТУРЫ (регистрируется ОДИН раз) ===
@@ -256,7 +351,7 @@
             }
             return;
         }
-        if (!gameActive || !gameRendered) {
+        if (!gameActive) {
             if (e.code === 'KeyN' || e.code === 'Space') {
                 e.preventDefault();
                 newGame();
@@ -279,12 +374,7 @@
     function updateMobileButtonsState() {
         const buttons = document.querySelectorAll('#mobile-controls button');
         buttons.forEach(b => {
-            if (b.dataset.act === 'pause') {
-                b.textContent = gamePaused ? '▶' : '⏸';
-                b.disabled = !gameActive;
-            } else {
-                b.disabled = !gameActive || gamePaused;
-            }
+            b.disabled = !gameActive || gamePaused;
         });
     }
 
@@ -299,6 +389,10 @@
         score = 0; lines = 0; level = 1; fallSpeed = 500;
         gameActive = true; gamePaused = false;
         clearingRows = [];
+        wasActiveBeforeSwitch = false;
+        wasPausedBeforeSwitch = false;
+        gameStartedEver = true;
+        
         if (clearingTimer) { clearInterval(clearingTimer); clearingTimer = null; }
         updateStats();
         spawnPiece();
@@ -369,7 +463,6 @@
         }
     }
 
-    // soft (true) даёт +1 очко за клетку
     function moveDown(soft) {
         if (isValidPosition(currentPiece.shape, currentPiece.x, currentPiece.y + 1)) {
             currentPiece.y++;
@@ -379,7 +472,6 @@
         return false;
     }
 
-    // Поворот с wall kicks (базовый SRS)
     function rotatePiece() {
         const shape = currentPiece.shape;
         const rotated = shape[0].map((_, idx) => shape.map(row => row[idx]).reverse());
@@ -400,7 +492,7 @@
             currentPiece.y++;
             dropped++;
         }
-        score += dropped * 2; // +2 очка за клетку hard drop
+        score += dropped * 2;
         updateStats();
         lockPiece();
     }
@@ -432,7 +524,6 @@
             if (board[r].every(cell => cell !== 0)) filledRows.push(r);
         }
         if (filledRows.length > 0) {
-            // Останавливаем основной loop на время анимации
             if (gameInterval) { clearInterval(gameInterval); gameInterval = null; }
             clearingRows = filledRows;
             flashOn = true;
@@ -534,7 +625,7 @@
     function updatePauseButton() {
         const btn = document.getElementById('pause-btn');
         if (btn) {
-            btn.textContent = gamePaused ? '▶ Играть' : '⏸ Пауза';
+            btn.textContent = gamePaused ? '▶ Продолжить' : '⏸ Пауза';
             btn.disabled = !gameActive;
         }
     }
@@ -586,7 +677,6 @@
         }
 
         if (currentPiece && gameActive && !gamePaused && clearingRows.length === 0) {
-            // Ghost piece
             const gy = getGhostY();
             for (let r = 0; r < currentPiece.shape.length; r++) {
                 for (let c = 0; c < currentPiece.shape[r].length; c++) {
@@ -601,7 +691,6 @@
                     }
                 }
             }
-            // Текущая фигура
             for (let r = 0; r < currentPiece.shape.length; r++) {
                 for (let c = 0; c < currentPiece.shape[r].length; c++) {
                     if (currentPiece.shape[r][c]) {
@@ -630,6 +719,7 @@
     async function endGame() {
         gameActive = false;
         gamePaused = false;
+        gameStartedEver = false;
         if (gameInterval) clearInterval(gameInterval);
         updatePauseButton();
         updateMobileButtonsState();
