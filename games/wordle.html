@@ -126,7 +126,8 @@
     const defaultStats = {
         games: 0, wins: 0, streak: 0, maxStreak: 0,
         lastDaily: '', lastDailyWon: false, lastDailyAttempts: 0,
-        dist: [0,0,0,0,0,0], freeWinsToday: 0, lastFreeDate: ''
+        dist: [0,0,0,0,0,0], freeWinsToday: 0, lastFreeDate: '',
+        perfectStreak: 0, bestPerfectStreak: 0
     };
     let stats = { ...defaultStats };
 
@@ -302,24 +303,41 @@
         showGameOverOverlay(won);
         updateUI();
     }
+
     async function finishDailyGame(won, attempts) {
         stats.games++; lastEarnedPoints = 0;
-        stats.lastDailyWon = won; stats.lastDailyAttempts = attempts;
         if (won) {
             stats.wins++;
             if (attempts >= 1 && attempts <= 6) stats.dist[attempts-1]++;
+
+            // Стрик: продолжаем, если играли вчера
             stats.streak = (stats.lastDaily === yesterdayStr()) ? stats.streak + 1 : 1;
             stats.maxStreak = Math.max(stats.maxStreak, stats.streak);
-            // (7 − попытка) × 4, +2 за стрик ≥ 3
+
+            // «Безупречная неделя»: победы за ≤3 попытки подряд
+            if (attempts <= 3) {
+                const yesterdayPerfect = (stats.lastDaily === yesterdayStr() && stats.lastDailyWon && stats.lastDailyAttempts <= 3);
+                stats.perfectStreak = yesterdayPerfect ? stats.perfectStreak + 1 : 1;
+                stats.bestPerfectStreak = Math.max(stats.bestPerfectStreak, stats.perfectStreak);
+            } else {
+                stats.perfectStreak = 0;
+            }
+
+            // Очки: (7 − попытка) × 4, +2 за стрик ≥ 3
             lastEarnedPoints = (7 - attempts) * 4;
             if (stats.streak >= 3) lastEarnedPoints += 2;
         } else {
             stats.streak = 0;
+            stats.perfectStreak = 0;
         }
+        // Записываем сегодняшний результат ПОСЛЕ проверки вчерашнего
         stats.lastDaily = todayStr();
+        stats.lastDailyWon = won;
+        stats.lastDailyAttempts = attempts;
         await saveStats();
         if (lastEarnedPoints > 0) await awardPoints(lastEarnedPoints);
     }
+
     async function finishFreeGame(won, attempts) {
         stats.games++; lastEarnedPoints = 0;
         if (won) {
