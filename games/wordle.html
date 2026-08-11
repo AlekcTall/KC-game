@@ -6,7 +6,6 @@
     <title>Wordle – КЦ Игры</title>
     <link rel="stylesheet" href="../css/style.css">
     <style>
-        /* ===== БАЗА ===== */
         body {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 50%, #f093fb 100%);
             min-height: 100vh;
@@ -38,7 +37,6 @@
             letter-spacing: -0.5px;
         }
 
-        /* ===== ВКЛАДКИ ===== */
         .tabs {
             display: flex;
             gap: 0.5rem;
@@ -79,7 +77,6 @@
         }
         .back-link:hover { background: #eef2ff; color: #4f46e5; }
 
-        /* ===== ВЫБОР РЕЖИМА ===== */
         .mode-selector {
             display: flex;
             gap: 0.5rem;
@@ -104,8 +101,12 @@
             color: white;
             box-shadow: 0 4px 14px rgba(106, 170, 100, 0.4);
         }
+        .mode-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
 
-        /* ===== БАННЕР ===== */
         .banner {
             padding: 0.9rem 1.2rem;
             border-radius: 14px;
@@ -121,8 +122,12 @@
             border-color: #34d399;
             color: #065f46;
         }
+        .banner.error {
+            background: linear-gradient(135deg, #fee2e2, #fecaca);
+            border-color: #f87171;
+            color: #991b1b;
+        }
 
-        /* ===== СТАТИСТИКА ===== */
         .wordle-stats {
             display: flex;
             justify-content: center;
@@ -147,7 +152,6 @@
         .stat-card .stat-icon { font-size: 1.3rem; }
         .stat-value { font-weight: 800; color: #111827; font-size: 1rem; }
 
-        /* ===== ДОСКА ===== */
         .board-wrapper {
             position: relative;
             display: inline-block;
@@ -202,7 +206,6 @@
         }
         .tile.flip { animation: wflip 0.5s ease; }
 
-        /* ===== КЛАВИАТУРА ===== */
         .keyboard {
             display: flex;
             flex-direction: column;
@@ -234,7 +237,6 @@
         .key:hover { transform: translateY(-1px); box-shadow: 0 4px 8px rgba(0,0,0,0.15), inset 0 1px 0 rgba(255,255,255,0.6); }
         .key.wide { min-width: 68px; font-size: 1.15rem; padding: 0 12px; }
 
-        /* ===== ЗЕЛЁНЫЙ ENTER И КРАСНЫЙ BACKSPACE ===== */
         .key.key-enter {
             background: linear-gradient(180deg, #6aaa64, #4a8a44);
             color: white;
@@ -252,8 +254,8 @@
         .key.present { background: linear-gradient(135deg, #c9b458, #b89f3f); color: white; }
         .key.absent { background: linear-gradient(135deg, #5f6368, #3c4043); color: white; }
         .key:active { transform: scale(0.93); }
+        .key:disabled { opacity: 0.5; cursor: not-allowed; }
 
-        /* ===== ПОДСКАЗКА О ФИЗ. КЛАВИАТУРЕ ===== */
         .keyboard-hint {
             font-size: 0.78rem;
             color: #9ca3af;
@@ -279,7 +281,6 @@
         .keyboard-hint .kbd-enter { background: #d1fae5; border-color: #6aaa64; color: #065f46; }
         .keyboard-hint .kbd-backspace { background: #fee2e2; border-color: #ef4444; color: #991b1b; }
 
-        /* ===== КНОПКИ УПРАВЛЕНИЯ ===== */
         .controls-bar {
             display: flex;
             gap: 0.6rem;
@@ -304,8 +305,12 @@
             transform: translateY(-2px);
             box-shadow: 0 6px 14px rgba(106,170,100,0.3);
         }
+        .controls-bar .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
 
-        /* ===== ОВЕРЛЕЙ ===== */
         .wordle-overlay {
             position: absolute;
             top: 0; left: 0;
@@ -340,7 +345,6 @@
         }
         .wordle-overlay .btn:hover { transform: translateY(-2px) scale(1.03); box-shadow: 0 6px 18px rgba(0,0,0,0.4); }
 
-        /* ===== МОЯ СТАТИСТИКА ===== */
         .my-stats {
             margin-top: 1.2rem;
             background: linear-gradient(135deg, #f9fafb, #f3f4f6);
@@ -383,7 +387,6 @@
             box-shadow: 0 2px 4px rgba(106,170,100,0.3);
         }
 
-        /* ===== ЛИДЕРБОРД ===== */
         .leaderboard-wordle { margin-top: 1.5rem; text-align: left; }
         .leaderboard-wordle h3 {
             text-align: center;
@@ -413,15 +416,29 @@
         .leaderboard-wordle td:first-child { border-left: 1px solid #f3f4f6; border-radius: 8px 0 0 8px; }
         .leaderboard-wordle td:last-child { border-right: 1px solid #f3f4f6; border-radius: 0 8px 8px 0; }
         .leaderboard-wordle .me td { background: #eff6ff; color: #1e40af; font-weight: 700; }
+        .leaderboard-error {
+            text-align: center;
+            padding: 2rem;
+            color: #6b7280;
+        }
 
-        /* ===== АНИМАЦИИ ===== */
+        .loading-spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(0,0,0,0.1);
+            border-radius: 50%;
+            border-top-color: #6aaa64;
+            animation: spin 1s ease-in-out infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
         @keyframes wpop { 0% { transform: scale(0.85); } 60% { transform: scale(1.12); } 100% { transform: scale(1); } }
         @keyframes wflip { 0% { transform: rotateX(0); } 50% { transform: rotateX(90deg); } 100% { transform: rotateX(0); } }
         @keyframes wshake { 0%,100% { transform: translateX(0); } 20% { transform: translateX(-6px); } 40% { transform: translateX(6px); } 60% { transform: translateX(-4px); } 80% { transform: translateX(4px); } }
         .grid-row.shake { animation: wshake 0.4s; }
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 
-        /* ===== АДАПТИВ ===== */
         @media (max-width: 480px) {
             .wordle-game { padding: 1.2rem 0.8rem; border-radius: 18px; }
             .tile { width: 50px; height: 50px; font-size: 1.5rem; border-radius: 8px; }
@@ -470,6 +487,7 @@
     let currentUid = null;
     let gameInitialized = false;
     let lastEarnedPoints = 0;
+    let statsLoaded = false; // НОВЫЙ ФЛАГ: отслеживает загрузку статистики
 
     const defaultStats = {
         games: 0, wins: 0, streak: 0, maxStreak: 0,
@@ -492,11 +510,19 @@
     function todayStr() { return dateStr(new Date()); }
     function yesterdayStr() { const d = new Date(); d.setDate(d.getDate()-1); return dateStr(d); }
 
+    // ИСПРАВЛЕНИЕ: Авторизация теперь корректно загружает статистику ПЕРЕД инициализацией игры
     if (typeof onAuthStateChange === 'function') {
-        onAuthStateChange((event, session) => {
+        onAuthStateChange(async (event, session) => {
             if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
-                if (session?.user) { currentUid = session.user.id; loadStats(); }
-            } else { currentUid = null; }
+                if (session?.user) {
+                    currentUid = session.user.id;
+                    await loadStats(); // ЖДЁМ загрузку статистики
+                    statsLoaded = true;
+                }
+            } else {
+                currentUid = null;
+                statsLoaded = false;
+            }
             switchTab('game');
         });
     }
@@ -513,29 +539,70 @@
         else if (tab === 'leaderboard') renderLeaderboardTab();
     }
 
+    // ИСПРАВЛЕНИЕ: Добавлена проверка на null и более надёжная обработка ошибок
     async function loadStats() {
         if (!currentUid) return;
         try {
-            const { data: row, error } = await supabase.from('users').select('data').eq('id', currentUid).single();
-            if (!error && row) {
+            const { data: row, error } = await supabase
+                .from('users')
+                .select('data')
+                .eq('id', currentUid)
+                .single();
+            
+            if (error) {
+                console.error('Ошибка загрузки статистики:', error);
+                return;
+            }
+            
+            if (row && row.data) {
                 const st = row.data?.gameStats?.wordle;
                 if (st) {
                     stats = { ...defaultStats, ...st };
-                    if (!Array.isArray(stats.dist) || stats.dist.length !== 6) stats.dist = [0,0,0,0,0,0];
+                    if (!Array.isArray(stats.dist) || stats.dist.length !== 6) {
+                        stats.dist = [0,0,0,0,0,0];
+                    }
                 }
             }
-        } catch (e) { console.error(e); }
+        } catch (e) {
+            console.error('Критическая ошибка загрузки статистики:', e);
+        }
     }
+
     async function saveStats() {
         if (!currentUid) return;
-        try { if (typeof syncGameStats === 'function') await syncGameStats('wordle', stats); } catch (e) { console.error(e); }
+        try {
+            if (typeof syncGameStats === 'function') {
+                await syncGameStats('wordle', stats);
+            }
+        } catch (e) {
+            console.error('Ошибка сохранения статистики:', e);
+            if (typeof showToast === 'function') {
+                showToast('Ошибка сохранения статистики', 'error');
+            }
+        }
     }
-    async function awardPoints(points) {
-        if (currentUid && typeof addPointsToCurrentUser === 'function' && points > 0) {
-            const res = await addPointsToCurrentUser(points, 'wordle');
-            if (res?.success) {
-                const earned = res.points;
-                if (typeof showToast === 'function') showToast(`+${earned} баллов${earned > points ? ' (x2 бонус)' : ''} за Wordle!`, 'success');
+
+    // ЗАЩИТА: Добавлена проверка на повторное начисление
+    async function awardPoints(points, gameResult) {
+        if (!currentUid || points <= 0) return;
+        
+        // Защита от повторного начисления
+        if (gameMode === 'daily' && stats.lastDaily === todayStr()) {
+            console.warn('Попытка повторного начисления очков за слово дня заблокирована');
+            return;
+        }
+        
+        if (typeof addPointsToCurrentUser === 'function') {
+            try {
+                const res = await addPointsToCurrentUser(points, 'wordle');
+                if (res?.success) {
+                    const earned = res.points;
+                    if (typeof showToast === 'function') {
+                        showToast(`+${earned} баллов${earned > points ? ' (x2 бонус)' : ''} за Wordle!`, 'success');
+                    }
+                }
+            } catch (e) {
+                console.error('Ошибка начисления очков:', e);
             }
         }
     }
@@ -543,23 +610,39 @@
     function resetBoard() {
         board = Array.from({length: WORDLE_ATTEMPTS}, () => Array(WORDLE_LENGTH).fill(''));
         boardStates = Array.from({length: WORDLE_ATTEMPTS}, () => Array(WORDLE_LENGTH).fill(''));
-        currentRow = 0; currentCol = 0;
+        currentRow = 0;
+        currentCol = 0;
         keyStates = {};
     }
+
+    // ИСПРАВЛЕНИЕ: Теперь проверяет stats.lastDaily ПЕРЕД инициализацией
     function initGame() {
+        if (!statsLoaded) {
+            console.warn('Статистика ещё не загружена, откладываем инициализацию');
+            return;
+        }
+        
         gameInitialized = true;
         keyStates = {};
+        
         if (gameMode === 'daily') {
+            // КРИТИЧЕСКАЯ ПРОВЕРКА: блокируем если уже играли сегодня
             if (stats.lastDaily === todayStr()) {
-                gameActive = false; gameOver = true;
+                gameActive = false;
+                gameOver = true;
+                if (typeof showToast === 'function') {
+                    showToast('Вы уже играли в слово дня сегодня!', 'info');
+                }
                 return;
             }
             currentWord = getWordleDailyWord();
         } else {
             currentWord = getWordleRandomWord();
         }
+        
         resetBoard();
-        gameActive = true; gameOver = false;
+        gameActive = true;
+        gameOver = false;
     }
 
     function addLetter(letter) {
@@ -573,6 +656,7 @@
         tile.classList.add('filled');
         currentCol++;
     }
+
     function deleteLetter() {
         if (!gameActive || gameOver || isAnimating) return;
         if (currentCol <= 0) return;
@@ -582,6 +666,7 @@
         tile.textContent = '';
         tile.classList.remove('filled');
     }
+
     function submitWord() {
         if (!gameActive || gameOver || isAnimating) return;
         if (currentCol < WORDLE_LENGTH) {
@@ -616,43 +701,86 @@
             handlePostReveal(row, results);
         }, WORDLE_LENGTH * 300 + 300);
     }
+
     function handlePostReveal(row, results) {
         for (let c = 0; c < WORDLE_LENGTH; c++) boardStates[row][c] = results[c];
         const won = results.every(r => r === 'correct');
-        if (won) { endGame(true); }
-        else if (row === WORDLE_ATTEMPTS - 1) { endGame(false); }
-        else { currentRow++; currentCol = 0; updateUI(); }
+        if (won) {
+            endGame(true);
+        } else if (row === WORDLE_ATTEMPTS - 1) {
+            endGame(false);
+        } else {
+            currentRow++;
+            currentCol = 0;
+            updateUI();
+        }
     }
+
     function updateKeyDOM(letter, state) {
         if (!letter) return;
         if (!keyStates[letter] || KEY_PRIORITY[state] > KEY_PRIORITY[keyStates[letter]]) {
             keyStates[letter] = state;
             const key = keyEls[letter];
-            if (key) { key.classList.remove('correct','present','absent'); key.classList.add(state); }
+            if (key) {
+                key.classList.remove('correct','present','absent');
+                key.classList.add(state);
+            }
         }
     }
+
     function shakeRow(row) {
         const rowEl = tileEls[row][0]?.parentElement;
-        if (rowEl) { rowEl.classList.add('shake'); setTimeout(() => rowEl.classList.remove('shake'), 450); }
+        if (rowEl) {
+            rowEl.classList.add('shake');
+            setTimeout(() => rowEl.classList.remove('shake'), 450);
+        }
     }
 
+    // ЗАЩИТА: Добавлена валидация перед начислением очков
     async function endGame(won) {
-        gameActive = false; gameOver = true;
+        if (gameOver) {
+            console.warn('Игра уже завершена, повторный вызов endGame заблокирован');
+            return;
+        }
+        
+        gameActive = false;
+        gameOver = true;
         const attempts = currentRow + 1;
-        if (gameMode === 'daily') await finishDailyGame(won, attempts);
-        else await finishFreeGame(won, attempts);
-        if (typeof checkAndAwardAchievements === 'function') await checkAndAwardAchievements();
+        
+        if (gameMode === 'daily') {
+            await finishDailyGame(won, attempts);
+        } else {
+            await finishFreeGame(won, attempts);
+        }
+        
+        if (typeof checkAndAwardAchievements === 'function') {
+            await checkAndAwardAchievements();
+        }
+        
         showGameOverOverlay(won);
         updateUI();
     }
 
+    // ИСПРАВЛЕНИЕ: Добавлена защита от повторного начисления
     async function finishDailyGame(won, attempts) {
-        stats.games++; lastEarnedPoints = 0;
+        // КРИТИЧЕСКАЯ ПРОВЕРКА: если уже играли сегодня - выходим
+        if (stats.lastDaily === todayStr()) {
+            console.warn('Попытка повторного завершения игры дня заблокирована');
+            return;
+        }
+        
+        stats.games++;
+        lastEarnedPoints = 0;
+        
         if (won) {
             stats.wins++;
-            if (attempts >= 1 && attempts <= 6) stats.dist[attempts-1]++;
+            if (attempts >= 1 && attempts <= 6) {
+                stats.dist[attempts-1]++;
+            }
+
             stats.streak = (stats.lastDaily === yesterdayStr()) ? stats.streak + 1 : 1;
             stats.maxStreak = Math.max(stats.maxStreak, stats.streak);
+
             if (attempts <= 3) {
                 const yesterdayPerfect = (stats.lastDaily === yesterdayStr() && stats.lastDailyWon && stats.lastDailyAttempts <= 3);
                 stats.perfectStreak = yesterdayPerfect ? stats.perfectStreak + 1 : 1;
@@ -660,25 +788,41 @@
             } else {
                 stats.perfectStreak = 0;
             }
+
             lastEarnedPoints = (7 - attempts) * 4;
             if (stats.streak >= 3) lastEarnedPoints += 2;
         } else {
             stats.streak = 0;
             stats.perfectStreak = 0;
         }
+        
+        // ВАЖНО: записываем дату ПОСЛЕ всех проверок
         stats.lastDaily = todayStr();
         stats.lastDailyWon = won;
         stats.lastDailyAttempts = attempts;
+        
         await saveStats();
-        if (lastEarnedPoints > 0) await awardPoints(lastEarnedPoints);
+        
+        if (lastEarnedPoints > 0) {
+            await awardPoints(lastEarnedPoints, { won, attempts });
+        }
     }
 
     async function finishFreeGame(won, attempts) {
-        stats.games++; lastEarnedPoints = 0;
+        stats.games++;
+        lastEarnedPoints = 0;
+        
         if (won) {
             stats.wins++;
-            if (attempts >= 1 && attempts <= 6) stats.dist[attempts-1]++;
-            if (stats.lastFreeDate !== todayStr()) { stats.freeWinsToday = 0; stats.lastFreeDate = todayStr(); }
+            if (attempts >= 1 && attempts <= 6) {
+                stats.dist[attempts-1]++;
+            }
+            
+            if (stats.lastFreeDate !== todayStr()) {
+                stats.freeWinsToday = 0;
+                stats.lastFreeDate = todayStr();
+            }
+            
             if (stats.freeWinsToday < 3) {
                 stats.freeWinsToday++;
                 lastEarnedPoints = 2;
@@ -686,18 +830,25 @@
                 showToast('Лимит очков за свободную игру на сегодня исчерпан', 'info');
             }
         }
+        
         await saveStats();
-        if (lastEarnedPoints > 0) await awardPoints(lastEarnedPoints);
+        
+        if (lastEarnedPoints > 0) {
+            await awardPoints(lastEarnedPoints, { won, attempts });
+        }
     }
 
     function showGameOverOverlay(won) {
         const wrapper = document.getElementById('board-wrapper');
         if (!wrapper) return;
+        
         wrapper.querySelectorAll('.wordle-overlay').forEach(o => o.remove());
+        
         const ov = document.createElement('div');
         ov.className = 'wordle-overlay';
         const attempts = currentRow + 1;
         const pointsHtml = (won && lastEarnedPoints > 0) ? `<div class="ov-points">+${lastEarnedPoints} баллов</div>` : '';
+        
         ov.innerHTML = `
             <div class="ov-title">${won ? '🎉 Победа!' : '😔 Не угадали'}</div>
             <div class="ov-word">${currentWord.toUpperCase()}</div>
@@ -707,16 +858,28 @@
                 ${gameMode === 'free' ? '<button class="btn" id="ov-again">Играть ещё</button>' : ''}
                 <button class="btn" id="ov-share">📋 Поделиться</button>
             </div>`;
+        
         wrapper.appendChild(ov);
+        
         const againBtn = document.getElementById('ov-again');
-        if (againBtn) againBtn.addEventListener('click', () => { ov.remove(); startFreeGame(); });
+        if (againBtn) {
+            againBtn.addEventListener('click', () => {
+                ov.remove();
+                startFreeGame();
+            });
+        }
+        
         document.getElementById('ov-share').addEventListener('click', shareResult);
     }
+
     function shareResult() {
         let lastRow = 0;
-        for (let r = 0; r < WORDLE_ATTEMPTS; r++) if (boardStates[r].some(s => s)) lastRow = r;
+        for (let r = 0; r < WORDLE_ATTEMPTS; r++) {
+            if (boardStates[r].some(s => s)) lastRow = r;
+        }
         const won = boardStates[lastRow].every(s => s === 'correct');
         let text = `Wordle КЦ ${won ? lastRow + 1 : 'X'}/6\n`;
+        
         for (let r = 0; r <= lastRow; r++) {
             for (let c = 0; c < WORDLE_LENGTH; c++) {
                 const s = boardStates[r][c];
@@ -724,11 +887,18 @@
             }
             if (r < lastRow) text += '\n';
         }
+        
         if (navigator.clipboard) {
             navigator.clipboard.writeText(text)
-                .then(() => { if (typeof showToast === 'function') showToast('Результат скопирован!', 'success'); })
-                .catch(() => { if (typeof showToast === 'function') showToast('Не удалось скопировать', 'error'); });
-        } else if (typeof showToast === 'function') showToast('Буфер обмена недоступен', 'error');
+                .then(() => {
+                    if (typeof showToast === 'function') showToast('Результат скопирован!', 'success');
+                })
+                .catch(() => {
+                    if (typeof showToast === 'function') showToast('Не удалось скопировать', 'error');
+                });
+        } else if (typeof showToast === 'function') {
+            showToast('Буфер обмена недоступен', 'error');
+        }
     }
 
     function renderGameTab() {
@@ -753,51 +923,103 @@
                 <kbd class="kbd-backspace">⌫ Backspace</kbd><span>— стереть</span>
             </div>
             <div class="controls-bar">
-                <button class="btn" id="new-game-btn">🔄 Новая игра</button>
+                <button class="btn" id="new-game-btn" ${gameMode === 'daily' && stats.lastDaily === todayStr() ? 'disabled' : ''}>
+                    🔄 ${gameMode === 'daily' ? 'Слово дня сыграно' : 'Новая игра'}
+                </button>
                 <button class="btn" id="stats-btn">📊 Моя статистика</button>
             </div>
             <div id="stats-panel" style="display:none;"></div>
         `;
+        
         buildGrid();
         buildKeyboard();
         attachHandlers();
-        if (!gameInitialized) initGame();
+        
+        // ИСПРАВЛЕНИЕ: Проверяем загрузку статистики ПЕРЕД инициализацией
+        if (!gameInitialized && statsLoaded) {
+            initGame();
+        }
+        
         fillBoardFromState();
-        if (gameMode === 'daily' && stats.lastDaily === todayStr()) showDailyAlreadyPlayed();
-        if (gameOver && gameMode === 'daily' && stats.lastDaily === todayStr()) showGameOverOverlay(stats.lastDailyWon);
+        
+        if (gameMode === 'daily' && stats.lastDaily === todayStr()) {
+            showDailyAlreadyPlayed();
+        }
+        
+        if (gameOver && gameMode === 'daily' && stats.lastDaily === todayStr()) {
+            showGameOverOverlay(stats.lastDailyWon);
+        }
+        
         updateUI();
     }
+
     function attachHandlers() {
-        document.getElementById('mode-daily').addEventListener('click', () => switchMode('daily'));
-        document.getElementById('mode-free').addEventListener('click', () => switchMode('free'));
-        document.getElementById('new-game-btn').addEventListener('click', () => {
-            if (gameMode === 'free') startFreeGame();
-            else if (typeof showToast === 'function') showToast('Слово дня можно сыграть только раз в день', 'info');
+        document.getElementById('mode-daily').addEventListener('click', () => {
+            if (stats.lastDaily === todayStr() && stats.lastDailyWon) {
+                if (typeof showToast === 'function') {
+                    showToast('Вы уже угадали слово дня сегодня!', 'info');
+                }
+                return;
+            }
+            switchMode('daily');
         });
+        
+        document.getElementById('mode-free').addEventListener('click', () => switchMode('free'));
+        
+        document.getElementById('new-game-btn').addEventListener('click', () => {
+            if (gameMode === 'free') {
+                startFreeGame();
+            } else {
+                if (typeof showToast === 'function') {
+                    showToast('Слово дня можно сыграть только раз в день', 'info');
+                }
+            }
+        });
+        
         document.getElementById('stats-btn').addEventListener('click', toggleStatsPanel);
     }
+
     function switchMode(mode) {
+        if (mode === 'daily' && stats.lastDaily === todayStr()) {
+            if (typeof showToast === 'function') {
+                showToast('Вы уже играли в слово дня сегодня!', 'info');
+            }
+            return;
+        }
+        
         gameMode = mode;
         initGame();
+        
         document.getElementById('mode-daily')?.classList.toggle('active', mode === 'daily');
         document.getElementById('mode-free')?.classList.toggle('active', mode === 'free');
+        
         const banner = document.getElementById('daily-banner');
         if (banner) banner.innerHTML = '';
-        buildGrid(); buildKeyboard();
+        
+        buildGrid();
+        buildKeyboard();
         fillBoardFromState();
-        if (mode === 'daily' && stats.lastDaily === todayStr()) showDailyAlreadyPlayed();
+        
+        if (mode === 'daily' && stats.lastDaily === todayStr()) {
+            showDailyAlreadyPlayed();
+        }
+        
         updateUI();
     }
+
     function startFreeGame() {
         gameMode = 'free';
         initGame();
-        buildGrid(); buildKeyboard();
+        buildGrid();
+        buildKeyboard();
         fillBoardFromState();
         updateUI();
     }
+
     function showDailyAlreadyPlayed() {
         const banner = document.getElementById('daily-banner');
         if (!banner) return;
+        
         const word = getWordleDailyWord();
         if (stats.lastDailyWon) {
             banner.innerHTML = `<div class="banner success">✅ Вы уже угадали слово дня за ${stats.lastDailyAttempts} попыток. Возвращайтесь завтра!</div>`;
@@ -809,95 +1031,139 @@
     function buildGrid() {
         const grid = document.getElementById('wordle-grid');
         if (!grid) return;
+        
         grid.innerHTML = '';
         tileEls = [];
+        
         for (let r = 0; r < WORDLE_ATTEMPTS; r++) {
             const rowEl = document.createElement('div');
             rowEl.className = 'grid-row';
             const rowTiles = [];
+            
             for (let c = 0; c < WORDLE_LENGTH; c++) {
                 const tile = document.createElement('div');
                 tile.className = 'tile';
                 rowEl.appendChild(tile);
                 rowTiles.push(tile);
             }
+            
             grid.appendChild(rowEl);
             tileEls.push(rowTiles);
         }
     }
+
     function buildKeyboard() {
         const kb = document.getElementById('keyboard');
         if (!kb) return;
+        
         kb.innerHTML = '';
         keyEls = {};
+        
         KB_ROWS.forEach(row => {
             const rowEl = document.createElement('div');
             rowEl.className = 'kb-row';
+            
             row.forEach(k => {
                 const btn = document.createElement('button');
+                
                 if (k === 'enter') {
                     btn.className = 'key wide key-enter';
                     btn.textContent = '⏎';
                     btn.title = 'Enter — отправить слово';
                     btn.addEventListener('click', submitWord);
-                }
-                else if (k === 'backspace') {
+                } else if (k === 'backspace') {
                     btn.className = 'key wide key-backspace';
                     btn.textContent = '⌫';
                     btn.title = 'Backspace — стереть букву';
                     btn.addEventListener('click', deleteLetter);
-                }
-                else {
+                } else {
                     btn.className = 'key';
                     btn.textContent = k;
                     btn.addEventListener('click', () => addLetter(k));
                     keyEls[k] = btn;
                 }
+                
                 rowEl.appendChild(btn);
             });
+            
             kb.appendChild(rowEl);
         });
     }
+
     function fillBoardFromState() {
         for (let r = 0; r < WORDLE_ATTEMPTS; r++) {
             for (let c = 0; c < WORDLE_LENGTH; c++) {
                 const tile = tileEls[r]?.[c];
                 if (!tile) continue;
-                if (board[r][c]) { tile.textContent = board[r][c]; tile.classList.add('filled'); }
-                if (boardStates[r][c]) tile.classList.add(boardStates[r][c]);
+                
+                if (board[r][c]) {
+                    tile.textContent = board[r][c];
+                    tile.classList.add('filled');
+                }
+                if (boardStates[r][c]) {
+                    tile.classList.add(boardStates[r][c]);
+                }
             }
         }
+        
         for (const letter in keyStates) {
             const key = keyEls[letter];
-            if (key) { key.classList.remove('correct','present','absent'); key.classList.add(keyStates[letter]); }
+            if (key) {
+                key.classList.remove('correct','present','absent');
+                key.classList.add(keyStates[letter]);
+            }
         }
     }
+
     function updateUI() {
         const attemptEl = document.getElementById('attempt');
         const streakEl = document.getElementById('streak');
         const winsEl = document.getElementById('wins');
+        const newGameBtn = document.getElementById('new-game-btn');
+        
         if (attemptEl) attemptEl.textContent = `${Math.min(currentRow + 1, 6)}/6`;
         if (streakEl) streakEl.textContent = stats.streak;
         if (winsEl) winsEl.textContent = stats.wins;
+        
+        // Обновляем состояние кнопки "Новая игра"
+        if (newGameBtn) {
+            if (gameMode === 'daily' && stats.lastDaily === todayStr()) {
+                newGameBtn.disabled = true;
+                newGameBtn.textContent = '🔒 Слово дня сыграно';
+            } else {
+                newGameBtn.disabled = false;
+                newGameBtn.textContent = gameMode === 'free' ? '🔄 Новая игра' : '🔄 Слово дня';
+            }
+        }
     }
 
     function toggleStatsPanel() {
         const panel = document.getElementById('stats-panel');
         if (!panel) return;
-        if (panel.style.display === 'none') { renderMyStats(); panel.style.display = 'block'; }
-        else panel.style.display = 'none';
+        
+        if (panel.style.display === 'none') {
+            renderMyStats();
+            panel.style.display = 'block';
+        } else {
+            panel.style.display = 'none';
+        }
     }
+
     function renderMyStats() {
         const panel = document.getElementById('stats-panel');
         if (!panel) return;
+        
         const rate = stats.games > 0 ? Math.round((stats.wins / stats.games) * 100) : 0;
-        const dist = stats.dist, max = Math.max(...dist, 1);
+        const dist = stats.dist;
+        const max = Math.max(...dist, 1);
+        
         let distHtml = '';
         for (let i = 0; i < 6; i++) {
             const val = dist[i] || 0;
             const width = Math.max(Math.round((val / max) * 100), 12);
             distHtml += `<div class="dist-row"><span class="dist-label">${i+1}</span><div class="dist-bar" style="width:${width}%">${val}</div></div>`;
         }
+        
         panel.innerHTML = `
             <div class="my-stats">
                 <div class="stats-grid">
@@ -912,43 +1178,116 @@
             </div>`;
     }
 
-    // Физическая клавиатура (уже работала — оставил как есть)
     document.addEventListener('keydown', handleKeyDown);
+    
     function handleKeyDown(e) {
         if (!gameActive || gameOver || isAnimating) return;
-        if (e.key === 'Enter') { e.preventDefault(); submitWord(); }
-        else if (e.key === 'Backspace') { e.preventDefault(); deleteLetter(); }
-        else {
+        
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            submitWord();
+        } else if (e.key === 'Backspace') {
+            e.preventDefault();
+            deleteLetter();
+        } else {
             const letter = wordleNormalize(e.key);
             if (/^[а-я]$/.test(letter)) addLetter(letter);
         }
     }
 
+    // ИСПРАВЛЕНИЕ: Улучшена обработка ошибок и валидация данных
     async function renderLeaderboardTab() {
-        gameContainer.innerHTML = '<p>Загрузка...</p>';
+        gameContainer.innerHTML = '<div style="text-align:center;padding:2rem;"><div class="loading-spinner"></div><p style="margin-top:1rem;color:#6b7280;">Загрузка рекордов...</p></div>';
+        
         try {
-            const { data: users, error } = await supabase.from('users').select('id, data').neq('data->>role', 'admin');
-            if (error) throw error;
+            if (!supabase) {
+                throw new Error('Supabase не инициализирован');
+            }
+            
+            const { data: users, error } = await supabase
+                .from('users')
+                .select('id, data')
+                .limit(1000);
+            
+            if (error) {
+                console.error('Ошибка Supabase:', error);
+                throw error;
+            }
+            
+            if (!users || users.length === 0) {
+                gameContainer.innerHTML = '<div class="leaderboard-error"><p>😔 Пока нет рекордов. Будьте первым!</p></div>';
+                return;
+            }
+            
             const streakL = [], winsL = [], rateL = [];
-            (users || []).forEach(u => {
-                const st = u.data?.gameStats?.wordle || {}, un = u.data?.username || 'Аноним';
-                if (st.maxStreak > 0) streakL.push({ username: un, value: st.maxStreak, uid: u.id });
-                if (st.wins > 0) winsL.push({ username: un, value: st.wins, uid: u.id });
-                if (st.games >= 5 && st.wins > 0) rateL.push({ username: un, value: Math.round((st.wins / st.games) * 100), uid: u.id });
+            
+            users.forEach(u => {
+                if (!u.data || !u.data.gameStats) return;
+                
+                const st = u.data.gameStats.wordle || {};
+                const un = u.data.username || 'Аноним';
+                const role = u.data.role || 'user';
+                
+                // Исключаем админов
+                if (role === 'admin') return;
+                
+                if (st.maxStreak > 0) {
+                    streakL.push({ username: un, value: st.maxStreak, uid: u.id });
+                }
+                if (st.wins > 0) {
+                    winsL.push({ username: un, value: st.wins, uid: u.id });
+                }
+                if (st.games >= 5 && st.wins > 0) {
+                    const rate = Math.round((st.wins / st.games) * 100);
+                    rateL.push({ username: un, value: rate, uid: u.id });
+                }
             });
-            streakL.sort((a,b) => b.value - a.value);
-            winsL.sort((a,b) => b.value - a.value);
-            rateL.sort((a,b) => b.value - a.value);
-            let html = buildTable('🔥 Лучший стрик', streakL.slice(0,10), 'дн.')
-                     + buildTable('🏆 Больше всего побед', winsL.slice(0,10), 'побед')
-                     + buildTable('🎯 Лучший winrate', rateL.slice(0,10), '%');
-            gameContainer.innerHTML = html || '<p>Нет рекордов.</p>';
-        } catch (e) { gameContainer.innerHTML = '<p>Ошибка загрузки.</p>'; }
+            
+            streakL.sort((a, b) => b.value - a.value);
+            winsL.sort((a, b) => b.value - a.value);
+            rateL.sort((a, b) => b.value - a.value);
+            
+            let html = buildTable('🔥 Лучший стрик', streakL.slice(0, 10), 'дн.')
+                     + buildTable('🏆 Больше всего побед', winsL.slice(0, 10), 'побед')
+                     + buildTable('🎯 Лучший winrate', rateL.slice(0, 10), '%');
+            
+            if (!html) {
+                html = '<div class="leaderboard-error"><p>😔 Пока нет рекордов. Будьте первым!</p></div>';
+            }
+            
+            gameContainer.innerHTML = html;
+            
+        } catch (e) {
+            console.error('Ошибка загрузки лидерборда:', e);
+            gameContainer.innerHTML = `
+                <div class="leaderboard-error">
+                    <p>❌ Не удалось загрузить рекорды</p>
+                    <p style="font-size:0.85rem;color:#9ca3af;">Попробуйте обновить страницу</p>
+                </div>`;
+        }
     }
+
     function buildTable(title, data, suffix) {
         if (!data.length) return '';
-        let h = `<div class="leaderboard-wordle"><h3>${title}</h3><table><tr><th>#</th><th>Игрок</th><th>${suffix}</th></tr>`;
-        data.forEach((p, i) => { h += `<tr${p.uid === currentUid ? ' class="me"' : ''}><td>${i+1}</td><td>${p.username}</td><td>${p.value}</td></tr>`; });
+        
+        let h = `<div class="leaderboard-wordle">
+            <h3>${title}</h3>
+            <table>
+                <tr>
+                    <th>#</th>
+                    <th>Игрок</th>
+                    <th>${suffix}</th>
+                </tr>`;
+        
+        data.forEach((p, i) => {
+            const isMe = p.uid === currentUid;
+            h += `<tr${isMe ? ' class="me"' : ''}>
+                <td>${i + 1}</td>
+                <td>${p.username}</td>
+                <td>${p.value}</td>
+            </tr>`;
+        });
+        
         return h + '</table></div>';
     }
 })();
