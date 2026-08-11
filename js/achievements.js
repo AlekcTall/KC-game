@@ -69,6 +69,21 @@ function getAchievementsConfig() {
     { id: 'tetris_10000score', name: 'Ниндзя', description: 'Наберите 10000 очков в Тетрисе', icon: '🥷', hidden: true },
     { id: 'tetris_level10', name: 'Неудержимый', description: 'Достигните 10-го уровня в Тетрисе', icon: '💪', hidden: true },
 
+    // Wordle
+    { id: 'wordle_first_win', name: 'Первая победа', description: 'Угадайте своё первое слово', icon: '🟩', hidden: false },
+    { id: 'wordle_5games', name: 'Словодел', description: 'Сыграйте 5 игр', icon: '📖', hidden: false },
+    { id: 'wordle_25games', name: 'Книжный червь', description: 'Сыграйте 25 игр', icon: '📚', hidden: false },
+    { id: 'wordle_10wins', name: 'Лингвист', description: 'Одержите 10 побед', icon: '🏅', hidden: false },
+    { id: 'wordle_25wins', name: 'Эрудит', description: 'Одержите 25 побед', icon: '🎖️', hidden: false },
+    { id: 'wordle_streak3', name: 'На связи', description: 'Угадывайте слово дня 3 дня подряд', icon: '🔥', hidden: false },
+    { id: 'wordle_streak7', name: 'Неделька', description: 'Угадывайте слово дня 7 дней подряд', icon: '📅', hidden: true },
+    { id: 'wordle_streak30', name: 'Месяц без промахов', description: 'Угадывайте слово дня 30 дней подряд', icon: '💪', hidden: true },
+    { id: 'wordle_one_shot', name: 'Снайпер', description: 'Угадайте слово с первой попытки', icon: '🎯', hidden: true },
+    { id: 'wordle_lightning', name: 'Молния', description: 'Угадайте слово за 3 попытки или меньше', icon: '⚡', hidden: false },
+    { id: 'wordle_hardcore', name: 'На грани', description: 'Угадайте слово на последней (6-й) попытке', icon: '😅', hidden: true },
+    { id: 'wordle_perfect_week', name: 'Безупречная неделя', description: '7 побед подряд в слове дня, все за ≤3 попытки', icon: '🌟', hidden: true },
+    { id: 'wordle_polyglot', name: 'Словесный мастер', description: '50 побед в сумме', icon: '🧠', hidden: true },
+
     // НОВЫЕ ПАСХАЛКИ (скрытые)
     { id: 'easter_dark_side', name: 'Тёмная сторона', description: 'Купите тёмную тему в магазине', icon: '🌑', hidden: true },
     { id: 'easter_collector', name: 'Коллекционер', description: 'Соберите 10 разных достижений', icon: '🏅', hidden: true },
@@ -229,6 +244,21 @@ async function checkAndAwardAchievements() {
       case 'tetris_5000score': earned = (gameStats.tetris?.maxScore || 0) >= 5000; break;
       case 'tetris_10000score': earned = (gameStats.tetris?.maxScore || 0) >= 10000; break;
       case 'tetris_level10': earned = (gameStats.tetris?.maxLevel || 0) >= 10; break;
+
+      // Wordle
+      case 'wordle_first_win': earned = (gameStats.wordle?.wins || 0) >= 1; break;
+      case 'wordle_5games': earned = (gameStats.wordle?.games || 0) >= 5; break;
+      case 'wordle_25games': earned = (gameStats.wordle?.games || 0) >= 25; break;
+      case 'wordle_10wins': earned = (gameStats.wordle?.wins || 0) >= 10; break;
+      case 'wordle_25wins': earned = (gameStats.wordle?.wins || 0) >= 25; break;
+      case 'wordle_streak3': earned = (gameStats.wordle?.maxStreak || 0) >= 3; break;
+      case 'wordle_streak7': earned = (gameStats.wordle?.maxStreak || 0) >= 7; break;
+      case 'wordle_streak30': earned = (gameStats.wordle?.maxStreak || 0) >= 30; break;
+      case 'wordle_one_shot': earned = Array.isArray(gameStats.wordle?.dist) && (gameStats.wordle.dist[0] || 0) >= 1; break;
+      case 'wordle_lightning': earned = Array.isArray(gameStats.wordle?.dist) && ((gameStats.wordle.dist[0] || 0) + (gameStats.wordle.dist[1] || 0) + (gameStats.wordle.dist[2] || 0)) >= 1; break;
+      case 'wordle_hardcore': earned = Array.isArray(gameStats.wordle?.dist) && (gameStats.wordle.dist[5] || 0) >= 1; break;
+      case 'wordle_perfect_week': earned = (gameStats.wordle?.bestPerfectStreak || 0) >= 7; break;
+      case 'wordle_polyglot': earned = (gameStats.wordle?.wins || 0) >= 50; break;
 
       // НОВЫЕ ПАСХАЛКИ
       case 'easter_dark_side': earned = easterEggs.includes('dark_side'); break;
