@@ -145,7 +145,7 @@
   <div class="clicker-game">
     <div class="clicker-header">
       <h2>🖱️ Супер Кликер</h2>
-      <p>Кликайте, чтобы заработать баллы. Награда каждые <strong>20</strong> кликов!</p>
+      <p>Кликайте, чтобы заработать баллы. Награда каждые <strong>100</strong> кликов!</p>
     </div>
 
     <div class="clicker-score" id="score">0</div>
@@ -153,7 +153,7 @@
     <div class="progress-container">
       <div class="progress-bar" id="progress-bar"></div>
     </div>
-    <div class="progress-text" id="progress-text">0 / 20 до награды</div>
+    <div class="progress-text" id="progress-text">0 / 100 до награды</div>
 
     <button class="clicker-btn" id="click-btn">КЛИК!</button>
     <p id="message" style="margin-top: 1.5rem; font-weight: 600; min-height: 1.5rem; color: #f59e0b;"></p>
@@ -210,7 +210,7 @@
       setTimeout(() => { if (el.parentNode) el.remove(); }, 800);
     }
 
-    const CLICKS_PER_REWARD = 20;
+    const CLICKS_PER_REWARD = 100;
     const POINTS_PER_REWARD = 1;
     
     let totalClicks = 0;
@@ -251,7 +251,6 @@
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      // Пробуем загрузить из кеша или Supabase
       let loadedClicks = 0;
       const cu = typeof getCurrentUser === 'function' ? getCurrentUser() : null;
       if (cu?.gameStats?.clicker?.totalClicks) {
@@ -293,7 +292,6 @@
       if (!tbody || !currentUid) return;
       
       try {
-        // Получаем топ-10 по кликам через JSONB
         const { data: users, error } = await supabase
           .from('users')
           .select('id, data')
