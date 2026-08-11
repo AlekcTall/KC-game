@@ -487,7 +487,7 @@
     let currentUid = null;
     let gameInitialized = false;
     let lastEarnedPoints = 0;
-    let statsLoaded = false; // НОВЫЙ ФЛАГ: отслеживает загрузку статистики
+    let statsLoaded = false;
 
     const defaultStats = {
         games: 0, wins: 0, streak: 0, maxStreak: 0,
@@ -510,13 +510,63 @@
     function todayStr() { return dateStr(new Date()); }
     function yesterdayStr() { const d = new Date(); d.setDate(d.getDate()-1); return dateStr(d); }
 
-    // ИСПРАВЛЕНИЕ: Авторизация теперь корректно загружает статистику ПЕРЕД инициализацией игры
+    // ========== СЕРВЕРНАЯ ПРОВЕРКА БЛОКИРОВКИ ==========
+    async function verifyDailyLockFromServer() {
+        if (!currentUid) return false;
+        
+        try {
+            const { data: row, error } = await supabase
+                .from('users')
+                .select('data')
+                .eq('id', currentUid)
+                .single();
+            
+            if (error || !row) {
+                console.error('[DEBUG] Ошибка серверной проверки:', error);
+                return false;
+            }
+            
+            const serverLastDaily = row.data?.gameStats?.wordle?.lastDaily;
+            const isLocked = serverLastDaily === todayStr();
+            
+            console.log('[DEBUG] Серверная проверка блокировки:', {
+                serverLastDaily,
+                today: todayStr(),
+                isLocked
+            });
+            
+            return isLocked;
+        } catch (e) {
+            console.error('[DEBUG] Ошибка серверной проверки:', e);
+            return false;
+        }
+    }
+
+    // ========== КОМБИНИРОВАННАЯ ПРОВЕРКА ==========
+    async function isDailyLocked() {
+        // Сначала проверяем сервер (надёжный источник)
+        const serverLocked = await verifyDailyLockFromServer();
+        
+        // Если сервер говорит что заблокировано - блокируем
+        if (serverLocked) {
+            console.log('[DEBUG] Заблокировано сервером');
+            return true;
+        }
+        
+        // Если сервер не заблокировал, проверяем локальные данные
+        const localLocked = stats.lastDaily === todayStr();
+        console.log('[DEBUG] Локальная проверка:', { localLocked, lastDaily: stats.lastDaily });
+        
+        return localLocked;
+    }
+
+    // ========== АВТОРИЗАЦИЯ ==========
     if (typeof onAuthStateChange === 'function') {
         onAuthStateChange(async (event, session) => {
             if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
                 if (session?.user) {
                     currentUid = session.user.id;
-                    await loadStats(); // ЖДЁМ загрузку статистики
+                    await loadStats();
                     statsLoaded = true;
                 }
             } else {
@@ -534,12 +584,13 @@
             switchTab(tab.dataset.tab);
         });
     });
+    
     function switchTab(tab) {
         if (tab === 'game') renderGameTab();
         else if (tab === 'leaderboard') renderLeaderboardTab();
     }
 
-    // ИСПРАВЛЕНИЕ: Добавлена проверка на null и более надёжная обработка ошибок
+    // ========== ЗАГРУЗКА СТАТИСТИКИ ==========
     async function loadStats() {
         if (!currentUid) return;
         try {
@@ -563,32 +614,66 @@
                     }
                 }
             }
+            
+            console.log('[DEBUG] stats loaded:', stats);
         } catch (e) {
             console.error('Критическая ошибка загрузки статистики:', e);
         }
     }
 
+    // ========== СОХРАНЕНИЕ С ПРЯМЫМ ОБНОВЛЕНИЕМ ==========
     async function saveStats() {
-        if (!currentUid) return;
+        if (!currentUid) return false;
+        
         try {
-            if (typeof syncGameStats === 'function') {
-                await syncGameStats('wordle', stats);
+            // ПРЯМОЕ обновление через Supabase для надёжности
+            const { error } = await supabase
+                .from('users')
+                .update({
+                    data: {
+                        ...stats,
+                        gameStats: {
+                            wordle: stats
+                        }
+                    }
+                })
+                .eq('id', currentUid);
+            
+            if (error) {
+                console.error('Ошибка прямого сохранения:', error);
+                throw error;
             }
+            
+            console.log('[DEBUG] stats saved directly to Supabase:', stats);
+            return true;
         } catch (e) {
             console.error('Ошибка сохранения статистики:', e);
+            
+            // Fallback на syncGameStats если прямой запрос не сработал
+            try {
+                if (typeof syncGameStats === 'function') {
+                    await syncGameStats('wordle', stats);
+                    console.log('[DEBUG] stats saved via syncGameStats');
+                    return true;
+                }
+            } catch (e2) {
+                console.error('Ошибка fallback сохранения:', e2);
+            }
+            
             if (typeof showToast === 'function') {
                 showToast('Ошибка сохранения статистики', 'error');
             }
+            return false;
         }
     }
 
-    // ЗАЩИТА: Добавлена проверка на повторное начисление
     async function awardPoints(points, gameResult) {
         if (!currentUid || points <= 0) return;
         
-        // Защита от повторного начисления
-        if (gameMode === 'daily' && stats.lastDaily === todayStr()) {
-            console.warn('Попытка повторного начисления очков за слово дня заблокирована');
+        // СЕРВЕРНАЯ ПРОВЕРКА перед начислением
+        const serverLocked = await verifyDailyLockFromServer();
+        if (gameMode === 'daily' && serverLocked) {
+            console.warn('Попытка повторного начисления очков заблокирована сервером');
             return;
         }
         
@@ -615,10 +700,10 @@
         keyStates = {};
     }
 
-    // ИСПРАВЛЕНИЕ: Теперь проверяет stats.lastDaily ПЕРЕД инициализацией
-    function initGame() {
+    // ========== ИНИЦИАЛИЗАЦИЯ С СЕРВЕРНОЙ ПРОВЕРКОЙ ==========
+    async function initGame() {
         if (!statsLoaded) {
-            console.warn('Статистика ещё не загружена, откладываем инициализацию');
+            console.warn('Статистика ещё не загружена');
             return;
         }
         
@@ -626,13 +711,12 @@
         keyStates = {};
         
         if (gameMode === 'daily') {
-            // КРИТИЧЕСКАЯ ПРОВЕРКА: блокируем если уже играли сегодня
-            if (stats.lastDaily === todayStr()) {
+            // СЕРВЕРНАЯ ПРОВЕРКА блокировки
+            const locked = await isDailyLocked();
+            if (locked) {
                 gameActive = false;
                 gameOver = true;
-                if (typeof showToast === 'function') {
-                    showToast('Вы уже играли в слово дня сегодня!', 'info');
-                }
+                console.log('[DEBUG] Игра дня заблокирована сервером');
                 return;
             }
             currentWord = getWordleDailyWord();
@@ -736,10 +820,10 @@
         }
     }
 
-    // ЗАЩИТА: Добавлена валидация перед начислением очков
+    // ========== ЗАВЕРШЕНИЕ ИГРЫ ==========
     async function endGame(won) {
         if (gameOver) {
-            console.warn('Игра уже завершена, повторный вызов endGame заблокирован');
+            console.warn('Игра уже завершена');
             return;
         }
         
@@ -753,19 +837,25 @@
             await finishFreeGame(won, attempts);
         }
         
+        // Достижения ПОСЛЕ сохранения
         if (typeof checkAndAwardAchievements === 'function') {
-            await checkAndAwardAchievements();
+            try {
+                await checkAndAwardAchievements();
+                console.log('[DEBUG] Достижения проверены');
+            } catch (e) {
+                console.error('Ошибка проверки достижений:', e);
+            }
         }
         
         showGameOverOverlay(won);
         updateUI();
     }
 
-    // ИСПРАВЛЕНИЕ: Добавлена защита от повторного начисления
     async function finishDailyGame(won, attempts) {
-        // КРИТИЧЕСКАЯ ПРОВЕРКА: если уже играли сегодня - выходим
-        if (stats.lastDaily === todayStr()) {
-            console.warn('Попытка повторного завершения игры дня заблокирована');
+        // СЕРВЕРНАЯ ПРОВЕРКА перед завершением
+        const serverLocked = await verifyDailyLockFromServer();
+        if (serverLocked) {
+            console.warn('Попытка повторного завершения игры дня заблокирована сервером');
             return;
         }
         
@@ -796,12 +886,18 @@
             stats.perfectStreak = 0;
         }
         
-        // ВАЖНО: записываем дату ПОСЛЕ всех проверок
         stats.lastDaily = todayStr();
         stats.lastDailyWon = won;
         stats.lastDailyAttempts = attempts;
         
-        await saveStats();
+        // СОХРАНЕНИЕ С ОЖИДАНИЕМ
+        const saved = await saveStats();
+        if (!saved) {
+            console.error('Не удалось сохранить статистику!');
+            if (typeof showToast === 'function') {
+                showToast('Ошибка сохранения результата', 'error');
+            }
+        }
         
         if (lastEarnedPoints > 0) {
             await awardPoints(lastEarnedPoints, { won, attempts });
@@ -901,7 +997,7 @@
         }
     }
 
-    function renderGameTab() {
+    async function renderGameTab() {
         gameContainer.innerHTML = `
             <div class="mode-selector">
                 <button class="mode-btn ${gameMode==='daily'?'active':''}" id="mode-daily">📅 Слово дня</button>
@@ -923,9 +1019,7 @@
                 <kbd class="kbd-backspace">⌫ Backspace</kbd><span>— стереть</span>
             </div>
             <div class="controls-bar">
-                <button class="btn" id="new-game-btn" ${gameMode === 'daily' && stats.lastDaily === todayStr() ? 'disabled' : ''}>
-                    🔄 ${gameMode === 'daily' ? 'Слово дня сыграно' : 'Новая игра'}
-                </button>
+                <button class="btn" id="new-game-btn">🔄 Новая игра</button>
                 <button class="btn" id="stats-btn">📊 Моя статистика</button>
             </div>
             <div id="stats-panel" style="display:none;"></div>
@@ -935,18 +1029,19 @@
         buildKeyboard();
         attachHandlers();
         
-        // ИСПРАВЛЕНИЕ: Проверяем загрузку статистики ПЕРЕД инициализацией
         if (!gameInitialized && statsLoaded) {
-            initGame();
+            await initGame();
         }
         
         fillBoardFromState();
         
-        if (gameMode === 'daily' && stats.lastDaily === todayStr()) {
+        // Проверяем блокировку и обновляем UI
+        const locked = await isDailyLocked();
+        if (gameMode === 'daily' && locked) {
             showDailyAlreadyPlayed();
         }
         
-        if (gameOver && gameMode === 'daily' && stats.lastDaily === todayStr()) {
+        if (gameOver && gameMode === 'daily' && locked) {
             showGameOverOverlay(stats.lastDailyWon);
         }
         
@@ -954,15 +1049,19 @@
     }
 
     function attachHandlers() {
-        document.getElementById('mode-daily').addEventListener('click', () => {
-            if (stats.lastDaily === todayStr() && stats.lastDailyWon) {
-                if (typeof showToast === 'function') {
-                    showToast('Вы уже угадали слово дня сегодня!', 'info');
+        const dailyBtn = document.getElementById('mode-daily');
+        if (dailyBtn) {
+            dailyBtn.addEventListener('click', async () => {
+                const locked = await isDailyLocked();
+                if (locked) {
+                    if (typeof showToast === 'function') {
+                        showToast('Вы уже играли в слово дня сегодня!', 'info');
+                    }
+                    return;
                 }
-                return;
-            }
-            switchMode('daily');
-        });
+                switchMode('daily');
+            });
+        }
         
         document.getElementById('mode-free').addEventListener('click', () => switchMode('free'));
         
@@ -980,13 +1079,6 @@
     }
 
     function switchMode(mode) {
-        if (mode === 'daily' && stats.lastDaily === todayStr()) {
-            if (typeof showToast === 'function') {
-                showToast('Вы уже играли в слово дня сегодня!', 'info');
-            }
-            return;
-        }
-        
         gameMode = mode;
         initGame();
         
@@ -999,10 +1091,6 @@
         buildGrid();
         buildKeyboard();
         fillBoardFromState();
-        
-        if (mode === 'daily' && stats.lastDaily === todayStr()) {
-            showDailyAlreadyPlayed();
-        }
         
         updateUI();
     }
@@ -1020,9 +1108,12 @@
         const banner = document.getElementById('daily-banner');
         if (!banner) return;
         
+        const won = stats.lastDailyWon;
+        const attempts = stats.lastDailyAttempts;
         const word = getWordleDailyWord();
-        if (stats.lastDailyWon) {
-            banner.innerHTML = `<div class="banner success">✅ Вы уже угадали слово дня за ${stats.lastDailyAttempts} попыток. Возвращайтесь завтра!</div>`;
+        
+        if (won) {
+            banner.innerHTML = `<div class="banner success">✅ Вы уже угадали слово дня за ${attempts} попыток. Возвращайтесь завтра!</div>`;
         } else {
             banner.innerHTML = `<div class="banner">Слово дня было: <b>${word.toUpperCase()}</b>. Попробуйте свободную игру!</div>`;
         }
@@ -1120,6 +1211,7 @@
         const streakEl = document.getElementById('streak');
         const winsEl = document.getElementById('wins');
         const newGameBtn = document.getElementById('new-game-btn');
+        const dailyBtn = document.getElementById('mode-daily');
         
         if (attemptEl) attemptEl.textContent = `${Math.min(currentRow + 1, 6)}/6`;
         if (streakEl) streakEl.textContent = stats.streak;
@@ -1134,6 +1226,11 @@
                 newGameBtn.disabled = false;
                 newGameBtn.textContent = gameMode === 'free' ? '🔄 Новая игра' : '🔄 Слово дня';
             }
+        }
+        
+        // Блокируем кнопку "Слово дня" если уже играли
+        if (dailyBtn && stats.lastDaily === todayStr()) {
+            dailyBtn.disabled = true;
         }
     }
 
@@ -1195,7 +1292,6 @@
         }
     }
 
-    // ИСПРАВЛЕНИЕ: Улучшена обработка ошибок и валидация данных
     async function renderLeaderboardTab() {
         gameContainer.innerHTML = '<div style="text-align:center;padding:2rem;"><div class="loading-spinner"></div><p style="margin-top:1rem;color:#6b7280;">Загрузка рекордов...</p></div>';
         
@@ -1228,7 +1324,6 @@
                 const un = u.data.username || 'Аноним';
                 const role = u.data.role || 'user';
                 
-                // Исключаем админов
                 if (role === 'admin') return;
                 
                 if (st.maxStreak > 0) {
