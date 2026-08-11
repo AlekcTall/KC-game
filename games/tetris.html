@@ -108,7 +108,6 @@
     let bgCanvas = null;
     let gameStartedEver = false;
 
-    // === АВТОРИЗАЦИЯ ===
     if (typeof onAuthStateChange === 'function') {
         onAuthStateChange((event, session) => {
             if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
@@ -172,9 +171,7 @@
         }
     }
 
-    // ===== ГЛАВНАЯ ФУНКЦИЯ РЕНДЕРА ВКЛАДКИ ИГРЫ =====
     function renderGameTab() {
-        // ВСЕГДА пересоздаём разметку (старая могла быть удалена вкладкой "Рекорды")
         gameContainer.innerHTML = `
             <div class="tetris-stats">
                 <div class="stat-card"><span class="stat-icon">🏆</span><span>Очки: <span id="score" class="stat-value">${score}</span></span></div>
@@ -205,7 +202,6 @@
             </div>
         `;
 
-        // Получаем НОВЫЕ ссылки на canvas после пересоздания DOM
         canvas = document.getElementById('tetris-canvas');
         ctx = canvas ? canvas.getContext('2d') : null;
         nextCanvas = document.getElementById('next-canvas');
@@ -227,7 +223,6 @@
             else if (act === 'drop') hardDrop();
         });
 
-        // Если игра была начата и не завершена — восстанавливаем состояние
         if (gameStartedEver && gameActive) {
             updatePauseButton();
             updateMobileButtonsState();
@@ -240,7 +235,6 @@
         }
     }
 
-    // === КЛАВИАТУРА (один раз) ===
     document.addEventListener('keydown', handleKeyDown);
 
     function handleKeyDown(e) {
@@ -420,7 +414,6 @@
     }
 
     function draw() {
-        // ЗАЩИТА: если canvas ещё не создан или вкладка не активна — не рисуем
         if (!ctx || !canvas) return;
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         if (bgCanvas) ctx.drawImage(bgCanvas, 0, 0);
@@ -468,12 +461,13 @@
         if (nbs) bestScore = score; if (nbl) bestLines = lines; if (nblv) bestLevel = level;
         if ((nbs || nbl || nblv) && currentUid) await syncGameStats('tetris', { maxScore: bestScore, maxLines: bestLines, maxLevel: bestLevel });
         if (currentUid && typeof addPointsToCurrentUser === 'function') {
-            const pts = Math.floor(score / 500);
-            if (pts > 0) {
-                const res = await addPointsToCurrentUser(pts, 'tetris');
+            // ★ ИЗМЕНЕНО: 1 балл за 1000 очков (было 500)
+            const pointsEarned = Math.floor(score / 1000);
+            if (pointsEarned > 0) {
+                const res = await addPointsToCurrentUser(pointsEarned, 'tetris');
                 if (res?.success) {
                     const earned = res.points;
-                    if (typeof showToast === 'function') showToast(`+${earned} баллов${earned > pts ? ' (x2 бонус)' : ''} за тетрис!`, 'success');
+                    if (typeof showToast === 'function') showToast(`+${earned} баллов${earned > pointsEarned ? ' (x2 бонус)' : ''} за тетрис!`, 'success');
                 }
             }
         }
