@@ -1,0 +1,588 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Wordle – КЦ Игры</title>
+    <link rel="stylesheet" href="../css/style.css">
+    <style>
+        .wordle-game { max-width: 560px; margin: 2rem auto; text-align: center; background: white; padding: 1.5rem; border-radius: var(--border-radius); box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
+
+        .tabs { display: flex; gap: 0.5rem; margin-bottom: 1.5rem; border-bottom: 2px solid #eee; padding-bottom: 0.5rem; }
+        .tab { background: none; border: none; padding: 0.5rem 1rem; font-size: 1rem; cursor: pointer; border-radius: 4px 4px 0 0; }
+        .tab.active { background: var(--color-primary); color: white; }
+        .back-link { display: inline-block; margin-top: 1rem; color: var(--color-primary); text-decoration: none; }
+
+        .mode-selector { display: flex; gap: 0.5rem; justify-content: center; margin-bottom: 1rem; }
+        .mode-btn { padding: 0.5rem 1rem; border: 2px solid #e5e7eb; background: #f9fafb; border-radius: 10px; cursor: pointer; font-weight: 600; font-size: 0.9rem; transition: all 0.2s; }
+        .mode-btn.active { border-color: var(--color-primary); background: var(--color-primary); color: white; }
+
+        .banner { padding: 0.7rem 1rem; border-radius: 10px; margin-bottom: 1rem; font-size: 0.95rem; background: #fef3c7; border: 1px solid #fcd34d; }
+        .banner.success { background: #d1fae5; border-color: #34d399; }
+
+        .wordle-stats { display: flex; justify-content: space-around; margin: 0.5rem 0 1rem; font-weight: 600; gap: 0.75rem; flex-wrap: wrap; }
+        .stat-card { background: #f9fafb; border-radius: 12px; padding: 0.5rem 1rem; display: flex; align-items: center; gap: 0.5rem; box-shadow: 0 1px 3px rgba(0,0,0,0.05); font-size: 0.9rem; }
+        .stat-card .stat-icon { font-size: 1.2rem; }
+        .stat-value { font-weight: 700; color: #2c3e50; }
+
+        .board-wrapper { position: relative; display: inline-block; }
+        .wordle-grid { display: grid; grid-template-rows: repeat(6, 1fr); gap: 6px; margin: 0 auto; width: fit-content; }
+        .grid-row { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+        .tile { width: 56px; height: 56px; border: 2px solid #d3d6da; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 1.7rem; font-weight: bold; text-transform: uppercase; user-select: none; background: white; color: #1a1a1a; }
+        .tile.filled { border-color: #878a8c; animation: wpop 0.1s; }
+        .tile.correct { background: #6aaa64; border-color: #6aaa64; color: white; }
+        .tile.present { background: #c9b458; border-color: #c9b458; color: white; }
+        .tile.absent { background: #787c7e; border-color: #787c7e; color: white; }
+        .tile.flip { animation: wflip 0.5s ease; }
+
+        .keyboard { display: flex; flex-direction: column; gap: 8px; align-items: center; margin: 1.2rem auto 0; }
+        .kb-row { display: flex; gap: 5px; justify-content: center; }
+        .key { min-width: 40px; height: 54px; border-radius: 6px; border: none; background: #d3d6da; font-size: 1rem; font-weight: bold; cursor: pointer; display: flex; align-items: center; justify-content: center; text-transform: uppercase; user-select: none; padding: 0 6px; color: #1a1a1a; touch-action: manipulation; }
+        .key.wide { min-width: 56px; font-size: 1.1rem; }
+        .key.correct { background: #6aaa64; color: white; }
+        .key.present { background: #c9b458; color: white; }
+        .key.absent { background: #787c7e; color: white; }
+        .key:active { transform: scale(0.94); }
+
+        .controls-bar { display: flex; gap: 0.5rem; justify-content: center; margin-top: 1rem; flex-wrap: wrap; }
+        .controls-bar .btn { padding: 0.5rem 1.2rem; }
+
+        .wordle-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(15,23,42,0.82); display: flex; flex-direction: column; align-items: center; justify-content: center; border-radius: 10px; animation: fadeIn 0.4s ease; z-index: 10; padding: 1rem; box-sizing: border-box; }
+        .ov-title { color: white; font-size: 1.6rem; font-weight: bold; margin-bottom: 0.4rem; }
+        .ov-word { color: #fbbf24; font-size: 1.3rem; margin-bottom: 0.3rem; letter-spacing: 2px; }
+        .ov-sub { color: #e5e7eb; font-size: 0.95rem; margin-bottom: 0.3rem; }
+        .ov-points { color: #34d399; font-size: 1.1rem; font-weight: 700; margin-bottom: 0.6rem; }
+        .ov-btns { display: flex; gap: 0.6rem; flex-wrap: wrap; justify-content: center; margin-top: 0.4rem; }
+        .wordle-overlay .btn { background: white; color: #333; font-weight: 600; padding: 0.5rem 1.4rem; border-radius: 20px; cursor: pointer; border: none; }
+
+        .my-stats { margin-top: 1rem; background: #f9fafb; border-radius: 12px; padding: 1rem; }
+        .stats-grid { display: flex; justify-content: space-around; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 0.8rem; }
+        .ms-item { display: flex; flex-direction: column; align-items: center; min-width: 60px; }
+        .ms-item small { color: #6b7280; font-size: 0.75rem; }
+        .my-stats h4 { margin: 0.5rem 0; font-size: 0.9rem; color: #555; }
+        .dist-row { display: flex; align-items: center; gap: 0.5rem; margin: 3px 0; }
+        .dist-label { width: 14px; font-size: 0.85rem; font-weight: 600; color: #555; }
+        .dist-bar { background: #6aaa64; color: white; border-radius: 4px; font-size: 0.8rem; padding: 2px 8px; min-width: 24px; text-align: right; box-sizing: border-box; }
+
+        .leaderboard-wordle { margin-top: 1.5rem; text-align: left; }
+        .leaderboard-wordle h3 { text-align: center; margin-bottom: 0.5rem; font-size: 1.1rem; }
+        .leaderboard-wordle table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+        .leaderboard-wordle th, .leaderboard-wordle td { padding: 0.4rem 0.5rem; border-bottom: 1px solid #eee; }
+        .leaderboard-wordle th { background: #f5f5f5; font-weight: 600; }
+        .leaderboard-wordle .me { background: #e6f7ff; font-weight: 600; }
+
+        @keyframes wpop { 0% { transform: scale(0.85); } 60% { transform: scale(1.12); } 100% { transform: scale(1); } }
+        @keyframes wflip { 0% { transform: rotateX(0); } 50% { transform: rotateX(90deg); } 100% { transform: rotateX(0); } }
+        @keyframes wshake { 0%,100% { transform: translateX(0); } 20% { transform: translateX(-6px); } 40% { transform: translateX(6px); } 60% { transform: translateX(-4px); } 80% { transform: translateX(4px); } }
+        .grid-row.shake { animation: wshake 0.4s; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+        @media (max-width: 480px) {
+            .tile { width: 48px; height: 48px; font-size: 1.4rem; }
+            .key { min-width: 30px; height: 48px; font-size: 0.85rem; padding: 0 4px; }
+            .key.wide { min-width: 44px; }
+        }
+        @media (max-width: 360px) {
+            .tile { width: 42px; height: 42px; font-size: 1.2rem; }
+            .key { min-width: 25px; height: 44px; font-size: 0.75rem; }
+        }
+    </style>
+</head>
+<body>
+<div class="wordle-game" id="game-container">
+    <h2>🟩 Wordle</h2>
+    <div class="tabs">
+        <button class="tab active" data-tab="game">Игра</button>
+        <button class="tab" data-tab="leaderboard">Рекорды</button>
+    </div>
+    <div id="tab-content"></div>
+    <a href="../games.html" class="back-link">← Вернуться к играм</a>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="../js/supabase-config.js"></script>
+<script src="../js/auth.js"></script>
+<script src="../js/storage.js"></script>
+<script src="../js/achievements.js"></script>
+<script src="../js/notifications.js"></script>
+<script src="../js/easter-eggs.js"></script>
+<script src="../js/main.js"></script>
+<script src="../js/wordle-words.js"></script>
+
+<script>
+(function() {
+    const gameContainer = document.getElementById('tab-content');
+    let tileEls = [], keyEls = {};
+    let board = [], boardStates = [];
+    let currentRow = 0, currentCol = 0;
+    let currentWord = '';
+    let gameActive = false, gameOver = false, isAnimating = false;
+    let gameMode = 'daily';
+    let keyStates = {};
+    let currentUid = null;
+    let gameInitialized = false;
+    let lastEarnedPoints = 0;
+
+    const defaultStats = {
+        games: 0, wins: 0, streak: 0, maxStreak: 0,
+        lastDaily: '', lastDailyWon: false, lastDailyAttempts: 0,
+        dist: [0,0,0,0,0,0], freeWinsToday: 0, lastFreeDate: ''
+    };
+    let stats = { ...defaultStats };
+
+    const KB_ROWS = [
+        ['й','ц','у','к','е','н','г','ш','щ','з','х','ъ'],
+        ['ф','ы','в','а','п','р','о','л','д','ж','э'],
+        ['enter','я','ч','с','м','и','т','ь','б','ю','backspace']
+    ];
+    const KEY_PRIORITY = { correct: 3, present: 2, absent: 1 };
+
+    /* ---------- Даты ---------- */
+    function dateStr(d) {
+        return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+    }
+    function todayStr() { return dateStr(new Date()); }
+    function yesterdayStr() { const d = new Date(); d.setDate(d.getDate()-1); return dateStr(d); }
+
+    /* ---------- Авторизация ---------- */
+    if (typeof onAuthStateChange === 'function') {
+        onAuthStateChange((event, session) => {
+            if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
+                if (session?.user) { currentUid = session.user.id; loadStats(); }
+            } else { currentUid = null; }
+            switchTab('game');
+        });
+    }
+
+    /* ---------- Вкладки ---------- */
+    document.querySelectorAll('.tab').forEach(tab => {
+        tab.addEventListener('click', () => {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            tab.classList.add('active');
+            switchTab(tab.dataset.tab);
+        });
+    });
+    function switchTab(tab) {
+        if (tab === 'game') renderGameTab();
+        else if (tab === 'leaderboard') renderLeaderboardTab();
+    }
+
+    /* ---------- Статистика (Supabase) ---------- */
+    async function loadStats() {
+        if (!currentUid) return;
+        try {
+            const { data: row, error } = await supabase.from('users').select('data').eq('id', currentUid).single();
+            if (!error && row) {
+                const st = row.data?.gameStats?.wordle;
+                if (st) {
+                    stats = { ...defaultStats, ...st };
+                    if (!Array.isArray(stats.dist) || stats.dist.length !== 6) stats.dist = [0,0,0,0,0,0];
+                }
+            }
+        } catch (e) { console.error(e); }
+    }
+    async function saveStats() {
+        if (!currentUid) return;
+        try { if (typeof syncGameStats === 'function') await syncGameStats('wordle', stats); } catch (e) { console.error(e); }
+    }
+    async function awardPoints(points) {
+        if (currentUid && typeof addPointsToCurrentUser === 'function' && points > 0) {
+            const res = await addPointsToCurrentUser(points, 'wordle');
+            if (res?.success) {
+                const earned = res.points;
+                if (typeof showToast === 'function') showToast(`+${earned} баллов${earned > points ? ' (x2 бонус)' : ''} за Wordle!`, 'success');
+            }
+        }
+    }
+
+    /* ---------- Игровая логика ---------- */
+    function resetBoard() {
+        board = Array.from({length: WORDLE_ATTEMPTS}, () => Array(WORDLE_LENGTH).fill(''));
+        boardStates = Array.from({length: WORDLE_ATTEMPTS}, () => Array(WORDLE_LENGTH).fill(''));
+        currentRow = 0; currentCol = 0;
+        keyStates = {};
+    }
+    function initGame() {
+        gameInitialized = true;
+        keyStates = {};
+        if (gameMode === 'daily') {
+            if (stats.lastDaily === todayStr()) {
+                gameActive = false; gameOver = true;
+                return;
+            }
+            currentWord = getWordleDailyWord();
+        } else {
+            currentWord = getWordleRandomWord();
+        }
+        resetBoard();
+        gameActive = true; gameOver = false;
+    }
+
+    function addLetter(letter) {
+        if (!gameActive || gameOver || isAnimating) return;
+        if (currentCol >= WORDLE_LENGTH) return;
+        letter = wordleNormalize(letter);
+        if (!/^[а-я]$/.test(letter)) return;
+        board[currentRow][currentCol] = letter;
+        const tile = tileEls[currentRow][currentCol];
+        tile.textContent = letter;
+        tile.classList.add('filled');
+        currentCol++;
+    }
+    function deleteLetter() {
+        if (!gameActive || gameOver || isAnimating) return;
+        if (currentCol <= 0) return;
+        currentCol--;
+        board[currentRow][currentCol] = '';
+        const tile = tileEls[currentRow][currentCol];
+        tile.textContent = '';
+        tile.classList.remove('filled');
+    }
+    function submitWord() {
+        if (!gameActive || gameOver || isAnimating) return;
+        if (currentCol < WORDLE_LENGTH) {
+            if (typeof showToast === 'function') showToast('Слишком мало букв', 'info');
+            shakeRow(currentRow);
+            return;
+        }
+        const guess = board[currentRow].join('');
+        if (!isWordleGuessValid(guess)) {
+            if (typeof showToast === 'function') showToast('Нет такого слова', 'info');
+            shakeRow(currentRow);
+            return;
+        }
+        const results = evaluateWordleGuess(guess, currentWord);
+        revealRow(currentRow, results);
+    }
+
+    function revealRow(row, results) {
+        isAnimating = true;
+        const tiles = tileEls[row];
+        tiles.forEach((tile, i) => {
+            setTimeout(() => {
+                tile.classList.add('flip');
+                setTimeout(() => {
+                    tile.classList.add(results[i]);
+                    updateKeyDOM(board[row][i], results[i]);
+                }, 250);
+            }, i * 300);
+        });
+        setTimeout(() => {
+            isAnimating = false;
+            handlePostReveal(row, results);
+        }, WORDLE_LENGTH * 300 + 300);
+    }
+    function handlePostReveal(row, results) {
+        for (let c = 0; c < WORDLE_LENGTH; c++) boardStates[row][c] = results[c];
+        const won = results.every(r => r === 'correct');
+        if (won) { endGame(true); }
+        else if (row === WORDLE_ATTEMPTS - 1) { endGame(false); }
+        else { currentRow++; currentCol = 0; updateUI(); }
+    }
+    function updateKeyDOM(letter, state) {
+        if (!letter) return;
+        if (!keyStates[letter] || KEY_PRIORITY[state] > KEY_PRIORITY[keyStates[letter]]) {
+            keyStates[letter] = state;
+            const key = keyEls[letter];
+            if (key) { key.classList.remove('correct','present','absent'); key.classList.add(state); }
+        }
+    }
+    function shakeRow(row) {
+        const rowEl = tileEls[row][0]?.parentElement;
+        if (rowEl) { rowEl.classList.add('shake'); setTimeout(() => rowEl.classList.remove('shake'), 450); }
+    }
+
+    /* ---------- Завершение игры + очки ---------- */
+    async function endGame(won) {
+        gameActive = false; gameOver = true;
+        const attempts = currentRow + 1;
+        if (gameMode === 'daily') await finishDailyGame(won, attempts);
+        else await finishFreeGame(won, attempts);
+        if (typeof checkAndAwardAchievements === 'function') await checkAndAwardAchievements();
+        showGameOverOverlay(won);
+        updateUI();
+    }
+    async function finishDailyGame(won, attempts) {
+        stats.games++; lastEarnedPoints = 0;
+        stats.lastDailyWon = won; stats.lastDailyAttempts = attempts;
+        if (won) {
+            stats.wins++;
+            if (attempts >= 1 && attempts <= 6) stats.dist[attempts-1]++;
+            stats.streak = (stats.lastDaily === yesterdayStr()) ? stats.streak + 1 : 1;
+            stats.maxStreak = Math.max(stats.maxStreak, stats.streak);
+            // (7 − попытка) × 4, +2 за стрик ≥ 3
+            lastEarnedPoints = (7 - attempts) * 4;
+            if (stats.streak >= 3) lastEarnedPoints += 2;
+        } else {
+            stats.streak = 0;
+        }
+        stats.lastDaily = todayStr();
+        await saveStats();
+        if (lastEarnedPoints > 0) await awardPoints(lastEarnedPoints);
+    }
+    async function finishFreeGame(won, attempts) {
+        stats.games++; lastEarnedPoints = 0;
+        if (won) {
+            stats.wins++;
+            if (attempts >= 1 && attempts <= 6) stats.dist[attempts-1]++;
+            if (stats.lastFreeDate !== todayStr()) { stats.freeWinsToday = 0; stats.lastFreeDate = todayStr(); }
+            if (stats.freeWinsToday < 3) {
+                stats.freeWinsToday++;
+                lastEarnedPoints = 2; // 2 балла за победу в свободной игре
+            } else if (typeof showToast === 'function') {
+                showToast('Лимит очков за свободную игру на сегодня исчерпан', 'info');
+            }
+        }
+        await saveStats();
+        if (lastEarnedPoints > 0) await awardPoints(lastEarnedPoints);
+    }
+
+    /* ---------- Оверлей результата ---------- */
+    function showGameOverOverlay(won) {
+        const wrapper = document.getElementById('board-wrapper');
+        if (!wrapper) return;
+        wrapper.querySelectorAll('.wordle-overlay').forEach(o => o.remove());
+        const ov = document.createElement('div');
+        ov.className = 'wordle-overlay';
+        const attempts = currentRow + 1;
+        const pointsHtml = (won && lastEarnedPoints > 0) ? `<div class="ov-points">+${lastEarnedPoints} баллов</div>` : '';
+        ov.innerHTML = `
+            <div class="ov-title">${won ? '🎉 Победа!' : '😔 Не угадали'}</div>
+            <div class="ov-word">${currentWord.toUpperCase()}</div>
+            ${won ? `<div class="ov-sub">Угадано за ${attempts} попыток</div>` : '<div class="ov-sub">Попробуйте ещё раз!</div>'}
+            ${pointsHtml}
+            <div class="ov-btns">
+                ${gameMode === 'free' ? '<button class="btn" id="ov-again">Играть ещё</button>' : ''}
+                <button class="btn" id="ov-share">📋 Поделиться</button>
+            </div>`;
+        wrapper.appendChild(ov);
+        const againBtn = document.getElementById('ov-again');
+        if (againBtn) againBtn.addEventListener('click', () => { ov.remove(); startFreeGame(); });
+        document.getElementById('ov-share').addEventListener('click', shareResult);
+    }
+    function shareResult() {
+        let lastRow = 0;
+        for (let r = 0; r < WORDLE_ATTEMPTS; r++) if (boardStates[r].some(s => s)) lastRow = r;
+        const won = boardStates[lastRow].every(s => s === 'correct');
+        let text = `Wordle КЦ ${won ? lastRow + 1 : 'X'}/6\n`;
+        for (let r = 0; r <= lastRow; r++) {
+            for (let c = 0; c < WORDLE_LENGTH; c++) {
+                const s = boardStates[r][c];
+                text += s === 'correct' ? '🟩' : s === 'present' ? '🟨' : '⬜';
+            }
+            if (r < lastRow) text += '\n';
+        }
+        if (navigator.clipboard) {
+            navigator.clipboard.writeText(text)
+                .then(() => { if (typeof showToast === 'function') showToast('Результат скопирован!', 'success'); })
+                .catch(() => { if (typeof showToast === 'function') showToast('Не удалось скопировать', 'error'); });
+        } else if (typeof showToast === 'function') showToast('Буфер обмена недоступен', 'error');
+    }
+
+    /* ---------- Рендер вкладки «Игра» ---------- */
+    function renderGameTab() {
+        gameContainer.innerHTML = `
+            <div class="mode-selector">
+                <button class="mode-btn ${gameMode==='daily'?'active':''}" id="mode-daily">📅 Слово дня</button>
+                <button class="mode-btn ${gameMode==='free'?'active':''}" id="mode-free">🎲 Свободная игра</button>
+            </div>
+            <div id="daily-banner"></div>
+            <div class="wordle-stats">
+                <div class="stat-card"><span class="stat-icon">🎯</span><span>Попытка: <span id="attempt" class="stat-value">${Math.min(currentRow+1,6)}/6</span></span></div>
+                <div class="stat-card"><span class="stat-icon">🔥</span><span>Стрик: <span id="streak" class="stat-value">${stats.streak}</span></span></div>
+                <div class="stat-card"><span class="stat-icon">🏆</span><span>Побед: <span id="wins" class="stat-value">${stats.wins}</span></span></div>
+            </div>
+            <div class="board-wrapper" id="board-wrapper">
+                <div class="wordle-grid" id="wordle-grid"></div>
+            </div>
+            <div class="keyboard" id="keyboard"></div>
+            <div class="controls-bar">
+                <button class="btn" id="new-game-btn">🔄 Новая игра</button>
+                <button class="btn" id="stats-btn">📊 Моя статистика</button>
+            </div>
+            <div id="stats-panel" style="display:none;"></div>
+        `;
+        buildGrid();
+        buildKeyboard();
+        attachHandlers();
+        if (!gameInitialized) initGame();
+        fillBoardFromState();
+        if (gameMode === 'daily' && stats.lastDaily === todayStr()) showDailyAlreadyPlayed();
+        if (gameOver && gameMode === 'daily' && stats.lastDaily === todayStr()) showGameOverOverlay(stats.lastDailyWon);
+        updateUI();
+    }
+    function attachHandlers() {
+        document.getElementById('mode-daily').addEventListener('click', () => switchMode('daily'));
+        document.getElementById('mode-free').addEventListener('click', () => switchMode('free'));
+        document.getElementById('new-game-btn').addEventListener('click', () => {
+            if (gameMode === 'free') startFreeGame();
+            else if (typeof showToast === 'function') showToast('Слово дня можно сыграть только раз в день', 'info');
+        });
+        document.getElementById('stats-btn').addEventListener('click', toggleStatsPanel);
+    }
+    function switchMode(mode) {
+        gameMode = mode;
+        initGame();
+        document.getElementById('mode-daily')?.classList.toggle('active', mode === 'daily');
+        document.getElementById('mode-free')?.classList.toggle('active', mode === 'free');
+        const banner = document.getElementById('daily-banner');
+        if (banner) banner.innerHTML = '';
+        buildGrid(); buildKeyboard();
+        fillBoardFromState();
+        if (mode === 'daily' && stats.lastDaily === todayStr()) showDailyAlreadyPlayed();
+        updateUI();
+    }
+    function startFreeGame() {
+        gameMode = 'free';
+        initGame();
+        buildGrid(); buildKeyboard();
+        fillBoardFromState();
+        updateUI();
+    }
+    function showDailyAlreadyPlayed() {
+        const banner = document.getElementById('daily-banner');
+        if (!banner) return;
+        const word = getWordleDailyWord();
+        if (stats.lastDailyWon) {
+            banner.innerHTML = `<div class="banner success">✅ Вы уже угадали слово дня за ${stats.lastDailyAttempts} попыток. Возвращайтесь завтра!</div>`;
+        } else {
+            banner.innerHTML = `<div class="banner">Слово дня было: <b>${word.toUpperCase()}</b>. Попробуйте свободную игру!</div>`;
+        }
+    }
+
+    function buildGrid() {
+        const grid = document.getElementById('wordle-grid');
+        if (!grid) return;
+        grid.innerHTML = '';
+        tileEls = [];
+        for (let r = 0; r < WORDLE_ATTEMPTS; r++) {
+            const rowEl = document.createElement('div');
+            rowEl.className = 'grid-row';
+            const rowTiles = [];
+            for (let c = 0; c < WORDLE_LENGTH; c++) {
+                const tile = document.createElement('div');
+                tile.className = 'tile';
+                rowEl.appendChild(tile);
+                rowTiles.push(tile);
+            }
+            grid.appendChild(rowEl);
+            tileEls.push(rowTiles);
+        }
+    }
+    function buildKeyboard() {
+        const kb = document.getElementById('keyboard');
+        if (!kb) return;
+        kb.innerHTML = '';
+        keyEls = {};
+        KB_ROWS.forEach(row => {
+            const rowEl = document.createElement('div');
+            rowEl.className = 'kb-row';
+            row.forEach(k => {
+                const btn = document.createElement('button');
+                if (k === 'enter') { btn.className = 'key wide'; btn.textContent = '⏎'; btn.addEventListener('click', submitWord); }
+                else if (k === 'backspace') { btn.className = 'key wide'; btn.textContent = '⌫'; btn.addEventListener('click', deleteLetter); }
+                else { btn.className = 'key'; btn.textContent = k; btn.addEventListener('click', () => addLetter(k)); keyEls[k] = btn; }
+                rowEl.appendChild(btn);
+            });
+            kb.appendChild(rowEl);
+        });
+    }
+    function fillBoardFromState() {
+        for (let r = 0; r < WORDLE_ATTEMPTS; r++) {
+            for (let c = 0; c < WORDLE_LENGTH; c++) {
+                const tile = tileEls[r]?.[c];
+                if (!tile) continue;
+                if (board[r][c]) { tile.textContent = board[r][c]; tile.classList.add('filled'); }
+                if (boardStates[r][c]) tile.classList.add(boardStates[r][c]);
+            }
+        }
+        for (const letter in keyStates) {
+            const key = keyEls[letter];
+            if (key) { key.classList.remove('correct','present','absent'); key.classList.add(keyStates[letter]); }
+        }
+    }
+    function updateUI() {
+        const attemptEl = document.getElementById('attempt');
+        const streakEl = document.getElementById('streak');
+        const winsEl = document.getElementById('wins');
+        if (attemptEl) attemptEl.textContent = `${Math.min(currentRow + 1, 6)}/6`;
+        if (streakEl) streakEl.textContent = stats.streak;
+        if (winsEl) winsEl.textContent = stats.wins;
+    }
+
+    /* ---------- Моя статистика ---------- */
+    function toggleStatsPanel() {
+        const panel = document.getElementById('stats-panel');
+        if (!panel) return;
+        if (panel.style.display === 'none') { renderMyStats(); panel.style.display = 'block'; }
+        else panel.style.display = 'none';
+    }
+    function renderMyStats() {
+        const panel = document.getElementById('stats-panel');
+        if (!panel) return;
+        const rate = stats.games > 0 ? Math.round((stats.wins / stats.games) * 100) : 0;
+        const dist = stats.dist, max = Math.max(...dist, 1);
+        let distHtml = '';
+        for (let i = 0; i < 6; i++) {
+            const val = dist[i] || 0;
+            const width = Math.max(Math.round((val / max) * 100), 12);
+            distHtml += `<div class="dist-row"><span class="dist-label">${i+1}</span><div class="dist-bar" style="width:${width}%">${val}</div></div>`;
+        }
+        panel.innerHTML = `
+            <div class="my-stats">
+                <div class="stats-grid">
+                    <div class="ms-item"><span class="stat-value">${stats.games}</span><small>Игр</small></div>
+                    <div class="ms-item"><span class="stat-value">${stats.wins}</span><small>Побед</small></div>
+                    <div class="ms-item"><span class="stat-value">${rate}%</span><small>Winrate</small></div>
+                    <div class="ms-item"><span class="stat-value">${stats.streak}</span><small>Стрик</small></div>
+                    <div class="ms-item"><span class="stat-value">${stats.maxStreak}</span><small>Макс. стрик</small></div>
+                </div>
+                <h4>Распределение побед по попыткам</h4>
+                <div class="distribution">${distHtml}</div>
+            </div>`;
+    }
+
+    /* ---------- Физическая клавиатура ---------- */
+    document.addEventListener('keydown', handleKeyDown);
+    function handleKeyDown(e) {
+        if (!gameActive || gameOver || isAnimating) return;
+        if (e.key === 'Enter') { e.preventDefault(); submitWord(); }
+        else if (e.key === 'Backspace') { e.preventDefault(); deleteLetter(); }
+        else {
+            const letter = wordleNormalize(e.key);
+            if (/^[а-я]$/.test(letter)) addLetter(letter);
+        }
+    }
+
+    /* ---------- Таблица лидеров ---------- */
+    async function renderLeaderboardTab() {
+        gameContainer.innerHTML = '<p>Загрузка...</p>';
+        try {
+            const { data: users, error } = await supabase.from('users').select('id, data').neq('data->>role', 'admin');
+            if (error) throw error;
+            const streakL = [], winsL = [], rateL = [];
+            (users || []).forEach(u => {
+                const st = u.data?.gameStats?.wordle || {}, un = u.data?.username || 'Аноним';
+                if (st.maxStreak > 0) streakL.push({ username: un, value: st.maxStreak, uid: u.id });
+                if (st.wins > 0) winsL.push({ username: un, value: st.wins, uid: u.id });
+                if (st.games >= 5 && st.wins > 0) rateL.push({ username: un, value: Math.round((st.wins / st.games) * 100), uid: u.id });
+            });
+            streakL.sort((a,b) => b.value - a.value);
+            winsL.sort((a,b) => b.value - a.value);
+            rateL.sort((a,b) => b.value - a.value);
+            let html = buildTable('🔥 Лучший стрик', streakL.slice(0,10), 'дн.')
+                     + buildTable('🏆 Больше всего побед', winsL.slice(0,10), 'побед')
+                     + buildTable('🎯 Лучший winrate', rateL.slice(0,10), '%');
+            gameContainer.innerHTML = html || '<p>Нет рекордов.</p>';
+        } catch (e) { gameContainer.innerHTML = '<p>Ошибка загрузки.</p>'; }
+    }
+    function buildTable(title, data, suffix) {
+        if (!data.length) return '';
+        let h = `<div class="leaderboard-wordle"><h3>${title}</h3><table><tr><th>#</th><th>Игрок</th><th>${suffix}</th></tr>`;
+        data.forEach((p, i) => { h += `<tr${p.uid === currentUid ? ' class="me"' : ''}><td>${i+1}</td><td>${p.username}</td><td>${p.value}</td></tr>`; });
+        return h + '</table></div>';
+    }
+})();
+</script>
+</body>
+</html>
