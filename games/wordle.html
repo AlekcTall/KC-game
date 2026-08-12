@@ -505,6 +505,7 @@
     function todayStr() { return dateStr(new Date()); }
     function yesterdayStr() { const d = new Date(); d.setDate(d.getDate()-1); return dateStr(d); }
 
+    /* ========== СЕРВЕРНАЯ ПРОВЕРКА БЛОКИРОВКИ ========== */
     async function verifyDailyLockFromServer() {
         if (!currentUid) return false;
         try {
@@ -513,13 +514,11 @@
                 .select('data')
                 .eq('id', currentUid)
                 .single();
-            
             if (error || !row) return false;
-            
             const serverLastDaily = row.data?.gameStats?.wordle?.lastDaily;
             return serverLastDaily === todayStr();
         } catch (e) {
-            console.error('Ошибка серверной проверки:', e);
+            console.error('[DEBUG] Ошибка серверной проверки:', e);
             return false;
         }
     }
@@ -530,6 +529,7 @@
         return stats.lastDaily === todayStr();
     }
 
+    /* ========== АВТОРИЗАЦИЯ ========== */
     if (typeof onAuthStateChange === 'function') {
         onAuthStateChange(async (event, session) => {
             if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
@@ -553,12 +553,13 @@
             switchTab(tab.dataset.tab);
         });
     });
-    
+
     function switchTab(tab) {
         if (tab === 'game') renderGameTab();
         else if (tab === 'leaderboard') renderLeaderboardTab();
     }
 
+    /* ========== ЗАГРУЗКА СТАТИСТИКИ ========== */
     async function loadStats() {
         if (!currentUid) return;
         try {
@@ -567,9 +568,7 @@
                 .select('data')
                 .eq('id', currentUid)
                 .single();
-            
             if (error) { console.error('Ошибка загрузки:', error); return; }
-            
             if (row && row.data) {
                 const st = row.data?.gameStats?.wordle;
                 if (st) {
@@ -584,76 +583,52 @@
         }
     }
 
-    // ✅ ИСПРАВЛЕНИЕ: Безопасное частичное обновление
+    /* ========== БЕЗОПАСНОЕ СОХРАНЕНИЕ (MERGE) ========== */
     async function saveStats() {
         if (!currentUid) return false;
-        
         try {
-            // 1. Загружаем ТЕКУЩИЕ данные пользователя
+            // 1. Загружаем текущие данные
             const { data: current, error: loadError } = await supabase
                 .from('users')
                 .select('data')
                 .eq('id', currentUid)
                 .single();
-            
-            if (loadError) {
-                console.error('Ошибка загрузки для сохранения:', loadError);
-                throw loadError;
-            }
-            
-            // 2. МЕРЖИМ: сохраняем ВСЁ что было, обновляем только wordle
+            if (loadError) throw loadError;
+
+            // 2. Мержим: сохраняем ВСЁ, обновляем только wordle
             const currentData = current?.data || {};
             const updatedData = {
-                ...currentData,                          // ВСЕ существующие данные
+                ...currentData,
                 gameStats: {
-                    ...currentData.gameStats,            // Все существующие игры
-                    wordle: { ...stats }                 // Обновляем только Wordle
+                    ...currentData.gameStats,
+                    wordle: { ...stats }
                 }
             };
-            
-            // 3. Сохраняем ОБЪЕДИНЁННЫЕ данные
+
+            // 3. Сохраняем
             const { error: saveError } = await supabase
                 .from('users')
                 .update({ data: updatedData })
                 .eq('id', currentUid);
-            
-            if (saveError) {
-                console.error('Ошибка сохранения:', saveError);
-                throw saveError;
-            }
-            
-            console.log('[DEBUG] Stats saved safely (merge)');
+            if (saveError) throw saveError;
+
             return true;
-            
         } catch (e) {
             console.error('Ошибка saveStats:', e);
-            
-            // Fallback на syncGameStats
             try {
                 if (typeof syncGameStats === 'function') {
                     await syncGameStats('wordle', stats);
                     return true;
                 }
-            } catch (e2) {
-                console.error('Fallback тоже не сработал:', e2);
-            }
-            
-            if (typeof showToast === 'function') {
-                showToast('Ошибка сохранения результата', 'error');
-            }
+            } catch (e2) { console.error('Fallback не сработал:', e2); }
+            if (typeof showToast === 'function') showToast('Ошибка сохранения результата', 'error');
             return false;
         }
     }
 
-    async function awardPoints(points, gameResult) {
+    /* ========== НАЧИСЛЕНИЕ ОЧКОВ (БЕЗ БЛОКИРОВКИ) ========== */
+    async function awardPoints(points) {
         if (!currentUid || points <= 0) return;
-        
-        const serverLocked = await verifyDailyLockFromServer();
-        if (gameMode === 'daily' && serverLocked) {
-            console.warn('Повторное начисление заблокировано');
-            return;
-        }
-        
         if (typeof addPointsToCurrentUser === 'function') {
             try {
                 const res = await addPointsToCurrentUser(points, 'wordle');
@@ -669,6 +644,7 @@
         }
     }
 
+    /* ========== ИГРОВАЯ ЛОГИКА ========== */
     function resetBoard() {
         board = Array.from({length: WORDLE_ATTEMPTS}, () => Array(WORDLE_LENGTH).fill(''));
         boardStates = Array.from({length: WORDLE_ATTEMPTS}, () => Array(WORDLE_LENGTH).fill(''));
@@ -679,11 +655,10 @@
 
     async function initGame() {
         if (!statsLoaded) return;
-        
         gameInitialized = true;
         keyStates = {};
-        resetBoard();
-        
+        resetBoard(); // Всегда инициализируем доску
+
         if (gameMode === 'daily') {
             const locked = await isDailyLocked();
             if (locked) {
@@ -695,7 +670,7 @@
         } else {
             currentWord = getWordleRandomWord();
         }
-        
+
         gameActive = true;
         gameOver = false;
     }
@@ -706,7 +681,7 @@
         letter = wordleNormalize(letter);
         if (!/^[а-я]$/.test(letter)) return;
         board[currentRow][currentCol] = letter;
-        const tile = tileEls[currentRow][currentCol];
+        const tile = tileEls[currentRow]?.[currentCol];
         if (tile) { tile.textContent = letter; tile.classList.add('filled'); }
         currentCol++;
     }
@@ -716,7 +691,7 @@
         if (currentCol <= 0) return;
         currentCol--;
         board[currentRow][currentCol] = '';
-        const tile = tileEls[currentRow][currentCol];
+        const tile = tileEls[currentRow]?.[currentCol];
         if (tile) { tile.textContent = ''; tile.classList.remove('filled'); }
     }
 
@@ -784,76 +759,106 @@
         }
     }
 
+    /* ========== ЗАВЕРШЕНИЕ ИГРЫ ========== */
     async function endGame(won) {
         if (gameOver) return;
         gameActive = false;
         gameOver = true;
         const attempts = currentRow + 1;
-        
+
         if (gameMode === 'daily') await finishDailyGame(won, attempts);
         else await finishFreeGame(won, attempts);
-        
+
+        // Достижения ПОСЛЕ сохранения статистики
         if (typeof checkAndAwardAchievements === 'function') {
             try { await checkAndAwardAchievements(); } catch (e) { console.error(e); }
         }
-        
+
         showGameOverOverlay(won);
         updateUI();
     }
 
     async function finishDailyGame(won, attempts) {
+        // Защита от повторного завершения
         const serverLocked = await verifyDailyLockFromServer();
-        if (serverLocked) return;
-        
+        if (serverLocked) {
+            console.warn('Повторное завершение игры дня заблокировано');
+            return;
+        }
+
         stats.games++;
         lastEarnedPoints = 0;
-        
+
         if (won) {
             stats.wins++;
             if (attempts >= 1 && attempts <= 6) stats.dist[attempts-1]++;
             stats.streak = (stats.lastDaily === yesterdayStr()) ? stats.streak + 1 : 1;
             stats.maxStreak = Math.max(stats.maxStreak, stats.streak);
+
             if (attempts <= 3) {
                 const yp = (stats.lastDaily === yesterdayStr() && stats.lastDailyWon && stats.lastDailyAttempts <= 3);
                 stats.perfectStreak = yp ? stats.perfectStreak + 1 : 1;
                 stats.bestPerfectStreak = Math.max(stats.bestPerfectStreak, stats.perfectStreak);
-            } else { stats.perfectStreak = 0; }
+            } else {
+                stats.perfectStreak = 0;
+            }
+
             lastEarnedPoints = (7 - attempts) * 4;
             if (stats.streak >= 3) lastEarnedPoints += 2;
         } else {
             stats.streak = 0;
             stats.perfectStreak = 0;
         }
-        
+
         stats.lastDaily = todayStr();
         stats.lastDailyWon = won;
         stats.lastDailyAttempts = attempts;
-        
+
         await saveStats();
-        if (lastEarnedPoints > 0) await awardPoints(lastEarnedPoints, { won, attempts });
+
+        // Начисление очков БЕЗ повторной проверки блокировки
+        if (lastEarnedPoints > 0) {
+            await awardPoints(lastEarnedPoints);
+        }
     }
 
     async function finishFreeGame(won, attempts) {
         stats.games++;
         lastEarnedPoints = 0;
+
         if (won) {
             stats.wins++;
             if (attempts >= 1 && attempts <= 6) stats.dist[attempts-1]++;
-            if (stats.lastFreeDate !== todayStr()) { stats.freeWinsToday = 0; stats.lastFreeDate = todayStr(); }
-            if (stats.freeWinsToday < 3) { stats.freeWinsToday++; lastEarnedPoints = 2; }
+            if (stats.lastFreeDate !== todayStr()) {
+                stats.freeWinsToday = 0;
+                stats.lastFreeDate = todayStr();
+            }
+            if (stats.freeWinsToday < 3) {
+                stats.freeWinsToday++;
+                lastEarnedPoints = 2;
+            } else if (typeof showToast === 'function') {
+                showToast('Лимит очков за свободную игру на сегодня исчерпан', 'info');
+            }
         }
+
         await saveStats();
-        if (lastEarnedPoints > 0) await awardPoints(lastEarnedPoints, { won, attempts });
+
+        if (lastEarnedPoints > 0) {
+            await awardPoints(lastEarnedPoints);
+        }
     }
 
+    /* ========== ОВЕРЛЕЙ РЕЗУЛЬТАТА ========== */
     function showGameOverOverlay(won) {
         const wrapper = document.getElementById('board-wrapper');
         if (!wrapper) return;
         wrapper.querySelectorAll('.wordle-overlay').forEach(o => o.remove());
+
         const ov = document.createElement('div');
         ov.className = 'wordle-overlay';
         const attempts = currentRow + 1;
         const pointsHtml = (won && lastEarnedPoints > 0) ? `<div class="ov-points">+${lastEarnedPoints} баллов</div>` : '';
+
         ov.innerHTML = `
             <div class="ov-title">${won ? '🎉 Победа!' : '😔 Не угадали'}</div>
             <div class="ov-word">${currentWord.toUpperCase()}</div>
@@ -863,15 +868,19 @@
                 ${gameMode === 'free' ? '<button class="btn" id="ov-again">Играть ещё</button>' : ''}
                 <button class="btn" id="ov-share">📋 Поделиться</button>
             </div>`;
+
         wrapper.appendChild(ov);
+
         const againBtn = document.getElementById('ov-again');
         if (againBtn) againBtn.addEventListener('click', () => { ov.remove(); startFreeGame(); });
-        document.getElementById('ov-share').addEventListener('click', shareResult);
+        document.getElementById('ov-share')?.addEventListener('click', shareResult);
     }
 
     function shareResult() {
         let lastRow = 0;
-        for (let r = 0; r < WORDLE_ATTEMPTS; r++) if (boardStates[r]?.some(s => s)) lastRow = r;
+        for (let r = 0; r < WORDLE_ATTEMPTS; r++) {
+            if (boardStates[r]?.some(s => s)) lastRow = r;
+        }
         const won = boardStates[lastRow]?.every(s => s === 'correct');
         let text = `Wordle КЦ ${won ? lastRow + 1 : 'X'}/6\n`;
         for (let r = 0; r <= lastRow; r++) {
@@ -885,9 +894,12 @@
             navigator.clipboard.writeText(text)
                 .then(() => { if (typeof showToast === 'function') showToast('Результат скопирован!', 'success'); })
                 .catch(() => { if (typeof showToast === 'function') showToast('Не удалось скопировать', 'error'); });
+        } else if (typeof showToast === 'function') {
+            showToast('Буфер обмена недоступен', 'error');
         }
     }
 
+    /* ========== РЕНДЕР ВКЛАДКИ «ИГРА» ========== */
     async function renderGameTab() {
         gameContainer.innerHTML = `
             <div class="mode-selector">
@@ -915,19 +927,19 @@
             </div>
             <div id="stats-panel" style="display:none;"></div>
         `;
-        
+
         buildGrid();
         buildKeyboard();
         attachHandlers();
-        
+
         if (!gameInitialized && statsLoaded) await initGame();
-        
+
         fillBoardFromState();
-        
+
         const locked = await isDailyLocked();
         if (gameMode === 'daily' && locked) showDailyAlreadyPlayed();
         if (gameOver && gameMode === 'daily' && locked) showGameOverOverlay(stats.lastDailyWon);
-        
+
         updateUI();
     }
 
@@ -954,13 +966,19 @@
         document.getElementById('mode-free')?.classList.toggle('active', mode === 'free');
         const banner = document.getElementById('daily-banner');
         if (banner) banner.innerHTML = '';
-        buildGrid(); buildKeyboard(); fillBoardFromState(); updateUI();
+        buildGrid();
+        buildKeyboard();
+        fillBoardFromState();
+        updateUI();
     }
 
     function startFreeGame() {
         gameMode = 'free';
         initGame();
-        buildGrid(); buildKeyboard(); fillBoardFromState(); updateUI();
+        buildGrid();
+        buildKeyboard();
+        fillBoardFromState();
+        updateUI();
     }
 
     function showDailyAlreadyPlayed() {
@@ -1004,9 +1022,22 @@
             rowEl.className = 'kb-row';
             row.forEach(k => {
                 const btn = document.createElement('button');
-                if (k === 'enter') { btn.className = 'key wide key-enter'; btn.textContent = '⏎'; btn.addEventListener('click', submitWord); }
-                else if (k === 'backspace') { btn.className = 'key wide key-backspace'; btn.textContent = '⌫'; btn.addEventListener('click', deleteLetter); }
-                else { btn.className = 'key'; btn.textContent = k; btn.addEventListener('click', () => addLetter(k)); keyEls[k] = btn; }
+                if (k === 'enter') {
+                    btn.className = 'key wide key-enter';
+                    btn.textContent = '⏎';
+                    btn.title = 'Enter — отправить слово';
+                    btn.addEventListener('click', submitWord);
+                } else if (k === 'backspace') {
+                    btn.className = 'key wide key-backspace';
+                    btn.textContent = '⌫';
+                    btn.title = 'Backspace — стереть букву';
+                    btn.addEventListener('click', deleteLetter);
+                } else {
+                    btn.className = 'key';
+                    btn.textContent = k;
+                    btn.addEventListener('click', () => addLetter(k));
+                    keyEls[k] = btn;
+                }
                 rowEl.appendChild(btn);
             });
             kb.appendChild(rowEl);
@@ -1026,7 +1057,10 @@
         }
         for (const letter in keyStates) {
             const key = keyEls[letter];
-            if (key) { key.classList.remove('correct','present','absent'); key.classList.add(keyStates[letter]); }
+            if (key) {
+                key.classList.remove('correct','present','absent');
+                key.classList.add(keyStates[letter]);
+            }
         }
     }
 
@@ -1040,8 +1074,13 @@
         if (s) s.textContent = stats.streak;
         if (w) w.textContent = stats.wins;
         if (n) {
-            if (gameMode === 'daily' && stats.lastDaily === todayStr()) { n.disabled = true; n.textContent = '🔒 Слово дня сыграно'; }
-            else { n.disabled = false; n.textContent = gameMode === 'free' ? '🔄 Новая игра' : '🔄 Слово дня'; }
+            if (gameMode === 'daily' && stats.lastDaily === todayStr()) {
+                n.disabled = true;
+                n.textContent = '🔒 Слово дня сыграно';
+            } else {
+                n.disabled = false;
+                n.textContent = gameMode === 'free' ? '🔄 Новая игра' : '🔄 Слово дня';
+            }
         }
         if (d && stats.lastDaily === todayStr()) d.disabled = true;
     }
@@ -1064,34 +1103,43 @@
             const w = Math.max(Math.round((v / max) * 100), 12);
             dh += `<div class="dist-row"><span class="dist-label">${i+1}</span><div class="dist-bar" style="width:${w}%">${v}</div></div>`;
         }
-        p.innerHTML = `<div class="my-stats">
-            <div class="stats-grid">
-                <div class="ms-item"><span class="stat-value">${stats.games}</span><small>Игр</small></div>
-                <div class="ms-item"><span class="stat-value">${stats.wins}</span><small>Побед</small></div>
-                <div class="ms-item"><span class="stat-value">${rate}%</span><small>Winrate</small></div>
-                <div class="ms-item"><span class="stat-value">${stats.streak}</span><small>Стрик</small></div>
-                <div class="ms-item"><span class="stat-value">${stats.maxStreak}</span><small>Макс. стрик</small></div>
-            </div>
-            <h4>Распределение побед по попыткам</h4>
-            <div class="distribution">${dh}</div>
-        </div>`;
+        p.innerHTML = `
+            <div class="my-stats">
+                <div class="stats-grid">
+                    <div class="ms-item"><span class="stat-value">${stats.games}</span><small>Игр</small></div>
+                    <div class="ms-item"><span class="stat-value">${stats.wins}</span><small>Побед</small></div>
+                    <div class="ms-item"><span class="stat-value">${rate}%</span><small>Winrate</small></div>
+                    <div class="ms-item"><span class="stat-value">${stats.streak}</span><small>Стрик</small></div>
+                    <div class="ms-item"><span class="stat-value">${stats.maxStreak}</span><small>Макс. стрик</small></div>
+                </div>
+                <h4>Распределение побед по попыткам</h4>
+                <div class="distribution">${dh}</div>
+            </div>`;
     }
 
+    /* ========== ФИЗИЧЕСКАЯ КЛАВИАТУРА ========== */
     document.addEventListener('keydown', handleKeyDown);
     function handleKeyDown(e) {
         if (!gameActive || gameOver || isAnimating) return;
         if (e.key === 'Enter') { e.preventDefault(); submitWord(); }
         else if (e.key === 'Backspace') { e.preventDefault(); deleteLetter(); }
-        else { const l = wordleNormalize(e.key); if (/^[а-я]$/.test(l)) addLetter(l); }
+        else {
+            const l = wordleNormalize(e.key);
+            if (/^[а-я]$/.test(l)) addLetter(l);
+        }
     }
 
+    /* ========== ТАБЛИЦА ЛИДЕРОВ ========== */
     async function renderLeaderboardTab() {
-        gameContainer.innerHTML = '<div style="text-align:center;padding:2rem;"><div class="loading-spinner"></div><p style="margin-top:1rem;color:#6b7280;">Загрузка...</p></div>';
+        gameContainer.innerHTML = '<div style="text-align:center;padding:2rem;"><div class="loading-spinner"></div><p style="margin-top:1rem;color:#6b7280;">Загрузка рекордов...</p></div>';
         try {
             if (!supabase) throw new Error('Supabase не инициализирован');
             const { data: users, error } = await supabase.from('users').select('id, data').limit(1000);
             if (error) throw error;
-            if (!users || !users.length) { gameContainer.innerHTML = '<div class="leaderboard-error"><p>😔 Пока нет рекордов.</p></div>'; return; }
+            if (!users || !users.length) {
+                gameContainer.innerHTML = '<div class="leaderboard-error"><p>😔 Пока нет рекордов. Будьте первым!</p></div>';
+                return;
+            }
             const sL = [], wL = [], rL = [];
             users.forEach(u => {
                 if (!u.data?.gameStats) return;
@@ -1100,23 +1148,27 @@
                 if (u.data.role === 'admin') return;
                 if (st.maxStreak > 0) sL.push({ username: un, value: st.maxStreak, uid: u.id });
                 if (st.wins > 0) wL.push({ username: un, value: st.wins, uid: u.id });
-                if (st.games >= 5 && st.wins > 0) rL.push({ username: un, value: Math.round((st.wins/st.games)*100), uid: u.id });
+                if (st.games >= 5 && st.wins > 0) rL.push({ username: un, value: Math.round((st.wins / st.games) * 100), uid: u.id });
             });
             sL.sort((a,b) => b.value - a.value);
             wL.sort((a,b) => b.value - a.value);
             rL.sort((a,b) => b.value - a.value);
-            let html = buildTable('🔥 Лучший стрик', sL.slice(0,10), 'дн.') + buildTable('🏆 Больше всего побед', wL.slice(0,10), 'побед') + buildTable('🎯 Лучший winrate', rL.slice(0,10), '%');
-            gameContainer.innerHTML = html || '<div class="leaderboard-error"><p>😔 Пока нет рекордов.</p></div>';
+            let html = buildTable('🔥 Лучший стрик', sL.slice(0,10), 'дн.')
+                     + buildTable('🏆 Больше всего побед', wL.slice(0,10), 'побед')
+                     + buildTable('🎯 Лучший winrate', rL.slice(0,10), '%');
+            gameContainer.innerHTML = html || '<div class="leaderboard-error"><p>😔 Пока нет рекордов. Будьте первым!</p></div>';
         } catch (e) {
-            console.error(e);
-            gameContainer.innerHTML = '<div class="leaderboard-error"><p>❌ Ошибка загрузки</p></div>';
+            console.error('Ошибка загрузки лидерборда:', e);
+            gameContainer.innerHTML = '<div class="leaderboard-error"><p>❌ Не удалось загрузить рекорды</p><p style="font-size:0.85rem;color:#9ca3af;">Попробуйте обновить страницу</p></div>';
         }
     }
 
     function buildTable(title, data, suffix) {
         if (!data.length) return '';
         let h = `<div class="leaderboard-wordle"><h3>${title}</h3><table><tr><th>#</th><th>Игрок</th><th>${suffix}</th></tr>`;
-        data.forEach((p, i) => { h += `<tr${p.uid === currentUid ? ' class="me"' : ''}><td>${i+1}</td><td>${p.username}</td><td>${p.value}</td></tr>`; });
+        data.forEach((p, i) => {
+            h += `<tr${p.uid === currentUid ? ' class="me"' : ''}><td>${i+1}</td><td>${p.username}</td><td>${p.value}</td></tr>`;
+        });
         return h + '</table></div>';
     }
 })();
