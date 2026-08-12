@@ -510,7 +510,7 @@
     function todayStr() { return dateStr(new Date()); }
     function yesterdayStr() { const d = new Date(); d.setDate(d.getDate()-1); return dateStr(d); }
 
-    // ========== СЕРВЕРНАЯ ПРОВЕРКА БЛОКИРОВКИ ==========
+    // ========== СЕРВЕРНАЯ ПРОВЕРКА ==========
     async function verifyDailyLockFromServer() {
         if (!currentUid) return false;
         
@@ -542,18 +542,13 @@
         }
     }
 
-    // ========== КОМБИНИРОВАННАЯ ПРОВЕРКА ==========
     async function isDailyLocked() {
-        // Сначала проверяем сервер (надёжный источник)
         const serverLocked = await verifyDailyLockFromServer();
-        
-        // Если сервер говорит что заблокировано - блокируем
         if (serverLocked) {
             console.log('[DEBUG] Заблокировано сервером');
             return true;
         }
         
-        // Если сервер не заблокировал, проверяем локальные данные
         const localLocked = stats.lastDaily === todayStr();
         console.log('[DEBUG] Локальная проверка:', { localLocked, lastDaily: stats.lastDaily });
         
@@ -590,7 +585,6 @@
         else if (tab === 'leaderboard') renderLeaderboardTab();
     }
 
-    // ========== ЗАГРУЗКА СТАТИСТИКИ ==========
     async function loadStats() {
         if (!currentUid) return;
         try {
@@ -621,12 +615,10 @@
         }
     }
 
-    // ========== СОХРАНЕНИЕ С ПРЯМЫМ ОБНОВЛЕНИЕМ ==========
     async function saveStats() {
         if (!currentUid) return false;
         
         try {
-            // ПРЯМОЕ обновление через Supabase для надёжности
             const { error } = await supabase
                 .from('users')
                 .update({
@@ -649,7 +641,6 @@
         } catch (e) {
             console.error('Ошибка сохранения статистики:', e);
             
-            // Fallback на syncGameStats если прямой запрос не сработал
             try {
                 if (typeof syncGameStats === 'function') {
                     await syncGameStats('wordle', stats);
@@ -670,7 +661,6 @@
     async function awardPoints(points, gameResult) {
         if (!currentUid || points <= 0) return;
         
-        // СЕРВЕРНАЯ ПРОВЕРКА перед начислением
         const serverLocked = await verifyDailyLockFromServer();
         if (gameMode === 'daily' && serverLocked) {
             console.warn('Попытка повторного начисления очков заблокирована сервером');
@@ -700,7 +690,7 @@
         keyStates = {};
     }
 
-    // ========== ИНИЦИАЛИЗАЦИЯ С СЕРВЕРНОЙ ПРОВЕРКОЙ ==========
+    // ИСПРАВЛЕНИЕ: resetBoard() вызывается ВСЕГДА
     async function initGame() {
         if (!statsLoaded) {
             console.warn('Статистика ещё не загружена');
@@ -710,8 +700,10 @@
         gameInitialized = true;
         keyStates = {};
         
+        // ВСЕГДА инициализируем доску
+        resetBoard();
+        
         if (gameMode === 'daily') {
-            // СЕРВЕРНАЯ ПРОВЕРКА блокировки
             const locked = await isDailyLocked();
             if (locked) {
                 gameActive = false;
@@ -724,7 +716,6 @@
             currentWord = getWordleRandomWord();
         }
         
-        resetBoard();
         gameActive = true;
         gameOver = false;
     }
@@ -820,7 +811,6 @@
         }
     }
 
-    // ========== ЗАВЕРШЕНИЕ ИГРЫ ==========
     async function endGame(won) {
         if (gameOver) {
             console.warn('Игра уже завершена');
@@ -837,7 +827,6 @@
             await finishFreeGame(won, attempts);
         }
         
-        // Достижения ПОСЛЕ сохранения
         if (typeof checkAndAwardAchievements === 'function') {
             try {
                 await checkAndAwardAchievements();
@@ -852,7 +841,6 @@
     }
 
     async function finishDailyGame(won, attempts) {
-        // СЕРВЕРНАЯ ПРОВЕРКА перед завершением
         const serverLocked = await verifyDailyLockFromServer();
         if (serverLocked) {
             console.warn('Попытка повторного завершения игры дня заблокирована сервером');
@@ -890,7 +878,6 @@
         stats.lastDailyWon = won;
         stats.lastDailyAttempts = attempts;
         
-        // СОХРАНЕНИЕ С ОЖИДАНИЕМ
         const saved = await saveStats();
         if (!saved) {
             console.error('Не удалось сохранить статистику!');
@@ -1035,7 +1022,6 @@
         
         fillBoardFromState();
         
-        // Проверяем блокировку и обновляем UI
         const locked = await isDailyLocked();
         if (gameMode === 'daily' && locked) {
             showDailyAlreadyPlayed();
@@ -1181,8 +1167,13 @@
         });
     }
 
+    // ИСПРАВЛЕНИЕ: Добавлена защита от undefined
     function fillBoardFromState() {
+        if (!board || !boardStates || !tileEls) return;
+        
         for (let r = 0; r < WORDLE_ATTEMPTS; r++) {
+            if (!board[r] || !boardStates[r] || !tileEls[r]) continue;
+            
             for (let c = 0; c < WORDLE_LENGTH; c++) {
                 const tile = tileEls[r]?.[c];
                 if (!tile) continue;
@@ -1217,7 +1208,6 @@
         if (streakEl) streakEl.textContent = stats.streak;
         if (winsEl) winsEl.textContent = stats.wins;
         
-        // Обновляем состояние кнопки "Новая игра"
         if (newGameBtn) {
             if (gameMode === 'daily' && stats.lastDaily === todayStr()) {
                 newGameBtn.disabled = true;
@@ -1228,7 +1218,6 @@
             }
         }
         
-        // Блокируем кнопку "Слово дня" если уже играли
         if (dailyBtn && stats.lastDaily === todayStr()) {
             dailyBtn.disabled = true;
         }
