@@ -728,21 +728,20 @@
     }
 
     /**
-     * Загрузка лидерборда с числовой сортировкой (::int)
-     * и автоматическим fallback на клиентскую сортировку
+     * Загрузка лидерборда с клиентской сортировкой.
+     * Серверная сортировка по JSONB с ::int не поддерживается PostgREST,
+     * поэтому загружаем до 200 записей и сортируем на клиенте.
      */
     async function updateTop() { 
         const tbody = document.querySelector('#top-table tbody'); 
         if (!tbody || !currentUid) return; 
         
-        try { 
-            // Числовая сортировка на сервере через приведение типа ::int
+        try {
             const { data: users, error } = await supabase
                 .from('users')
                 .select('id, data')
                 .neq('data->>role', 'admin')
-                .order("(data->'gameStats'->'2048'->>'maxScore')::int", { ascending: false })
-                .limit(10);
+                .limit(200);
 
             if (error) throw error;
 
@@ -752,7 +751,9 @@
                     username: u.data?.username || 'Аноним', 
                     score: parseInt(u.data?.gameStats?.['2048']?.maxScore) || 0 
                 }))
-                .filter(p => p.score > 0);
+                .filter(p => p.score > 0)
+                .sort((a, b) => b.score - a.score)
+                .slice(0, 10);
 
             tbody.innerHTML = players.length > 0
                 ? players.map((p, i) => { 
@@ -760,38 +761,10 @@
                     return `<tr${me}><td>${i+1}</td><td>${p.username}</td><td>${p.score.toLocaleString()}</td></tr>`; 
                 }).join('')
                 : '<tr><td colspan="3">Пока нет рекордов</td></tr>';
-        } catch (e) { 
-            console.warn('Серверная сортировка недоступна, используем клиентский fallback:', e.message);
-            
-            // Fallback: загружаем до 200 записей и сортируем на клиенте
-            try {
-                const { data: users } = await supabase
-                    .from('users')
-                    .select('id, data')
-                    .neq('data->>role', 'admin')
-                    .limit(200);
-
-                const players = (users || [])
-                    .map(u => ({ 
-                        uid: u.id, 
-                        username: u.data?.username || 'Аноним', 
-                        score: parseInt(u.data?.gameStats?.['2048']?.maxScore) || 0 
-                    }))
-                    .filter(p => p.score > 0)
-                    .sort((a, b) => b.score - a.score)
-                    .slice(0, 10);
-
-                tbody.innerHTML = players.length > 0
-                    ? players.map((p, i) => { 
-                        const me = (p.uid === currentUid) ? ' class="me"' : ''; 
-                        return `<tr${me}><td>${i+1}</td><td>${p.username}</td><td>${p.score.toLocaleString()}</td></tr>`; 
-                    }).join('')
-                    : '<tr><td colspan="3">Пока нет рекордов</td></tr>';
-            } catch (fallbackErr) {
-                console.error('Ошибка загрузки лидерборда:', fallbackErr);
-                tbody.innerHTML = '<tr><td colspan="3">Ошибка загрузки рейтинга</td></tr>';
-            }
-        } 
+        } catch (e) {
+            console.error('Ошибка загрузки лидерборда:', e);
+            tbody.innerHTML = '<tr><td colspan="3">Ошибка загрузки рейтинга</td></tr>';
+        }
     }
 
     // Старт
