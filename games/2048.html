@@ -462,7 +462,7 @@
                 showEndGameModal(false);
             } 
 
-            // Сохраняем maxTile в реальном времени (опционально, можно оставить только в handleGameEnd)
+            // Сохраняем maxTile в реальном времени
             if (currentUid && typeof syncGameStats === 'function') {
                 syncGameStats('2048', { maxTile: maxTile }).catch(console.error);
                 if (typeof checkAndAwardAchievements === 'function') {
@@ -503,12 +503,12 @@
     }
 
     /* ==========================================
-       ОБНОВЛЕННАЯ ЛОГИКА СОХРАНЕНИЯ И ЛИДЕРОБОРДА
+       БЕЗОПАСНОЕ СОХРАНЕНИЕ И ЛИДЕРОБОРД
        ========================================== */
 
     /**
      * Безопасно обновляет статистику 2048, сохраняя все остальные данные пользователя.
-     * Использует read-modify-write с Math.max для защиты от перезаписи.
+     * Read-modify-write с Math.max для защиты от перезаписи.
      */
     async function saveGameProgress(newStats) {
         if (!currentUid) return;
@@ -520,7 +520,7 @@
                 return;
             }
 
-            // 2. Fallback: Прямой безопасный апдейт через Supabase
+            // 2. Fallback: прямой безопасный апдейт через Supabase
             const { data: userData, error: fetchError } = await supabase
                 .from('users')
                 .select('data')
@@ -667,7 +667,6 @@
 
         if (typeof onAuthStateChange === 'function') {
             onAuthStateChange((event, session) => {
-                // INITIAL_SESSION уже обработан выше через getSession
                 if (event === 'SIGNED_IN' && session?.user) {
                     currentUid = session.user.id;
                     loadBestAndTop();
@@ -704,8 +703,8 @@
                     
                 if (!error && row?.data?.gameStats?.['2048']) { 
                     const stats = row.data.gameStats['2048'];
-                    bestScore = stats.maxScore || bestScore; 
-                    maxTile = stats.maxTile || maxTile; 
+                    bestScore = parseInt(stats.maxScore) || bestScore; 
+                    maxTile = parseInt(stats.maxTile) || maxTile; 
                     updateScore();
                 } 
             } catch (e) { console.error('Ошибка загрузки рекорда:', e); } 
@@ -728,19 +727,21 @@
         } 
     }
 
+    /**
+     * Загрузка лидерборда с числовой сортировкой (::int)
+     * и автоматическим fallback на клиентскую сортировку
+     */
     async function updateTop() { 
         const tbody = document.querySelector('#top-table tbody'); 
         if (!tbody || !currentUid) return; 
         
         try { 
-            // Сортировка и лимит на стороне сервера (без создания доп. индексов)
-            // Если order по JSONB не поддерживается вашей версией Supabase, 
-            // он вернет ошибку и сработает fallback ниже
+            // Числовая сортировка на сервере через приведение типа ::int
             const { data: users, error } = await supabase
                 .from('users')
                 .select('id, data')
                 .neq('data->>role', 'admin')
-                .order('data->gameStats->2048->>maxScore', { ascending: false })
+                .order("(data->'gameStats'->'2048'->>'maxScore')::int", { ascending: false })
                 .limit(10);
 
             if (error) throw error;
@@ -749,7 +750,7 @@
                 .map(u => ({ 
                     uid: u.id, 
                     username: u.data?.username || 'Аноним', 
-                    score: u.data?.gameStats?.['2048']?.maxScore || 0 
+                    score: parseInt(u.data?.gameStats?.['2048']?.maxScore) || 0 
                 }))
                 .filter(p => p.score > 0);
 
@@ -762,7 +763,7 @@
         } catch (e) { 
             console.warn('Серверная сортировка недоступна, используем клиентский fallback:', e.message);
             
-            // Fallback: загружаем ограниченное кол-во и сортируем на клиенте
+            // Fallback: загружаем до 200 записей и сортируем на клиенте
             try {
                 const { data: users } = await supabase
                     .from('users')
@@ -774,7 +775,7 @@
                     .map(u => ({ 
                         uid: u.id, 
                         username: u.data?.username || 'Аноним', 
-                        score: u.data?.gameStats?.['2048']?.maxScore || 0 
+                        score: parseInt(u.data?.gameStats?.['2048']?.maxScore) || 0 
                     }))
                     .filter(p => p.score > 0)
                     .sort((a, b) => b.score - a.score)
