@@ -462,6 +462,7 @@
                 showEndGameModal(false);
             } 
 
+            // Сохраняем maxTile в реальном времени (опционально, можно оставить только в handleGameEnd)
             if (currentUid && typeof syncGameStats === 'function') {
                 syncGameStats('2048', { maxTile: maxTile }).catch(console.error);
                 if (typeof checkAndAwardAchievements === 'function') {
@@ -501,16 +502,86 @@
         handleGameEnd();
     }
 
+    /* ==========================================
+       ОБНОВЛЕННАЯ ЛОГИКА СОХРАНЕНИЯ И ЛИДЕРОБОРДА
+       ========================================== */
+
+    /**
+     * Безопасно обновляет статистику 2048, сохраняя все остальные данные пользователя.
+     * Использует read-modify-write с Math.max для защиты от перезаписи.
+     */
+    async function saveGameProgress(newStats) {
+        if (!currentUid) return;
+
+        try {
+            // 1. Сначала пробуем через общий модуль storage.js
+            if (typeof syncGameStats === 'function') {
+                await syncGameStats('2048', newStats);
+                return;
+            }
+
+            // 2. Fallback: Прямой безопасный апдейт через Supabase
+            const { data: userData, error: fetchError } = await supabase
+                .from('users')
+                .select('data')
+                .eq('id', currentUid)
+                .single();
+
+            if (fetchError) throw fetchError;
+
+            const currentData = userData?.data || {};
+            const currentGameStats = currentData.gameStats || {};
+            const current2048 = currentGameStats['2048'] || {};
+
+            // Берем МАКСИМУМ между старым и новым значением
+            const merged2048 = {
+                maxScore: Math.max(current2048.maxScore || 0, newStats.maxScore || 0),
+                maxTile: Math.max(current2048.maxTile || 0, newStats.maxTile || 0),
+                updatedAt: new Date().toISOString()
+            };
+
+            // Формируем полный объект data, сохраняя ВСЕ существующие ключи
+            const updatedData = {
+                ...currentData,
+                gameStats: {
+                    ...currentGameStats,
+                    '2048': merged2048
+                }
+            };
+
+            const { error: updateError } = await supabase
+                .from('users')
+                .update({ data: updatedData })
+                .eq('id', currentUid);
+
+            if (updateError) throw updateError;
+
+        } catch (e) {
+            console.error('[2048] Ошибка сохранения прогресса:', e);
+            messageEl.textContent = '⚠️ Не удалось сохранить рекорд';
+        }
+    }
+
     async function handleGameEnd() { 
+        let isNewRecord = false;
+        
         if (score > bestScore) { 
             bestScore = score; 
-            updateScore(); 
-            if (currentUid && typeof syncGameStats === 'function') { 
-                await syncGameStats('2048', { maxScore: bestScore, maxTile: maxTile }); 
-                if (typeof checkAndAwardAchievements === 'function') await checkAndAwardAchievements(); 
-            } 
+            isNewRecord = true;
             messageEl.textContent = `🔥 Новый рекорд: ${bestScore}!`; 
         } 
+        
+        updateScore(); 
+        
+        // Надежное сохранение в Supabase при окончании игры
+        if (currentUid) {
+            await saveGameProgress({ maxScore: bestScore, maxTile: maxTile });
+            
+            if (isNewRecord && typeof checkAndAwardAchievements === 'function') {
+                await checkAndAwardAchievements().catch(console.error);
+            }
+        }
+        
         updateTop(); 
     }
 
@@ -580,7 +651,7 @@
         } 
     });
 
-    // Авторизация: сначала проверяем сессию напрямую, потом подписываемся на изменения
+    // Авторизация: исправлена гонка состояний
     async function initAuth() {
         try {
             const { data: { session } } = await supabase.auth.getSession();
@@ -596,13 +667,15 @@
 
         if (typeof onAuthStateChange === 'function') {
             onAuthStateChange((event, session) => {
-                if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
-                    if (session?.user) {
-                        currentUid = session.user.id;
-                        loadBestAndTop();
-                    }
-                } else {
+                // INITIAL_SESSION уже обработан выше через getSession
+                if (event === 'SIGNED_IN' && session?.user) {
+                    currentUid = session.user.id;
+                    loadBestAndTop();
+                } else if (event === 'SIGNED_OUT') {
                     currentUid = null;
+                    bestScore = 0;
+                    maxTile = 0;
+                    updateScore();
                     updateTopVisibility();
                 }
             });
@@ -610,29 +683,36 @@
     }
 
     async function loadBestAndTop() { 
-        // Сначала пытаемся взять рекорд из кеша
+        // 1. Быстрая загрузка из кеша (мгновенный UI)
         const cu = typeof getCurrentUser === 'function' ? getCurrentUser() : null;
-        if (cu?.gameStats?.['2048']?.maxTile) maxTile = cu.gameStats['2048'].maxTile; 
-        if (cu?.gameStats?.['2048']?.maxScore) bestScore = cu.gameStats['2048'].maxScore; 
+        if (cu?.gameStats?.['2048']) {
+            maxTile = cu.gameStats['2048'].maxTile || 0; 
+            bestScore = cu.gameStats['2048'].maxScore || 0; 
+        }
         
-        // Затем актуальные данные из базы
-        try { 
-            const { data: row, error } = await supabase
-                .from('users')
-                .select('data')
-                .eq('id', currentUid)
-                .single();
-            if (!error && row) { 
-                const stats = row.data?.gameStats?.['2048'] || {}; 
-                if (stats.maxScore) bestScore = stats.maxScore; 
-                if (stats.maxTile) maxTile = stats.maxTile; 
-            } 
-        } catch (e) { console.error(e); } 
+        updateScore();
+        messageEl.textContent = bestScore > 0 ? `Ваш рекорд: ${bestScore}` : 'Удачи!';
         
-        updateScore(); 
+        // 2. Актуализация из БД (фоновая)
+        if (currentUid) {
+            try { 
+                const { data: row, error } = await supabase
+                    .from('users')
+                    .select('data')
+                    .eq('id', currentUid)
+                    .single();
+                    
+                if (!error && row?.data?.gameStats?.['2048']) { 
+                    const stats = row.data.gameStats['2048'];
+                    bestScore = stats.maxScore || bestScore; 
+                    maxTile = stats.maxTile || maxTile; 
+                    updateScore();
+                } 
+            } catch (e) { console.error('Ошибка загрузки рекорда:', e); } 
+        }
+        
         updateTopVisibility(); 
         updateTop(); 
-        messageEl.textContent = bestScore > 0 ? `Ваш рекорд: ${bestScore}` : 'Удачи!'; 
     }
 
     function updateTopVisibility() { 
@@ -653,12 +733,15 @@
         if (!tbody || !currentUid) return; 
         
         try { 
-            // Загружаем всех пользователей, кроме админов, лимит 200
+            // Сортировка и лимит на стороне сервера (без создания доп. индексов)
+            // Если order по JSONB не поддерживается вашей версией Supabase, 
+            // он вернет ошибку и сработает fallback ниже
             const { data: users, error } = await supabase
                 .from('users')
                 .select('id, data')
                 .neq('data->>role', 'admin')
-                .limit(200);
+                .order('data->gameStats->2048->>maxScore', { ascending: false })
+                .limit(10);
 
             if (error) throw error;
 
@@ -668,18 +751,45 @@
                     username: u.data?.username || 'Аноним', 
                     score: u.data?.gameStats?.['2048']?.maxScore || 0 
                 }))
-                .filter(p => p.score > 0)               // только с рекордом
-                .sort((a, b) => b.score - a.score)      // по убыванию
-                .slice(0, 10);                           // топ-10
+                .filter(p => p.score > 0);
 
             tbody.innerHTML = players.length > 0
                 ? players.map((p, i) => { 
-                    const me = (currentUid && p.uid === currentUid) ? ' class="me"' : ''; 
+                    const me = (p.uid === currentUid) ? ' class="me"' : ''; 
                     return `<tr${me}><td>${i+1}</td><td>${p.username}</td><td>${p.score.toLocaleString()}</td></tr>`; 
                 }).join('')
                 : '<tr><td colspan="3">Пока нет рекордов</td></tr>';
         } catch (e) { 
-            console.error('Ошибка загрузки лидерборда:', e); 
+            console.warn('Серверная сортировка недоступна, используем клиентский fallback:', e.message);
+            
+            // Fallback: загружаем ограниченное кол-во и сортируем на клиенте
+            try {
+                const { data: users } = await supabase
+                    .from('users')
+                    .select('id, data')
+                    .neq('data->>role', 'admin')
+                    .limit(200);
+
+                const players = (users || [])
+                    .map(u => ({ 
+                        uid: u.id, 
+                        username: u.data?.username || 'Аноним', 
+                        score: u.data?.gameStats?.['2048']?.maxScore || 0 
+                    }))
+                    .filter(p => p.score > 0)
+                    .sort((a, b) => b.score - a.score)
+                    .slice(0, 10);
+
+                tbody.innerHTML = players.length > 0
+                    ? players.map((p, i) => { 
+                        const me = (p.uid === currentUid) ? ' class="me"' : ''; 
+                        return `<tr${me}><td>${i+1}</td><td>${p.username}</td><td>${p.score.toLocaleString()}</td></tr>`; 
+                    }).join('')
+                    : '<tr><td colspan="3">Пока нет рекордов</td></tr>';
+            } catch (fallbackErr) {
+                console.error('Ошибка загрузки лидерборда:', fallbackErr);
+                tbody.innerHTML = '<tr><td colspan="3">Ошибка загрузки рейтинга</td></tr>';
+            }
         } 
     }
 
