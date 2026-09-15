@@ -60,7 +60,6 @@
   </div>
   <div class="modal-overlay" id="confirm-lokoin-modal" style="display:none;"><div class="modal" style="max-width:350px; text-align:center;"><p id="confirm-lokoin-text"></p><button class="btn" id="confirm-lokoin-yes">Да</button><button class="btn btn-cancel" id="confirm-lokoin-no">Отмена</button></div></div>
 
-  <!-- Supabase SDK и модули -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="../js/supabase-config.js"></script>
   <script src="../js/auth.js"></script>
@@ -134,14 +133,8 @@
       if (settings.adaptiveMode !== false) { const totalActionsToday = Object.values(participantsData).reduce((s, p) => s + (p.lastResetDate === today ? Object.values(p.actions || {}).reduce((a, b) => a + b, 0) : 0), 0); if (totalActionsToday > 200) actualDecay *= 0.9; else if (totalActionsToday < 50) actualDecay *= 1.1; }
       currentHealth = Math.max(settings.minHealth || 50, (eventData.health !== undefined ? eventData.health : maxHealth) - hoursPassed * actualDecay);
 
-      // Загружаем админские события
-      const { data: adminEvents } = await supabase
-        .from('event_admin_events')
-        .select('*')
-        .eq('event_id', eventId);
-      let adminEventEffect = 0;
-      (adminEvents || []).forEach(ae => { if (ae.health_change) adminEventEffect += ae.health_change; });
-      currentHealth = Math.min(maxHealth, Math.max(settings.minHealth || 50, currentHealth + adminEventEffect));
+      // Ручные события админа теперь применяются к events.health напрямую, 
+      // повторный пересчёт здесь убран, чтобы не было двойного вычитания.
 
       // Загружаем активность
       const { data: activities } = await supabase
@@ -174,6 +167,10 @@
           if (userId) {
             const userData = participantsData[userId] || {};
             userActions = userData.actions || {};
+          }
+          // Обновляем health из свежих данных
+          if (data.health !== undefined && data.health !== null) {
+            currentHealth = data.health;
           }
           updateUI();
         })
@@ -324,14 +321,25 @@
       if (!activityLog.length) { activityFeed.innerHTML = '<h4>📜 Последние действия</h4><p style="text-align:center;color:#888;">Пока нет действий</p>'; return; }
       const nameMap = {};
       for (const a of activityLog) {
-        if (!nameMap[a.user_id]) {
-          const { data: userRow } = await supabase.from('users').select('data').eq('id', a.user_id).single();
-          nameMap[a.user_id] = userRow?.data?.username || 'Аноним';
+        if (!a.user_id || nameMap[a.user_id]) continue;
+        if (a.action_key && a.action_key.startsWith('admin_')) {
+          nameMap[a.user_id] = 'Администратор';
+          continue;
         }
+        const { data: userRow } = await supabase.from('users').select('data').eq('id', a.user_id).single();
+        nameMap[a.user_id] = userRow?.data?.username || 'Аноним';
       }
       activityFeed.innerHTML = '<h4>📜 Последние действия</h4>' + activityLog.slice(0, 15).map(a => {
         const time = a.created_at ? new Date(a.created_at).toLocaleTimeString('ru-RU') : '';
-        return `<div class="activity-item"><span class="act-icon">${a.action_icon || '🎯'}</span><span><strong>${nameMap[a.user_id]}</strong> ${a.action_name || ''} ${a.health_boost ? '+' + a.health_boost + '%' : ''}</span><span style="margin-left:auto;color:#888;font-size:0.75rem;">${time}</span></div>`;
+        const isAdmin = a.action_key && a.action_key.startsWith('admin_');
+        const displayName = isAdmin ? 'Администратор' : (nameMap[a.user_id] || 'Аноним');
+
+        if (isAdmin) {
+          const sign = a.health_boost > 0 ? '+' : '';
+          const boostText = a.health_boost ? ` ${sign}${a.health_boost} к здоровью` : '';
+          return `<div class="activity-item" style="background:#fff7e0; border-radius:6px; padding:0.4rem 0.6rem;"><span class="act-icon">${a.action_icon || '⚡'}</span><span><strong>${displayName}:</strong> ${a.action_name}${boostText}</span><span style="margin-left:auto;color:#888;font-size:0.75rem;">${time}</span></div>`;
+        }
+        return `<div class="activity-item"><span class="act-icon">${a.action_icon || '🎯'}</span><span><strong>${displayName}</strong> ${a.action_name || ''} ${a.health_boost ? '+' + a.health_boost + '%' : ''}</span><span style="margin-left:auto;color:#888;font-size:0.75rem;">${time}</span></div>`;
       }).join('');
     }
 
