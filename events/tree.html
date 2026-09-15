@@ -133,9 +133,6 @@
       if (settings.adaptiveMode !== false) { const totalActionsToday = Object.values(participantsData).reduce((s, p) => s + (p.lastResetDate === today ? Object.values(p.actions || {}).reduce((a, b) => a + b, 0) : 0), 0); if (totalActionsToday > 200) actualDecay *= 0.9; else if (totalActionsToday < 50) actualDecay *= 1.1; }
       currentHealth = Math.max(settings.minHealth || 50, (eventData.health !== undefined ? eventData.health : maxHealth) - hoursPassed * actualDecay);
 
-      // Админские события теперь применяются к events.health в момент клика.
-      // Повторный пересчёт здесь убран, чтобы не было двойного вычитания.
-
       const { data: activities } = await supabase
         .from('event_activity')
         .select('*')
@@ -284,7 +281,6 @@
       if (!evData.participants?.[userId]) stats.uniqueParticipants++;
       const newEvData = { ...evData, participants: participantsData, statistics: stats };
 
-      // Иконка и название — в JSONB-поле data
       await supabase.from('event_activity').insert([{
         event_id: eventId,
         user_id: userId,
@@ -316,6 +312,31 @@
 
     async function renderActivityFeed() {
       if (!activityLog.length) { activityFeed.innerHTML = '<h4>📜 Последние действия</h4><p style="text-align:center;color:#888;">Пока нет действий</p>'; return; }
+
+      // Словарь админских событий по action_key
+      const ADMIN_EVENT_MAP = {
+        admin_frost: { icon: '🥶', name: 'Заморозки' },
+        admin_locusts: { icon: '🦗', name: 'Нашествие саранчи' },
+        admin_birds: { icon: '🐦', name: 'Стая птиц' },
+        admin_hurricane: { icon: '🌪️', name: 'Ураган' },
+        admin_drought: { icon: '🔥', name: 'Засуха' },
+        admin_salt: { icon: '🧂', name: 'Засоление почвы' },
+        admin_rainbow: { icon: '🌈', name: 'Радуга' },
+        admin_ladybug: { icon: '🐞', name: 'Божьи коровки' }
+      };
+
+      // Словарь игровых действий
+      const PLAYER_ACTION_MAP = {
+        water: { icon: '💧', name: 'Полить' },
+        bugs: { icon: '🐛', name: 'Снять жуков' },
+        birds: { icon: '🦅', name: 'Отогнать птиц' },
+        fertilize: { icon: '🌿', name: 'Удобрить' },
+        tie: { icon: '🪴', name: 'Подвязать ветки' },
+        sing: { icon: '🎵', name: 'Спеть песню' },
+        lokoin: { icon: '🌞', name: 'Подарить свет' }
+      };
+
+      // Кэш имён пользователей
       const nameMap = {};
       for (const a of activityLog) {
         if (!a.user_id || nameMap[a.user_id]) continue;
@@ -326,11 +347,15 @@
         const { data: userRow } = await supabase.from('users').select('data').eq('id', a.user_id).single();
         nameMap[a.user_id] = userRow?.data?.username || 'Аноним';
       }
+
       activityFeed.innerHTML = '<h4>📜 Последние действия</h4>' + activityLog.slice(0, 15).map(a => {
         const time = a.created_at ? new Date(a.created_at).toLocaleTimeString('ru-RU') : '';
         const isAdmin = a.action_key && a.action_key.startsWith('admin_');
-        const icon = (a.data && a.data.icon) ? a.data.icon : '🎯';
-        const name = (a.data && a.data.name) ? a.data.name : '';
+
+        const dict = isAdmin ? ADMIN_EVENT_MAP : PLAYER_ACTION_MAP;
+        const entry = dict[a.action_key] || { icon: '🎯', name: a.action_key || '' };
+        const icon = entry.icon;
+        const name = entry.name;
         const displayName = isAdmin ? 'Администратор' : (nameMap[a.user_id] || 'Аноним');
 
         if (isAdmin) {
