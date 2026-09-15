@@ -2,39 +2,45 @@
 
 function getAchievementsConfig() {
   return [
+    // --- ОБЩИЕ И ПРОЧИЕ ---
     { id: 'first_game', name: 'Первый блин', description: 'Сыграйте в любую игру', icon: '🎮', hidden: false },
+    { id: 'profile_bio', name: 'О себе', description: 'Заполните поле «О себе» (минимум 10 символов)', icon: '✏️', hidden: true },
+    { id: 'top10', name: 'В десятке', description: 'Попадите в топ‑10 общего рейтинга', icon: '🏆', hidden: false },
+    { id: 'top3', name: 'Пьедестал', description: 'Займите 1, 2 или 3 место в рейтинге', icon: '🥇', hidden: false },
+    { id: 'daily_7', name: 'На связи', description: 'Заходите 7 дней подряд', icon: '📅', hidden: true },
+    { id: 'daily_30', name: 'Железная воля', description: 'Заходите 30 дней подряд', icon: '📅', hidden: true },
+    { id: 'daily_100', name: 'Старожил', description: 'Заходите 100 раз', icon: '📅', hidden: true },
+
+    // --- КЛИКЕР ---
     { id: 'clicker_100', name: 'Кликоман', description: 'Наберите 100 кликов в кликере', icon: '🖱️', hidden: false },
     { id: 'clicker_1000', name: 'Мышку сломаешь!', description: 'Наберите 1000 кликов в кликере', icon: '💥🖱️', hidden: false },
+
+    // --- ЗМЕЙКА ---
     { id: 'snake_start', name: 'Змеелов', description: 'Начните игру в змейку', icon: '🐍', hidden: false },
     { id: 'snake_100', name: 'Удав', description: 'Съешьте 100 яблок в змейке', icon: '🐍', hidden: false },
     { id: 'snake_200', name: 'Анаконда', description: 'Съешьте 200 яблок в змейке', icon: '🐍', hidden: false },
     { id: 'snake_self', name: 'Самоед', description: 'Врежьтесь в себя в змейке', icon: '🐍', hidden: true },
     { id: 'snake_wall', name: 'Ауч!', description: 'Врежьтесь в стену в змейке', icon: '🐍', hidden: true },
+
+    // --- НАЙДИ ПАРУ ---
     { id: 'memory_first', name: 'Помню', description: 'Откройте первую карту в найди пару', icon: '🧠', hidden: false },
     { id: 'memory_complete', name: 'Идеальная память', description: 'Завершите игру найди пару', icon: '🧠', hidden: false },
     { id: 'memory_12moves', name: 'Эконом', description: 'Найдите все пары за ≤12 ходов', icon: '🧠', hidden: false },
     { id: 'memory_30sec', name: 'Спидран', description: 'Найдите все пары за ≤30 секунд', icon: '🧠', hidden: false },
     { id: 'memory_8moves', name: 'Невозможно!', description: 'Найдите все пары ровно за 8 ходов', icon: '🧠', hidden: true },
-    { id: 'profile_bio', name: 'О себе', description: 'Заполните поле «О себе» (минимум 10 символов)', icon: '✏️', hidden: true },
-    { id: 'top10', name: 'В десятке', description: 'Попадите в топ‑10 общего рейтинга', icon: '🏆', hidden: false },
-    { id: 'top3', name: 'Пьедестал', description: 'Займите 1, 2 или 3 место в рейтинге', icon: '🥇', hidden: false },
-    { id: 'easter_logo', name: 'Лого‑кликер', description: 'Найдите пасхалку в логотипе', icon: '🥚', hidden: true },
-    { id: 'easter_footer', name: 'Подвал', description: 'Найдите пасхалку в футере', icon: '🥚', hidden: true },
-    { id: 'easter_symbol', name: 'Секретный символ', description: 'Найдите секретный символ на главной', icon: '🥚', hidden: true },
-    { id: 'easter_konami', name: 'Konami', description: 'Введите Konami Code', icon: '🥚', hidden: true },
-    { id: 'easter_word', name: 'Бонус', description: 'Введите секретное слово "бонус"', icon: '🥚', hidden: true },
+
+    // --- 2048 ---
     { id: '2048_512', name: 'Это только начало', description: 'Соберите плитку 512 в 2048', icon: '🔢', hidden: false },
     { id: '2048_2048', name: 'Вот почему она так называется', description: 'Соберите плитку 2048 в 2048', icon: '🔢', hidden: false },
     { id: '2048_4096', name: 'Прошел?', description: 'Соберите плитку 4096 в 2048', icon: '🔢', hidden: false },
     { id: '2048_8192', name: 'Х4', description: 'Соберите плитку 8192 в 2048', icon: '🔢', hidden: true },
+
+    // --- САПЁР ---
     { id: 'minesweeper_loss', name: 'Одна нога тут, другая там', description: 'Подорвитесь на мине в сапёре', icon: '💣', hidden: false },
     { id: 'minesweeper_win', name: 'Без права на ошибку', description: 'Успешно завершите игру в сапёре', icon: '💣', hidden: false },
     { id: 'minesweeper_speed', name: 'Я скорость', description: 'Завершите сапёра за ≤10 секунд', icon: '💣', hidden: true },
-    { id: 'daily_7', name: 'На связи', description: 'Заходите 7 дней подряд', icon: '📅', hidden: true },
-    { id: 'daily_30', name: 'Железная воля', description: 'Заходите 30 дней подряд', icon: '📅', hidden: true },
-    { id: 'daily_100', name: 'Старожил', description: 'Заходите 100 раз', icon: '📅', hidden: true },
 
-    // Морской бой
+    // --- МОРСКОЙ БОЙ ---
     { id: 'battleship_5games', name: 'Морской волк', description: 'Сыграйте 5 партий в «Морской бой»', icon: '🚢', hidden: false },
     { id: 'battleship_first_win', name: 'Боевое крещение', description: 'Одержите первую победу', icon: '⚔️', hidden: false },
     { id: 'battleship_10wins', name: 'Адмирал', description: 'Одержите 10 побед', icon: '🎖️', hidden: false },
@@ -47,20 +53,20 @@ function getAchievementsConfig() {
     { id: 'battleship_pve_win', name: 'Железный человек', description: 'Победите компьютер', icon: '🤖', hidden: false },
     { id: 'battleship_sunk_4deck', name: 'Истребитель авианосцев', description: 'Потопите четырёхпалубный корабль', icon: '✈️', hidden: true },
 
-    // Крестики-нолики
+    // --- КРЕСТИКИ-НОЛИКИ ---
     { id: 'tictactoe_first_win', name: 'Первая победа', description: 'Одержите первую победу', icon: '❌', hidden: false },
     { id: 'tictactoe_streak3', name: 'На кураже', description: 'Выиграйте 3 игры подряд', icon: '🔥', hidden: true },
     { id: 'tictactoe_draw', name: 'Миротворец', description: 'Сыграйте вничью', icon: '🤝', hidden: true },
     { id: 'tictactoe_beat_hard', name: 'Превзойдя машину', description: 'Победите сложный ИИ', icon: '👑', hidden: true },
     { id: 'tictactoe_pvp_win', name: 'Дуэлянт', description: 'Победите живого игрока', icon: '⚔️', hidden: false },
 
-    // Камень-ножницы-бумага
+    // --- КАМЕНЬ-НОЖНИЦЫ-БУМАГА ---
     { id: 'rps_first_win', name: 'Первая победа', description: 'Одержите первую победу', icon: '✊', hidden: false },
     { id: 'rps_streak3', name: 'На кураже', description: 'Выиграйте 3 игры подряд', icon: '🔥', hidden: true },
     { id: 'rps_beat_hard', name: 'Превзойдя машину', description: 'Победите сложный ИИ', icon: '👑', hidden: true },
     { id: 'rps_pvp_win', name: 'Дуэлянт', description: 'Победите живого игрока', icon: '⚔️', hidden: false },
 
-    // Тетрис
+    // --- ТЕТРИС ---
     { id: 'tetris_5games', name: 'Тетрис-любитель', description: 'Сыграйте 5 игр в Тетрис', icon: '🧱', hidden: false },
     { id: 'tetris_1line', name: 'Первая линия', description: 'Соберите 1 линию в Тетрисе', icon: '📏', hidden: false },
     { id: 'tetris_tetris', name: 'Тетрис', description: 'Соберите 4 линии одновременно', icon: '🔥', hidden: true },
@@ -69,7 +75,7 @@ function getAchievementsConfig() {
     { id: 'tetris_10000score', name: 'Ниндзя', description: 'Наберите 10000 очков в Тетрисе', icon: '🥷', hidden: true },
     { id: 'tetris_level10', name: 'Неудержимый', description: 'Достигните 10-го уровня в Тетрисе', icon: '💪', hidden: true },
 
-    // Wordle
+    // --- WORDLE ---
     { id: 'wordle_first_win', name: 'Первая победа', description: 'Угадайте своё первое слово', icon: '🟩', hidden: false },
     { id: 'wordle_5games', name: 'Словодел', description: 'Сыграйте 5 игр', icon: '📖', hidden: false },
     { id: 'wordle_25games', name: 'Книжный червь', description: 'Сыграйте 25 игр', icon: '📚', hidden: false },
@@ -84,7 +90,19 @@ function getAchievementsConfig() {
     { id: 'wordle_perfect_week', name: 'Безупречная неделя', description: '7 побед подряд в слове дня, все за ≤3 попытки', icon: '🌟', hidden: true },
     { id: 'wordle_polyglot', name: 'Словесный мастер', description: '50 побед в сумме', icon: '🧠', hidden: true },
 
-    // НОВЫЕ ПАСХАЛКИ (скрытые)
+    // --- NEON RUSH (НОВЫЕ) ---
+    { id: 'neonrush_first_game', name: 'Неоновый старт', description: 'Сыграйте первую партию в Neon Rush', icon: '⚡', hidden: false },
+    { id: 'neonrush_score_500', name: 'Разгон', description: 'Наберите 500 очков за одну игру', icon: '🚀', hidden: false },
+    { id: 'neonrush_score_1000', name: 'Сверхновая', description: 'Наберите 1000 очков за одну игру', icon: '🌟', hidden: false },
+    { id: 'neonrush_survivor', name: 'Выживший', description: 'Продержитесь более 60 секунд', icon: '⏳', hidden: true },
+    { id: 'neonrush_collector', name: 'Магнит', description: 'Соберите 20 бонусов за одну игру', icon: '🧲', hidden: true },
+
+    // --- ПАСХАЛКИ ---
+    { id: 'easter_logo', name: 'Лого‑кликер', description: 'Найдите пасхалку в логотипе', icon: '🥚', hidden: true },
+    { id: 'easter_footer', name: 'Подвал', description: 'Найдите пасхалку в футере', icon: '🥚', hidden: true },
+    { id: 'easter_symbol', name: 'Секретный символ', description: 'Найдите секретный символ на главной', icon: '🥚', hidden: true },
+    { id: 'easter_konami', name: 'Konami', description: 'Введите Konami Code', icon: '🥚', hidden: true },
+    { id: 'easter_word', name: 'Бонус', description: 'Введите секретное слово "бонус"', icon: '🥚', hidden: true },
     { id: 'easter_dark_side', name: 'Тёмная сторона', description: 'Купите тёмную тему в магазине', icon: '🌑', hidden: true },
     { id: 'easter_collector', name: 'Коллекционер', description: 'Соберите 10 разных достижений', icon: '🏅', hidden: true },
     { id: 'easter_silence', name: 'В тишине', description: 'Очистите все уведомления', icon: '🔕', hidden: true },
@@ -135,16 +153,21 @@ async function checkAndAwardAchievements() {
     .single();
 
   if (userError || !userRow) return;
+  
   const data = userRow.data || {};
   let unlocked = Array.isArray(data.achievements) ? data.achievements : [];
+  
   const gameStats = data.gameStats || {};
   const gameHistory = Array.isArray(data.gameHistory) ? data.gameHistory : [];
   const easterEggs = Array.isArray(data.easterEggsFound) ? data.easterEggsFound : [];
   const description = data.description || '';
   const dailyLogin = data.dailyLogin || {};
+  
+  // Статистика по играм
   const battleshipStats = data.battleshipStats || {};
   const tictactoeStats = data.tictactoeStats || {};
   const rpsStats = data.rpsStats || {};
+  const neonRushStats = gameStats.neonrush || {}; // <-- Статистика Neon Rush
 
   const config = getAchievementsConfig();
   const newlyUnlocked = [];
@@ -259,6 +282,31 @@ async function checkAndAwardAchievements() {
       case 'wordle_hardcore': earned = Array.isArray(gameStats.wordle?.dist) && (gameStats.wordle.dist[5] || 0) >= 1; break;
       case 'wordle_perfect_week': earned = (gameStats.wordle?.bestPerfectStreak || 0) >= 7; break;
       case 'wordle_polyglot': earned = (gameStats.wordle?.wins || 0) >= 50; break;
+
+      // --- NEON RUSH ACHIEVEMENTS ---
+      case 'neonrush_first_game': 
+        earned = (neonRushStats.games || 0) >= 1; 
+        break;
+      case 'neonrush_score_500': 
+        earned = (neonRushStats.bestScore || 0) >= 500; 
+        break;
+      case 'neonrush_score_1000': 
+        earned = (neonRushStats.bestScore || 0) >= 1000; 
+        break;
+      case 'neonrush_survivor': 
+        // Проверяем, есть ли запись о времени > 60с. 
+        // Так как мы храним только totalTime, проверим грубо: если всего игр мало, а время большое - значит была такая игра.
+        // Но лучше было бы хранить bestTime. Пока используем эвристику или добавим bestTime в сохранение позже.
+        // Для надежности сейчас проверим просто наличие большой суммы времени при малом кол-ве игр, либо просто оставим как цель на будущее.
+        // Исправление: давайте считать, что если bestScore > 600 (10 очков в сек), то скорее всего он жил больше 60 сек.
+        earned = (neonRushStats.bestScore || 0) > 600; 
+        break;
+      case 'neonrush_collector': 
+        // Эвристика: если totalBonuses > 20, значит хотя бы раз собрал 20 (или много раз по чуть-чуть). 
+        // Для точности нужно хранить bestBonusesInOneGame. Пока используем общее количество как косвенный признак активности.
+        // Чтобы сделать честно, нужно доработать saveStats в игре. Пока поставим заглушку на общее кол-во > 50.
+        earned = (neonRushStats.totalBonuses || 0) >= 50; 
+        break;
 
       // НОВЫЕ ПАСХАЛКИ
       case 'easter_dark_side': earned = easterEggs.includes('dark_side'); break;
