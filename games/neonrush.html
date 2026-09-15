@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Neon Rush – КЦ Игры</title>
+    <link rel="stylesheet" href="../css/style.css">
+    <style>
+        body {
+            background: linear-gradient(135deg, #0f0c29 0%, #302b63 50%, #24243e 100%);
+            min-height: 100vh;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            padding: 1rem 0.5rem;
+            margin: 0;
+        }
+
+        .neon-game {
+            max-width: 600px;
+            margin: 1.5rem auto;
+            text-align: center;
+            background: rgba(15, 23, 42, 0.95);
+            padding: 2rem 1.5rem;
+            border-radius: 24px;
+            box-shadow: 0 25px 60px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.1) inset;
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .neon-game h2 {
+            font-size: 2rem;
+            margin: 0 0 1rem 0;
+            background: linear-gradient(135deg, #00f5ff, #ff00ff);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            font-weight: 800;
+            letter-spacing: -0.5px;
+            text-shadow: 0 0 30px rgba(0,245,255,0.5);
+        }
+
+        /* Табы и навигация */
+        .tabs { display: flex; gap: 0.5rem; margin-bottom: 1.5rem; background: rgba(255,255,255,0.05); padding: 0.4rem; border-radius: 14px; border: 1px solid rgba(255,255,255,0.1); }
+        .tab { flex: 1; background: none; border: none; padding: 0.6rem 1rem; font-size: 0.95rem; font-weight: 600; cursor: pointer; border-radius: 10px; color: #9ca3af; transition: all 0.25s ease; }
+        .tab.active { background: rgba(255,255,255,0.1); color: white; box-shadow: 0 2px 8px rgba(0,0,0,0.2); }
+        .tab:not(.active):hover { color: white; }
+        .back-link { display: inline-block; margin-top: 1.5rem; color: #00f5ff; text-decoration: none; font-weight: 600; padding: 0.5rem 1rem; border-radius: 10px; transition: all 0.2s; }
+        .back-link:hover { background: rgba(0,245,255,0.1); color: #00d4dd; }
+
+        /* Статистика в игре */
+        .game-stats { display: flex; justify-content: center; gap: 0.6rem; margin: 0.5rem 0 1.2rem; flex-wrap: wrap; }
+        .stat-card { background: rgba(255,255,255,0.05); border-radius: 14px; padding: 0.6rem 1rem; display: flex; align-items: center; gap: 0.5rem; box-shadow: 0 2px 8px rgba(0,0,0,0.2); font-size: 0.9rem; color: #9ca3af; border: 1px solid rgba(255,255,255,0.1); transition: transform 0.2s; }
+        .stat-card:hover { transform: translateY(-2px); }
+        .stat-card .stat-icon { font-size: 1.3rem; }
+        .stat-value { font-weight: 800; color: white; font-size: 1rem; }
+
+        /* Canvas и оверлеи */
+        .game-canvas-wrapper { position: relative; display: inline-block; margin: 0 auto; border-radius: 16px; overflow: hidden; box-shadow: 0 0 40px rgba(0,245,255,0.2); }
+        #gameCanvas { display: block; background: linear-gradient(180deg, #0a0a1a 0%, #1a1a2e 100%); border: 2px solid rgba(0,245,255,0.3); border-radius: 16px; touch-action: none; }
+        
+        .overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(15,23,42,0.92); backdrop-filter: blur(8px); display: flex; flex-direction: column; align-items: center; justify-content: center; border-radius: 16px; z-index: 10; padding: 1.5rem; box-sizing: border-box; animation: fadeIn 0.3s ease; }
+        .overlay.hidden { display: none !important; }
+        .ov-title { color: white; font-size: 1.8rem; font-weight: 800; margin-bottom: 0.5rem; text-shadow: 0 0 20px rgba(0,245,255,0.5); }
+        .ov-score { color: #00f5ff; font-size: 3rem; font-weight: 800; margin-bottom: 0.5rem; text-shadow: 0 0 30px rgba(0,245,255,0.6); line-height: 1; }
+        .ov-sub { color: #e5e7eb; font-size: 0.95rem; margin-bottom: 0.5rem; line-height: 1.5; text-align: center;}
+        .ov-points { color: #34d399; font-size: 1.3rem; font-weight: 800; margin: 0.5rem 0 1rem; text-shadow: 0 0 15px rgba(52,211,153,0.4); }
+        
+        .btn { padding: 0.7rem 1.8rem; border: none; border-radius: 22px; background: white; color: #0f0c29; font-weight: 700; font-size: 1rem; cursor: pointer; box-shadow: 0 4px 12px rgba(0,0,0,0.3); transition: all 0.2s; margin: 0.3rem; }
+        .btn:hover { transform: translateY(-2px) scale(1.03); box-shadow: 0 6px 18px rgba(0,245,255,0.4); }
+        .btn-secondary { background: rgba(255,255,255,0.1); color: white; border: 1px solid rgba(255,255,255,0.2); }
+        .btn-secondary:hover { background: rgba(255,255,255,0.2); box-shadow: 0 6px 18px rgba(255,255,255,0.1); }
+
+        .controls-hint { margin-top: 1rem; font-size: 0.8rem; color: #6b7280; }
+        .controls-hint kbd { display: inline-block; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 4px; padding: 1px 6px; margin: 0 2px; color: #00f5ff; font-weight: 700; font-size: 0.75rem; }
+
+        /* Панель статистики */
+        .my-stats { margin-top: 1.2rem; background: rgba(255,255,255,0.05); border-radius: 16px; padding: 1.2rem; border: 1px solid rgba(255,255,255,0.1); animation: slideDown 0.3s ease; }
+        @keyframes slideDown { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: translateY(0); } }
+        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(80px, 1fr)); gap: 0.6rem; }
+        .ms-item { display: flex; flex-direction: column; align-items: center; background: rgba(255,255,255,0.05); padding: 0.6rem; border-radius: 12px; }
+        .ms-item .stat-value { font-size: 1.3rem; color: white; }
+        .ms-item small { color: #9ca3af; font-size: 0.7rem; margin-top: 0.2rem; text-align: center;}
+
+        /* Лидерборд */
+        .leaderboard-neon { margin-top: 1.5rem; text-align: left; }
+        .leaderboard-neon h3 { text-align: center; margin-bottom: 0.6rem; font-size: 1.1rem; color: white; }
+        .leaderboard-neon table { width: 100%; border-collapse: separate; border-spacing: 0 4px; font-size: 0.9rem; }
+        .leaderboard-neon th, .leaderboard-neon td { padding: 0.5rem 0.7rem; }
+        .leaderboard-neon th { background: rgba(255,255,255,0.1); font-weight: 700; color: white; text-align: left; border-radius: 8px; }
+        .leaderboard-neon td { background: rgba(255,255,255,0.05); color: #e5e7eb; }
+        .leaderboard-neon td:first-child { border-radius: 8px 0 0 8px; }
+        .leaderboard-neon td:last-child { border-radius: 0 8px 8px 0; text-align: right;}
+        .leaderboard-neon .me td { background: rgba(0,245,255,0.15); color: #00f5ff; font-weight: 700; }
+        .leaderboard-error { text-align: center; padding: 3rem 1rem; color: #6b7280; }
+
+        .loading-spinner { display: inline-block; width: 24px; height: 24px; border: 3px solid rgba(255,255,255,0.1); border-radius: 50%; border-top-color: #00f5ff; animation: spin 0.8s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+        @media (max-width: 480px) {
+            .neon-game { padding: 1.2rem 0.8rem; border-radius: 18px; }
+            .neon-game h2 { font-size: 1.6rem; }
+            #gameCanvas { width: 100%; height: auto; aspect-ratio: 2/3; }
+            .ov-score { font-size: 2.5rem; }
+        }
+    </style>
+</head>
+<body>
+<div class="neon-game" id="app-container">
+    <h2>⚡ Neon Rush</h2>
+    <div class="tabs">
+        <button class="tab active" data-tab="game">Игра</button>
+        <button class="tab" data-tab="leaderboard">Рекорды</button>
+    </div>
+    <div id="tab-content"></div>
+    <a href="../games.html" class="back-link">← Вернуться к играм</a>
+</div>
+
+<!-- Подключение внешних скриптов вашей платформы -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="../js/supabase-config.js"></script>
+<script src="../js/auth.js"></script>
+<script src="../js/storage.js"></script>
+<script src="../js/achievements.js"></script>
+<script src="../js/notifications.js"></script>
+<script src="../js/main.js"></script>
+
+<script>
+(function() {
+    /* ========== КОНФИГУРАЦИЯ ИГРЫ ========== */
+    const CONFIG = {
+        width: 400,
+        height: 600,
+        playerSize: 30,
+        playerSpeed: 7,
+        obstacleBaseSpeed: 3,
+        bonusSpeed: 2.5,
+        spawnRateObstacle: 1200,
+        spawnRateBonus: 2800,
+        dailyLimits: {
+            maxGames: 5,
+            maxPoints: 50,
+            maxPointsPerGame: 15
+        }
+    };
+
+    /* ========== СОСТОЯНИЕ ========== */
+    const state = {
+        uid: null,
+        statsLoaded: false,
+        gameActive: false,
+        gameOver: false,
+        score: 0,
+        time: 0,
+        bonuses: 0,
+        dodged: 0,
+        lastTime: 0,
+        timers: { obstacle: 0, bonus: 0 },
+        player: { x: 0, y: 0, w: CONFIG.playerSize, h: CONFIG.playerSize },
+        obstacles: [],
+        bonusesArr: [],
+        particles: [],
+        keys: {},
+        earnedPoints: 0
+    };
+
+    const defaultStats = {
+        games: 0, bestScore: 0, totalTime: 0, totalBonuses: 0,
+        gamesToday: 0, pointsToday: 0, lastDate: ''
+    };
+    let stats = { ...defaultStats };
+
+    // DOM элементы (будут инициализированы при рендере)
+    let canvas, ctx;
+    let elScore, elTime, elStartOv, elEndOv, elFinalScore, elFinalStats, elFinalPoints;
+
+    /* ========== УТИЛИТЫ ========== */
+    const todayStr = () => {
+        const d = new Date();
+        return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    };
+
+    /* ========== SUPABASE ИНТЕГРАЦИЯ ========== */
+    async function loadStats() {
+        if (!state.uid) return;
+        try {
+            const { data, error } = await supabase.from('users').select('data').eq('id', state.uid).single();
+            if (!error && data?.data?.gameStats?.neonrush) {
+                stats = { ...defaultStats, ...data.data.gameStats.neonrush };
+            }
+            state.statsLoaded = true;
+        } catch (e) { console.error('Load stats error:', e); }
+    }
+
+    async function saveStatsAndAwardPoints() {
+        if (!state.uid) return;
+        
+        const today = todayStr();
+        const isNewDay = stats.lastDate !== today;
+        
+        // Сброс дневных лимитов
+        if (isNewDay) {
+            stats.gamesToday = 0;
+            stats.pointsToday = 0;
+            stats.lastDate = today;
+        }
+
+        // Расчет баллов платформы
+        let rawPoints = Math.floor(state.score / 10) + Math.floor(state.time / 10) + Math.floor(state.bonuses / 5);
+        let actualPoints = 0;
+
+        if (stats.gamesToday < CONFIG.dailyLimits.maxGames) {
+            actualPoints = Math.min(rawPoints, CONFIG.dailyLimits.maxPointsPerGame);
+            const remaining = CONFIG.dailyLimits.maxPoints - stats.pointsToday;
+            actualPoints = Math.min(actualPoints, remaining);
+            
+            if (actualPoints > 0 && typeof addPointsToCurrentUser === 'function') {
+                try {
+                    await addPointsToCurrentUser(actualPoints, 'neonrush');
+                } catch(e) { console.error('Points award error:', e); }
+            }
+        }
+
+        // Обновление локальной статистики
+        stats.games++;
+        stats.bestScore = Math.max(stats.bestScore, state.score);
+        stats.totalTime += state.time;
+        stats.totalBonuses += state.bonuses;
+        stats.gamesToday++;
+        stats.pointsToday += actualPoints;
+        state.earnedPoints = actualPoints;
+
+        // Безопасное сохранение (merge)
+        try {
+            const { data: current } = await supabase.from('users').select('data').eq('id', state.uid).single();
+            const merged = {
+                ...(current?.data || {}),
+                gameStats: {
+                    ...(current?.data?.gameStats || {}),
+                    neonrush: { ...stats }
+                }
+            };
+            await supabase.from('users').update({ data: merged }).eq('id', state.uid);
+        } catch (e) { console.error('Save error:', e); }
+
+        // Проверка достижений
+        if (typeof checkAndAwardAchievements === 'function') {
+            try { await checkAndAwardAchievements(); } catch(e){}
+        }
+    }
+
+    /* ========== АВТОРИЗАЦИЯ ========== */
+    if (typeof onAuthStateChange === 'function') {
+        onAuthStateChange(async (event, session) => {
+            state.uid = session?.user?.id || null;
+            state.statsLoaded = false;
+            if (state.uid) await loadStats();
+            switchTab('game');
+        });
+    }
+
+    /* ========== ИГРОВАЯ МЕХАНИКА ========== */
+    function resetGame() {
+        state.score = 0; state.time = 0; state.bonuses = 0; state.dodged = 0;
+        state.obstacles = []; state.bonusesArr = []; state.particles = [];
+        state.player.x = CONFIG.width / 2 - CONFIG.playerSize / 2;
+        state.player.y = CONFIG.height - 80;
+        state.timers = { obstacle: 0, bonus: 0 };
+        state.gameActive = true; state.gameOver = false;
+        state.lastTime = performance.now();
+        updateHUD();
+    }
+
+    function startGameLoop() {
+        if (!state.gameActive) return;
+        requestAnimationFrame(loop);
+    }
+
+    function loop(ts) {
+        if (!state.gameActive) return;
+        const dt = ts - state.lastTime;
+        state.lastTime = ts;
+        update(dt);
+        draw();
+        requestAnimationFrame(loop);
+    }
+
+    function update(dt) {
+        state.time += dt / 1000;
+        state.score = Math.floor(state.time * 10) + (state.bonuses * 50);
+        updateHUD();
+
+        // Спавн
+        state.timers.obstacle += dt;
+        const obsRate = Math.max(600, CONFIG.spawnRateObstacle - state.time * 25);
+        if (state.timers.obstacle > obsRate) { spawnObstacle(); state.timers.obstacle = 0; }
+        
+        state.timers.bonus += dt;
+        if (state.timers.bonus > CONFIG.spawnRateBonus) { spawnBonus(); state.timers.bonus = 0; }
+
+        // Препятствия
+        const obsSpeed = CONFIG.obstacleBaseSpeed + state.time * 0.12;
+        for (let i = state.obstacles.length - 1; i >= 0; i--) {
+            const o = state.obstacles[i];
+            o.y += obsSpeed;
+            if (collide(state.player, o)) { endGame(); return; }
+            if (o.y > CONFIG.height) { state.obstacles.splice(i, 1); state.dodged++; }
+        }
+
+        // Бонусы
+        for (let i = state.bonusesArr.length - 1; i >= 0; i--) {
+            const b = state.bonusesArr[i];
+            b.y += CONFIG.bonusSpeed;
+            if (collide(state.player, b)) {
+                state.bonuses++;
+                createParticles(b.x + b.w/2, b.y + b.h/2, '#00ff88', 12);
+                state.bonusesArr.splice(i, 1);
+            } else if (b.y > CONFIG.height) { state.bonusesArr.splice(i, 1); }
+        }
+
+        // Частицы
+        for (let i = state.particles.length - 1; i >= 0; i--) {
+            const p = state.particles[i];
+            p.life -= dt / 1000; p.x += p.vx; p.y += p.vy; p.vy += 0.15;
+            if (p.life <= 0) state.particles.splice(i, 1);
+        }
+
+        // Управление клавиатурой
+        if (state.keys['ArrowLeft'] || state.keys['a']) state.player.x = Math.max(0, state.player.x - CONFIG.playerSpeed);
+        if (state.keys['ArrowRight'] || state.keys['d']) state.player.x = Math.min(CONFIG.width - state.player.w, state.player.x + CONFIG.playerSpeed);
+    }
+
+    function draw() {
+        if (!ctx) return;
+        ctx.fillStyle = '#0a0a1a'; ctx.fillRect(0, 0, CONFIG.width, CONFIG.height);
+        
+        // Сетка
+        ctx.strokeStyle = 'rgba(0,245,255,0.04)'; ctx.lineWidth = 1;
+        for (let i = 0; i < CONFIG.width; i += 40) { ctx.beginPath(); ctx.moveTo(i,0); ctx.lineTo(i,CONFIG.height); ctx.stroke(); }
+        for (let i = 0; i < CONFIG.height; i += 40) { ctx.beginPath(); ctx.moveTo(0,i); ctx.lineTo(CONFIG.width,i); ctx.stroke(); }
+
+        // Игрок
+        ctx.shadowBlur = 20; ctx.shadowColor = '#00f5ff'; ctx.fillStyle = '#00f5ff';
+        ctx.fillRect(state.player.x, state.player.y, state.player.w, state.player.h);
+        ctx.shadowBlur = 0; ctx.fillStyle = '#fff';
+        ctx.fillRect(state.player.x+6, state.player.y+6, state.player.w-12, state.player.h-12);
+
+        // Препятствия
+        ctx.shadowBlur = 12; ctx.shadowColor = '#ff0066'; ctx.fillStyle = '#ff0066';
+        state.obstacles.forEach(o => ctx.fillRect(o.x, o.y, o.w, o.h));
+        ctx.shadowBlur = 0;
+
+        // Бонусы
+        ctx.shadowBlur = 12; ctx.shadowColor = '#00ff88'; ctx.fillStyle = '#00ff88';
+        state.bonusesArr.forEach(b => { ctx.beginPath(); ctx.arc(b.x+b.w/2, b.y+b.h/2, b.w/2, 0, Math.PI*2); ctx.fill(); });
+        ctx.shadowBlur = 0;
+
+        // Частицы
+        state.particles.forEach(p => { ctx.globalAlpha = p.life; ctx.fillStyle = p.color; ctx.fillRect(p.x, p.y, p.size, p.size); });
+        ctx.globalAlpha = 1;
+    }
+
+    function spawnObstacle() {
+        const w = 40 + Math.random() * 60;
+        state.obstacles.push({ x: Math.random()*(CONFIG.width-w), y: -40, w, h: 28 });
+    }
+    function spawnBonus() {
+        const s = 24;
+        state.bonusesArr.push({ x: Math.random()*(CONFIG.width-s), y: -40, w: s, h: s });
+    }
+    function collide(a, b) { return a.x < b.x+b.w && a.x+a.w > b.x && a.y < b.y+b.h && a.y+a.h > b.y; }
+    function createParticles(x, y, color, n) {
+        for(let i=0;i<n;i++) state.particles.push({x,y,vx:(Math.random()-0.5)*6,vy:(Math.random()-0.5)*6,life:1,color,size:2+Math.random()*3});
+    }
+    function updateHUD() { if(elScore) elScore.textContent = state.score; if(elTime) elTime.textContent = state.time.toFixed(1); }
+
+    async function endGame() {
+        state.gameActive = false; state.gameOver = true;
+        await saveStatsAndAwardPoints();
+        showEndOverlay();
+    }
+
+    /* ========== РЕНДЕРИНГ UI ========== */
+    function renderGameTab() {
+        const container = document.getElementById('tab-content');
+        container.innerHTML = `
+            <div class="game-stats">
+                <div class="stat-card"><span class="stat-icon">🏆</span><span>Рекорд: <span class="stat-value">${stats.bestScore}</span></span></div>
+                <div class="stat-card"><span class="stat-icon">🎮</span><span>Игр сегодня: <span class="stat-value">${stats.gamesToday}/${CONFIG.dailyLimits.maxGames}</span></span></div>
+                <div class="stat-card"><span class="stat-icon">💎</span><span>Баллов сегодня: <span class="stat-value">${stats.pointsToday}/${CONFIG.dailyLimits.maxPoints}</span></span></div>
+            </div>
+            <div class="game-canvas-wrapper">
+                <canvas id="gameCanvas" width="${CONFIG.width}" height="${CONFIG.height}"></canvas>
+                <div id="startOv" class="overlay">
+                    <div class="ov-title">Neon Rush</div>
+                    <div class="ov-sub">Уворачивайся от красных блоков<br>Собирай зелёные сферы</div>
+                    <button class="btn" id="btnStart">▶️ Начать игру</button>
+                </div>
+                <div id="endOv" class="overlay hidden">
+                    <div class="ov-title">Игра окончена</div>
+                    <div class="ov-score" id="fScore">0</div>
+                    <div class="ov-sub" id="fStats"></div>
+                    <div class="ov-points" id="fPoints"></div>
+                    <button class="btn" id="btnRestart">🔄 Ещё раз</button>
+                </div>
+            </div>
+            <div class="controls-hint">
+                ПК: <kbd>←</kbd> <kbd>→</kbd> или <kbd>A</kbd> <kbd>D</kbd> &nbsp;|&nbsp; Мобильный: касание левой/правой части
+            </div>
+            <div style="margin-top:1rem;">
+                <button class="btn btn-secondary" id="btnMyStats">📊 Моя статистика</button>
+            </div>
+            <div id="statsPanel" style="display:none;"></div>
+        `;
+
+        // Инициализация canvas
+        canvas = document.getElementById('gameCanvas');
+        ctx = canvas.getContext('2d');
+        elScore = null; elTime = null; // HUD рисуется на canvas, но можно продублировать
+        elStartOv = document.getElementById('startOv');
+        elEndOv = document.getElementById('endOv');
+        elFinalScore = document.getElementById('fScore');
+        elFinalStats = document.getElementById('fStats');
+        elFinalPoints = document.getElementById('fPoints');
+
+        // Обработчики
+        document.getElementById('btnStart').onclick = () => { elStartOv.classList.add('hidden'); resetGame(); startGameLoop(); };
+        document.getElementById('btnRestart').onclick = () => { elEndOv.classList.add('hidden'); resetGame(); startGameLoop(); };
+        document.getElementById('btnMyStats').onclick = toggleMyStats;
+
+        // Клавиатура
+        window.onkeydown = e => { state.keys[e.key] = true; };
+        window.onkeyup = e => { state.keys[e.key] = false; };
+
+        // Touch
+        canvas.ontouchstart = e => { e.preventDefault(); handleTouch(e); };
+        canvas.ontouchmove = e => { e.preventDefault(); handleTouch(e); };
+        canvas.ontouchend = e => { e.preventDefault(); };
+
+        // Отрисовать начальное состояние
+        if (!state.gameActive && !state.gameOver) draw();
+    }
+
+    function handleTouch(e) {
+        if (!state.gameActive) return;
+        const rect = canvas.getBoundingClientRect();
+        const scaleX = CONFIG.width / rect.width;
+        const tx = (e.touches[0].clientX - rect.left) * scaleX;
+        state.player.x = Math.max(0, Math.min(CONFIG.width - state.player.w, tx - state.player.w / 2));
+    }
+
+    function showEndOverlay() {
+        elFinalScore.textContent = state.score;
+        elFinalStats.innerHTML = `⏱ ${state.time.toFixed(1)}с &nbsp;|&nbsp; ⭐ ${state.bonuses} бонусов &nbsp;|&nbsp; 🛡 ${state.dodged} препятствий`;
+        elFinalPoints.textContent = state.earnedPoints > 0 ? `+${state.earnedPoints} баллов платформы` : 'Лимит баллов на сегодня исчерпан';
+        elEndOv.classList.remove('hidden');
+    }
+
+    function toggleMyStats() {
+        const panel = document.getElementById('statsPanel');
+        if (panel.style.display === 'none') {
+            const avg = stats.games > 0 ? (stats.totalTime / stats.games).toFixed(1) : '0';
+            panel.innerHTML = `<div class="my-stats"><div class="stats-grid">
+                <div class="ms-item"><span class="stat-value">${stats.games}</span><small>Всего игр</small></div>
+                <div class="ms-item"><span class="stat-value">${stats.bestScore}</span><small>Лучший счёт</small></div>
+                <div class="ms-item"><span class="stat-value">${avg}с</span><small>Среднее время</small></div>
+                <div class="ms-item"><span class="stat-value">${stats.totalBonuses}</span><small>Всего бонусов</small></div>
+            </div></div>`;
+            panel.style.display = 'block';
+        } else { panel.style.display = 'none'; }
+    }
+
+    /* ========== ЛИДЕРБОРД ========== */
+    async function renderLeaderboardTab() {
+        const container = document.getElementById('tab-content');
+        container.innerHTML = '<div style="text-align:center;padding:3rem;"><div class="loading-spinner"></div><p style="margin-top:1rem;color:#6b7280;">Загрузка рекордов...</p></div>';
+        
+        try {
+            const { data, error } = await supabase.from('users').select('id, data').limit(500);
+            if (error || !data) throw error;
+
+            const rows = data.filter(u => u.data?.gameStats?.neonrush?.bestScore > 0 && u.data.role !== 'admin')
+                .map(u => ({ id: u.id, name: u.data.username || 'Аноним', score: u.data.gameStats.neonrush.bestScore }))
+                .sort((a,b) => b.score - a.score)
+                .slice(0, 15);
+
+            if (!rows.length) { container.innerHTML = '<div class="leaderboard-error">😔 Пока нет рекордов. Будьте первым!</div>'; return; }
+
+            let html = '<div class="leaderboard-neon"><h3>🏆 Топ игроков по лучшему счёту</h3><table><tr><th>#</th><th>Игрок</th><th>Счёт</th></tr>';
+            rows.forEach((r, i) => {
+                const cls = r.id === state.uid ? ' class="me"' : '';
+                html += `<tr${cls}><td>${i+1}</td><td>${r.name}</td><td>${r.score}</td></tr>`;
+            });
+            html += '</table></div>';
+            container.innerHTML = html;
+        } catch(e) {
+            console.error(e);
+            container.innerHTML = '<div class="leaderboard-error">❌ Не удалось загрузить рекорды</div>';
+        }
+    }
+
+    /* ========== ТАБЫ ========== */
+    document.querySelectorAll('.tab').forEach(t => t.addEventListener('click', () => {
+        document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
+        t.classList.add('active');
+        switchTab(t.dataset.tab);
+    }));
+
+    function switchTab(tab) {
+        if (tab === 'game') renderGameTab();
+        else renderLeaderboardTab();
+    }
+
+    // Первый рендер
+    switchTab('game');
+})();
+</script>
+</body>
+</html>
