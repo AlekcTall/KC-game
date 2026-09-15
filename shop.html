@@ -85,7 +85,6 @@
       const CACHE_KEY = 'krugames_shop_cache';
       const CACHE_TTL = 10 * 60 * 1000;
 
-      // Создаёт базовую структуру с категориями и сеткой
       function buildShopLayout() {
         shopContainer.innerHTML = `
           <div class="shop-categories" id="category-filters"></div>
@@ -110,7 +109,6 @@
           }
         }
 
-        // Если кеша нет — показываем скелетоны
         shopContainer.innerHTML = '<div class="shop-categories" id="category-filters"></div><div class="shop-items-grid">' +
           Array.from({ length: 8 }, () => `
             <div class="skeleton-card">
@@ -182,7 +180,8 @@
         const now = Date.now();
 
         grid.innerHTML = filtered.map(item => {
-          const owned = purchased.includes(item.id);
+          // Товар «куплен» только если он уникальный И уже в purchasedItems
+          const owned = item.unique === true && purchased.includes(item.id);
           let stockText = '';
           if (item.stock !== null && item.stock !== undefined) {
             stockText = `<div class="shop-card__stock">Осталось: ${item.stock} шт.</div>`;
@@ -271,7 +270,9 @@
           const purchased = Array.isArray(currentUserData.purchasedItems)
             ? [...currentUserData.purchasedItems]
             : [];
-          if (!purchased.includes(selectedItem.id)) {
+
+          // Добавляем ID в purchasedItems только для уникальных товаров
+          if (selectedItem.unique === true && !purchased.includes(selectedItem.id)) {
             purchased.push(selectedItem.id);
           }
           rawData.purchasedItems = purchased;
@@ -282,15 +283,27 @@
           const effectType = selectedItem.effect_type;
           if (effectType) {
             if (selectedItem.duration > 0) {
+              // Эффект с длительностью — продление таймера
               const durationMs = selectedItem.duration * 60000;
               const effects = rawData.activeEffects || {};
+              const existing = effects[effectType];
+              const now = Date.now();
+              let expiresAt;
+              if (existing && existing.expiresAt && existing.expiresAt > now) {
+                // Продление: прибавляем к текущему остатку
+                expiresAt = existing.expiresAt + durationMs;
+              } else {
+                // Новый эффект
+                expiresAt = now + durationMs;
+              }
               effects[effectType] = {
-                activatedAt: Date.now(),
-                expiresAt: Date.now() + durationMs,
+                activatedAt: existing?.activatedAt || now,
+                expiresAt: expiresAt,
                 params: selectedItem.effect_params || {}
               };
               rawData.activeEffects = effects;
             } else {
+              // Разовый (бессрочный) эффект
               if (effectType === 'custom_avatar') {
                 const emoji = selectedItem.effect_params?.avatar || '🐱';
                 if (!ownedAvatars.includes(emoji)) {
@@ -329,6 +342,7 @@
           setCurrentUser(currentUserData);
           updateAuthUI(auth.currentUser);
 
+          // Уведомление покупателю
           if (typeof addNotification === 'function') {
             await addNotification(userId, `Вы приобрели «${selectedItem.name}» за ${price} лок.`, 'purchase', 'shop.html');
           }
@@ -336,6 +350,24 @@
             await addPurchaseNotification(userId, selectedItem.name, price, newBalance);
           }
 
+          // Уведомление админам, если у товара включено notify_admin
+          if (selectedItem.notify_admin === true && typeof addNotification === 'function') {
+            try {
+              const { data: admins } = await supabase
+                .from('users')
+                .select('id')
+                .eq('data->>role', 'admin');
+              const buyerName = currentUserData.username || 'Пользователь';
+              const adminMsg = `🛒 ${buyerName} купил товар «${selectedItem.name}» за ${price} локоинов.`;
+              for (const admin of (admins || [])) {
+                await addNotification(admin.id, adminMsg, 'purchase', 'admin-shop.html');
+              }
+            } catch (adminErr) {
+              console.error('Ошибка отправки уведомления админам:', adminErr);
+            }
+          }
+
+          // Пасхалка «Первый покупатель»
           if (purchased.length === 1 && typeof checkFirstPurchase === 'function') {
             await checkFirstPurchase();
           }
