@@ -66,7 +66,6 @@
 
   <footer class="footer"><div class="container"><p>© 2026 ваши амбассадоры</p></div></footer>
 
-  <!-- Supabase SDK и модули -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="js/supabase-config.js"></script>
   <script src="js/auth.js"></script>
@@ -152,12 +151,7 @@
           const deptMap = {};
           userStats.forEach(p => {
             if (!deptMap[p.department]) {
-              deptMap[p.department] = {
-                totalActions: 0,
-                topPlayer: '',
-                topActions: 0,
-                users: []
-              };
+              deptMap[p.department] = { totalActions: 0, topPlayer: '', topActions: 0, users: [] };
             }
             deptMap[p.department].totalActions += p.total;
             deptMap[p.department].users.push(p.username);
@@ -877,7 +871,6 @@
           content.innerHTML = html;
 
           if (isTree) {
-            // Загружаем историю с правильным полем created_at
             const { data: history, error: histError } = await supabase
               .from('event_admin_events')
               .select('*')
@@ -903,7 +896,8 @@
                 const ae = ADMIN_EVENT_TYPES.find(t => t.id === btn.dataset.eventType);
                 if (!ae || !confirm(`Применить «${ae.name}»?`)) return;
                 const { data: { user } } = await supabase.auth.getUser();
-                // Вставляем только те поля, которые есть в таблице
+
+                // 1. Пишем в журнал event_admin_events
                 const { error: insertError } = await supabase.from('event_admin_events').insert([{
                   event_id: event.id,
                   type: ae.id,
@@ -918,6 +912,36 @@
                   showToast('Ошибка: ' + insertError.message, 'error');
                   return;
                 }
+
+                // 2. Обновляем здоровье в events (атомарно)
+                const { data: freshEvent } = await supabase
+                  .from('events')
+                  .select('health, data')
+                  .eq('id', event.id)
+                  .single();
+                if (freshEvent) {
+                  const settings = freshEvent.data?.settings || {};
+                  const maxHealth = settings.maxHealth || 1000;
+                  const minHealth = settings.minHealth || 50;
+                  const currentH = freshEvent.health !== undefined && freshEvent.health !== null ? freshEvent.health : maxHealth;
+                  const newHealth = Math.max(minHealth, Math.min(maxHealth, currentH + ae.healthChange));
+                  await supabase.from('events').update({ health: newHealth }).eq('id', event.id);
+                }
+
+                // 3. Пишем в ленту event_activity (её видят участники)
+                await supabase.from('event_activity').insert([{
+                  event_id: event.id,
+                  user_id: user?.id || null,
+                  username: 'Администратор',
+                  action_key: 'admin_' + ae.id,
+                  action_icon: ae.icon,
+                  action_name: ae.name,
+                  health_boost: ae.healthChange,
+                  points_reward: 0,
+                  cost_lokoin: 0,
+                  created_at: new Date().toISOString()
+                }]);
+
                 showToast(`${ae.name} применено`, 'success');
                 renderMonitor();
               });
