@@ -39,39 +39,97 @@
             text-shadow: 0 0 30px rgba(0,245,255,0.5);
         }
 
-        /* Табы и навигация */
+        /* Табы */
         .tabs { display: flex; gap: 0.5rem; margin-bottom: 1.5rem; background: rgba(255,255,255,0.05); padding: 0.4rem; border-radius: 14px; border: 1px solid rgba(255,255,255,0.1); }
         .tab { flex: 1; background: none; border: none; padding: 0.6rem 1rem; font-size: 0.95rem; font-weight: 600; cursor: pointer; border-radius: 10px; color: #9ca3af; transition: all 0.25s ease; }
         .tab.active { background: rgba(255,255,255,0.1); color: white; box-shadow: 0 2px 8px rgba(0,0,0,0.2); }
         .tab:not(.active):hover { color: white; }
+        
         .back-link { display: inline-block; margin-top: 1.5rem; color: #00f5ff; text-decoration: none; font-weight: 600; padding: 0.5rem 1rem; border-radius: 10px; transition: all 0.2s; }
         .back-link:hover { background: rgba(0,245,255,0.1); color: #00d4dd; }
 
-        /* Статистика в игре */
+        /* Статистика над игрой */
         .game-stats { display: flex; justify-content: center; gap: 0.6rem; margin: 0.5rem 0 1.2rem; flex-wrap: wrap; }
-        .stat-card { background: rgba(255,255,255,0.05); border-radius: 14px; padding: 0.6rem 1rem; display: flex; align-items: center; gap: 0.5rem; box-shadow: 0 2px 8px rgba(0,0,0,0.2); font-size: 0.9rem; color: #9ca3af; border: 1px solid rgba(255,255,255,0.1); transition: transform 0.2s; }
-        .stat-card:hover { transform: translateY(-2px); }
-        .stat-card .stat-icon { font-size: 1.3rem; }
+        .stat-card { background: rgba(255,255,255,0.05); border-radius: 14px; padding: 0.6rem 1rem; display: flex; align-items: center; gap: 0.5rem; box-shadow: 0 2px 8px rgba(0,0,0,0.2); font-size: 0.9rem; color: #9ca3af; border: 1px solid rgba(255,255,255,0.1); }
+        .stat-icon { font-size: 1.3rem; }
         .stat-value { font-weight: 800; color: white; font-size: 1rem; }
 
-        /* Canvas и оверлеи */
-        .game-canvas-wrapper { position: relative; display: inline-block; margin: 0 auto; border-radius: 16px; overflow: hidden; box-shadow: 0 0 40px rgba(0,245,255,0.2); }
-        #gameCanvas { display: block; background: linear-gradient(180deg, #0a0a1a 0%, #1a1a2e 100%); border: 2px solid rgba(0,245,255,0.3); border-radius: 16px; touch-action: none; }
+        /* Canvas контейнер */
+        .game-canvas-wrapper { 
+            position: relative; 
+            display: inline-block; 
+            margin: 0 auto; 
+            border-radius: 16px; 
+            overflow: hidden; 
+            box-shadow: 0 0 40px rgba(0,245,255,0.2); 
+            background: #0a0a1a;
+        }
         
-        .overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(15,23,42,0.92); backdrop-filter: blur(8px); display: flex; flex-direction: column; align-items: center; justify-content: center; border-radius: 16px; z-index: 10; padding: 1.5rem; box-sizing: border-box; animation: fadeIn 0.3s ease; }
+        #gameCanvas { 
+            display: block; 
+            background: linear-gradient(180deg, #0a0a1a 0%, #1a1a2e 100%); 
+            border: 2px solid rgba(0,245,255,0.3); 
+            border-radius: 16px; 
+            touch-action: none; /* Важно для мобильных */
+        }
+
+        /* HUD (Счет и время поверх игры) */
+        .game-hud {
+            position: absolute;
+            top: 15px;
+            left: 15px;
+            right: 15px;
+            display: flex;
+            justify-content: space-between;
+            pointer-events: none; /* Чтобы клики проходили сквозь текст */
+            z-index: 5;
+            font-family: 'Inter', sans-serif;
+        }
+        .hud-item {
+            background: rgba(0, 0, 0, 0.6);
+            padding: 6px 12px;
+            border-radius: 8px;
+            color: white;
+            font-weight: 700;
+            font-size: 1.1rem;
+            border: 1px solid rgba(255,255,255,0.1);
+            backdrop-filter: blur(4px);
+            text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+        }
+        .hud-score { color: #00f5ff; border-color: rgba(0,245,255,0.3); }
+        .hud-time { color: #ff00ff; border-color: rgba(255,0,255,0.3); }
+
+        /* Оверлеи (Старт / Конец игры) */
+        .overlay { 
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%; 
+            background: rgba(15,23,42,0.92); 
+            backdrop-filter: blur(8px); 
+            display: flex; flex-direction: column; align-items: center; justify-content: center; 
+            border-radius: 16px; z-index: 10; padding: 1.5rem; box-sizing: border-box; 
+            animation: fadeIn 0.3s ease; 
+        }
         .overlay.hidden { display: none !important; }
+        
         .ov-title { color: white; font-size: 1.8rem; font-weight: 800; margin-bottom: 0.5rem; text-shadow: 0 0 20px rgba(0,245,255,0.5); }
         .ov-score { color: #00f5ff; font-size: 3rem; font-weight: 800; margin-bottom: 0.5rem; text-shadow: 0 0 30px rgba(0,245,255,0.6); line-height: 1; }
         .ov-sub { color: #e5e7eb; font-size: 0.95rem; margin-bottom: 0.5rem; line-height: 1.5; text-align: center;}
         .ov-points { color: #34d399; font-size: 1.3rem; font-weight: 800; margin: 0.5rem 0 1rem; text-shadow: 0 0 15px rgba(52,211,153,0.4); }
         
-        .btn { padding: 0.7rem 1.8rem; border: none; border-radius: 22px; background: white; color: #0f0c29; font-weight: 700; font-size: 1rem; cursor: pointer; box-shadow: 0 4px 12px rgba(0,0,0,0.3); transition: all 0.2s; margin: 0.3rem; }
+        .btn { 
+            padding: 0.7rem 1.8rem; border: none; border-radius: 22px; 
+            background: white; color: #0f0c29; font-weight: 700; font-size: 1rem; 
+            cursor: pointer; box-shadow: 0 4px 12px rgba(0,0,0,0.3); transition: all 0.2s; margin: 0.3rem; 
+        }
         .btn:hover { transform: translateY(-2px) scale(1.03); box-shadow: 0 6px 18px rgba(0,245,255,0.4); }
         .btn-secondary { background: rgba(255,255,255,0.1); color: white; border: 1px solid rgba(255,255,255,0.2); }
-        .btn-secondary:hover { background: rgba(255,255,255,0.2); box-shadow: 0 6px 18px rgba(255,255,255,0.1); }
+        .btn-secondary:hover { background: rgba(255,255,255,0.2); }
 
         .controls-hint { margin-top: 1rem; font-size: 0.8rem; color: #6b7280; }
-        .controls-hint kbd { display: inline-block; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 4px; padding: 1px 6px; margin: 0 2px; color: #00f5ff; font-weight: 700; font-size: 0.75rem; }
+        .controls-hint kbd { 
+            display: inline-block; background: rgba(255,255,255,0.1); 
+            border: 1px solid rgba(255,255,255,0.2); border-radius: 4px; 
+            padding: 1px 6px; margin: 0 2px; color: #00f5ff; font-weight: 700; font-size: 0.75rem; 
+        }
 
         /* Панель статистики */
         .my-stats { margin-top: 1.2rem; background: rgba(255,255,255,0.05); border-radius: 16px; padding: 1.2rem; border: 1px solid rgba(255,255,255,0.1); animation: slideDown 0.3s ease; }
@@ -102,6 +160,7 @@
             .neon-game h2 { font-size: 1.6rem; }
             #gameCanvas { width: 100%; height: auto; aspect-ratio: 2/3; }
             .ov-score { font-size: 2.5rem; }
+            .hud-item { font-size: 0.9rem; padding: 4px 8px; }
         }
     </style>
 </head>
@@ -170,9 +229,10 @@
     };
     let stats = { ...defaultStats };
 
-    // DOM элементы (будут инициализированы при рендере)
+    // DOM элементы
     let canvas, ctx;
-    let elScore, elTime, elStartOv, elEndOv, elFinalScore, elFinalStats, elFinalPoints;
+    let elScore, elTime; // Элементы HUD
+    let elStartOv, elEndOv, elFinalScore, elFinalStats, elFinalPoints;
 
     /* ========== УТИЛИТЫ ========== */
     const todayStr = () => {
@@ -198,7 +258,6 @@
         const today = todayStr();
         const isNewDay = stats.lastDate !== today;
         
-        // Сброс дневных лимитов
         if (isNewDay) {
             stats.gamesToday = 0;
             stats.pointsToday = 0;
@@ -372,7 +431,12 @@
     function createParticles(x, y, color, n) {
         for(let i=0;i<n;i++) state.particles.push({x,y,vx:(Math.random()-0.5)*6,vy:(Math.random()-0.5)*6,life:1,color,size:2+Math.random()*3});
     }
-    function updateHUD() { if(elScore) elScore.textContent = state.score; if(elTime) elTime.textContent = state.time.toFixed(1); }
+    
+    // Обновление HUD
+    function updateHUD() {
+        if (elScore) elScore.textContent = state.score;
+        if (elTime) elTime.textContent = state.time.toFixed(1) + 'с';
+    }
 
     async function endGame() {
         state.gameActive = false; state.gameOver = true;
@@ -391,6 +455,13 @@
             </div>
             <div class="game-canvas-wrapper">
                 <canvas id="gameCanvas" width="${CONFIG.width}" height="${CONFIG.height}"></canvas>
+                
+                <!-- HUD: Счет и Время -->
+                <div class="game-hud">
+                    <div class="hud-item hud-score">Счёт: <span id="hudScore">0</span></div>
+                    <div class="hud-item hud-time">Время: <span id="hudTime">0.0с</span></div>
+                </div>
+
                 <div id="startOv" class="overlay">
                     <div class="ov-title">Neon Rush</div>
                     <div class="ov-sub">Уворачивайся от красных блоков<br>Собирай зелёные сферы</div>
@@ -413,10 +484,14 @@
             <div id="statsPanel" style="display:none;"></div>
         `;
 
-        // Инициализация canvas
+        // Инициализация canvas и HUD элементов
         canvas = document.getElementById('gameCanvas');
         ctx = canvas.getContext('2d');
-        elScore = null; elTime = null; // HUD рисуется на canvas, но можно продублировать
+        
+        // Находим элементы HUD по ID
+        elScore = document.getElementById('hudScore');
+        elTime = document.getElementById('hudTime');
+        
         elStartOv = document.getElementById('startOv');
         elEndOv = document.getElementById('endOv');
         elFinalScore = document.getElementById('fScore');
