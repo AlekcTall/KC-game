@@ -132,10 +132,50 @@ function updateAuthUI(authUser) {
   }
 }
 
+/**
+ * Надёжно возвращает объект текущего пользователя с полем role.
+ * Сначала проверяет кеш в localStorage, затем — активную сессию Supabase.
+ * Если кеша нет, но сессия активна — читает данные из БД и обновляет кеш.
+ * Возвращает null, если пользователь не авторизован.
+ */
+async function resolveCurrentUser() {
+  // 1. Пробуем взять из кеша
+  let cu = typeof getCurrentUser === 'function' ? getCurrentUser() : null;
+  if (cu && cu.id && cu.role) {
+    return cu;
+  }
+
+  // 2. Кеша нет или он неполный — читаем из сессии
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user) return null;
+
+    const { data: row, error } = await supabase
+      .from('users')
+      .select('id, email, data')
+      .eq('id', session.user.id)
+      .single();
+
+    if (error || !row) return null;
+
+    const userData = typeof unpackUserData === 'function'
+      ? unpackUserData(row)
+      : { id: row.id, email: row.email, ...(row.data || {}) };
+
+    if (typeof setCurrentUser === 'function') {
+      setCurrentUser(userData);
+    }
+    return userData;
+  } catch (e) {
+    console.error('resolveCurrentUser error:', e);
+    return null;
+  }
+}
+
 // Проверка режима обслуживания (без длительного кеша, мгновенное применение)
 async function checkMaintenanceMode() {
   try {
-    // Всегда запрашиваем актуальный статус из Supabase, кеш не используем
+    // Всегда запрашиваем актуальный статус из Supabase
     const { data, error } = await supabase
       .from('settings')
       .select('value')
@@ -146,22 +186,20 @@ async function checkMaintenanceMode() {
 
     const maintenanceData = data ? (typeof data.value === 'string' ? JSON.parse(data.value) : data.value) : { enabled: false };
 
-    // Сохраняем в кеш для возможного использования в рамках сессии, но не полагаемся на него
+    // Сохраняем в кеш для информации, но не полагаемся на него при принятии решения
     sessionStorage.setItem('krugames_maintenance_cache', JSON.stringify({ timestamp: Date.now(), data: maintenanceData }));
 
     if (!maintenanceData.enabled) {
-      // Убираем баннер, если он был
       const banner = document.getElementById('maintenance-banner');
       if (banner) banner.remove();
       return false;
     }
 
-    // Режим включен
-    const currentUser = getCurrentUser();
+    // Режим включён — надёжно определяем, кто перед нами
+    const currentUser = await resolveCurrentUser();
     const isAdmin = currentUser && currentUser.role === 'admin';
 
     if (!isAdmin) {
-      // Не-админ видит заглушку
       document.body.innerHTML = `
         <div style="display:flex; align-items:center; justify-content:center; min-height:100vh; background:#1a1a2e; color:#fff; font-family:'Segoe UI',sans-serif; text-align:center;">
           <div style="max-width:500px; padding:2rem;">
@@ -174,7 +212,6 @@ async function checkMaintenanceMode() {
       `;
       return true;
     } else {
-      // Админ видит баннер
       let banner = document.getElementById('maintenance-banner');
       if (!banner) {
         banner = document.createElement('div');
@@ -183,7 +220,6 @@ async function checkMaintenanceMode() {
         banner.textContent = '⚠️ Включён режим обслуживания. Обычные пользователи не видят сайт.';
         document.body.prepend(banner);
       } else {
-        // Обновляем текст на случай изменения сообщения
         banner.textContent = '⚠️ Включён режим обслуживания. Обычные пользователи не видят сайт.';
       }
     }
@@ -194,11 +230,11 @@ async function checkMaintenanceMode() {
   }
 }
 
-// Проверка версии кеша с кешированием на 10 минут (оставлено без изменений)
+// Проверка версии кеша с кешированием на 10 минут
 async function checkCacheVersion() {
   try {
     const CACHE_KEY = 'krugames_cache_version_check';
-    const CACHE_TTL = 10 * 60 * 1000; // 10 минут
+    const CACHE_TTL = 10 * 60 * 1000;
     const cached = sessionStorage.getItem(CACHE_KEY);
     if (cached) {
       const parsed = JSON.parse(cached);
@@ -287,7 +323,7 @@ async function updateLastActive(uid) {
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
-  // Проверяем обслуживание (теперь без кеша, мгновенно)
+  // Проверяем обслуживание (теперь надёжно определяет админа)
   const isMaintenance = await checkMaintenanceMode();
   if (isMaintenance) return;
 
@@ -360,7 +396,6 @@ document.addEventListener('DOMContentLoaded', async () => {
       }
     });
   } else {
-    // Если onAuthStateChange не определён (ошибка загрузки auth.js), отображаем состояние без входа
     updateAuthUI(null);
     document.body.classList.remove('dark-theme');
   }
