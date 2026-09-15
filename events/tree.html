@@ -157,7 +157,6 @@
     }
 
     function setupRealtime() {
-      // Подписка на изменения ивента
       if (eventChannel) supabase.removeChannel(eventChannel);
       eventChannel = supabase
         .channel(`event_${eventId}`)
@@ -180,7 +179,6 @@
         })
         .subscribe();
 
-      // Подписка на админские события
       if (adminEventsChannel) supabase.removeChannel(adminEventsChannel);
       adminEventsChannel = supabase
         .channel(`admin_events_${eventId}`)
@@ -189,7 +187,6 @@
         })
         .subscribe();
 
-      // Подписка на активность
       if (activityChannel) supabase.removeChannel(activityChannel);
       activityChannel = supabase
         .channel(`activity_${eventId}`)
@@ -204,7 +201,7 @@
         .from('event_admin_events')
         .select('*')
         .eq('event_id', eventId)
-        .order('timestamp', { ascending: false })
+        .order('created_at', { ascending: false })
         .limit(10);
       renderAdminEvents(data || []);
     }
@@ -292,7 +289,6 @@
       if (!evData.participants?.[userId]) stats.uniqueParticipants++;
       const newEvData = { ...evData, participants: participantsData, statistics: stats };
 
-      // Добавляем активность
       await supabase.from('event_activity').insert([{
         event_id: eventId,
         user_id: userId,
@@ -306,7 +302,6 @@
         created_at: new Date().toISOString()
       }]);
 
-      // Обновляем ивент
       await supabase.from('events').update({ health: currentHealth, data: newEvData }).eq('id', eventId);
       updateUI();
     }
@@ -343,7 +338,7 @@
     function renderAdminEvents(events) {
       if (!events || events.length === 0) { adminEventsLog.innerHTML = ''; return; }
       adminEventsLog.innerHTML = '<h4>⚡ События администратора</h4>' + events.map(ae => {
-        const time = ae.timestamp ? new Date(ae.timestamp).toLocaleString('ru-RU') : '';
+        const time = ae.created_at ? new Date(ae.created_at).toLocaleString('ru-RU') : '';
         return `<div class="admin-event-item">${ae.icon || '⚡'} ${ae.name}<br><small>${time}</small></div>`;
       }).join('');
     }
