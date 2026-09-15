@@ -913,7 +913,7 @@
                   return;
                 }
 
-                // 2. Обновляем здоровье в events (атомарно)
+                // 2. Обновляем здоровье в events
                 const { data: freshEvent } = await supabase
                   .from('events')
                   .select('health, data')
@@ -929,17 +929,16 @@
                 }
 
                 // 3. Пишем в ленту event_activity (её видят участники)
+                //    Иконка и название — в JSONB-поле data
                 await supabase.from('event_activity').insert([{
                   event_id: event.id,
                   user_id: user?.id || null,
                   username: 'Администратор',
                   action_key: 'admin_' + ae.id,
-                  action_icon: ae.icon,
-                  action_name: ae.name,
                   health_boost: ae.healthChange,
                   points_reward: 0,
                   cost_lokoin: 0,
-                  created_at: new Date().toISOString()
+                  data: { icon: ae.icon, name: ae.name, isAdmin: true }
                 }]);
 
                 showToast(`${ae.name} применено`, 'success');
