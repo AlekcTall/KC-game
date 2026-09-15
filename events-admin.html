@@ -116,11 +116,9 @@
           const participants = d.participants || {};
           const actionTypes = ['water','bugs','birds','fertilize','tie','sing','lokoin'];
 
-          // Суммарные действия по типам
           const totalsByType = {};
           actionTypes.forEach(k => totalsByType[k] = 0);
 
-          // Собираем статистику по пользователям
           const userStats = [];
           for (const [uid, pdata] of Object.entries(participants)) {
             if (uid === '_lastDecay') continue;
@@ -137,7 +135,6 @@
             const total = Object.values(actions).reduce((a,b) => a+b, 0);
             if (total === 0) continue;
 
-            // Суммируем по типам
             for (const k of actionTypes) {
               totalsByType[k] += actions[k] || 0;
             }
@@ -150,10 +147,8 @@
             });
           }
 
-          // Сортируем пользователей по убыванию total
           userStats.sort((a,b) => b.total - a.total);
 
-          // Статистика по отделам
           const deptMap = {};
           userStats.forEach(p => {
             if (!deptMap[p.department]) {
@@ -172,7 +167,6 @@
             }
           });
 
-          // Сортируем отделы по убыванию действий
           const deptList = Object.entries(deptMap)
             .map(([name, d]) => ({ name, ...d }))
             .sort((a,b) => b.totalActions - a.totalActions);
@@ -363,14 +357,12 @@
                   <br><small>${startStr} → ${endStr}</small>
                 </div>`;
 
-              // --- НАЧАЛО БЛОКА ДЕТАЛЬНЫХ ИТОГОВ ---
               if (ev.status === 'finished' && evData.finalStats) {
                 const fs = evData.finalStats;
                 html += `<div class="final-stats">
                   <strong>📊 Итоги:</strong>
                   <p>👥 Участников: <strong>${fs.uniqueParticipants}</strong> | 🎯 Всего действий: <strong>${fs.totalActions}</strong></p>`;
                 
-                // Общая статистика по типам действий
                 if (fs.totalsByType) {
                   const actionNames = {
                     water: '💧 Полито',
@@ -388,12 +380,10 @@
                   html += '</ul>';
                 }
                 
-                // Лучший игрок
                 if (fs.topPlayer) {
                   html += `<p>👑 <strong>Лучший игрок:</strong> ${fs.topPlayer.username} (${fs.topPlayer.department || '—'}) — ${fs.topPlayer.total} действий</p>`;
                 }
                 
-                // Топ-5 участников
                 if (fs.topParticipants && fs.topParticipants.length > 0) {
                   html += `<details style="margin-top:0.5rem;"><summary>🏆 Топ участников</summary><table style="width:100%; margin-top:0.5rem;"><tr><th>#</th><th>Игрок</th><th>Отдел</th><th>Действий</th></tr>`;
                   fs.topParticipants.forEach((p, i) => {
@@ -402,7 +392,6 @@
                   html += '</table></details>';
                 }
                 
-                // Лучшие отделы
                 if (fs.departments && fs.departments.length > 0) {
                   html += `<details style="margin-top:0.5rem;"><summary>🏢 Лучшие отделы</summary><table style="width:100%; margin-top:0.5rem;"><tr><th>Отдел</th><th>Действий</th><th>Лучший игрок</th></tr>`;
                   fs.departments.forEach(d => {
@@ -413,7 +402,6 @@
                 
                 html += '</div>';
               }
-              // --- КОНЕЦ БЛОКА ДЕТАЛЬНЫХ ИТОГОВ ---
 
               html += `<div class="event-actions">
                   <button class="btn btn-small edit-event-btn" data-event-id="${ev.id}">✏️</button>
@@ -812,9 +800,8 @@
             }
           });
 
-          // Обязательно добавляем id
           const dataObj = {
-            id: id,  // <-- важно: id обязателен и не может быть null
+            id: id,
             type,
             title: document.getElementById('event-title').value.trim(),
             data: {
@@ -890,21 +877,23 @@
           content.innerHTML = html;
 
           if (isTree) {
+            // Загружаем историю с правильным полем created_at
             const { data: history, error: histError } = await supabase
               .from('event_admin_events')
               .select('*')
               .eq('event_id', event.id)
-              .order('timestamp', { ascending: false })
+              .order('created_at', { ascending: false })
               .limit(20);
 
             const historyEl = document.getElementById('admin-events-history');
             if (histError) {
+              console.error('Ошибка загрузки истории:', histError);
               historyEl.innerHTML = '<p>Ошибка загрузки истории.</p>';
             } else if (!history || history.length === 0) {
               historyEl.innerHTML = '<p>Нет ручных событий.</p>';
             } else {
               historyEl.innerHTML = history.map(doc => {
-                const ts = doc.timestamp ? new Date(doc.timestamp).toLocaleString('ru-RU') : '';
+                const ts = doc.created_at ? new Date(doc.created_at).toLocaleString('ru-RU') : '';
                 return `<div class="admin-event-item"><span><span class="event-icon">${doc.icon || '⚡'}</span> ${doc.name}</span><small>${ts}</small></div>`;
               }).join('');
             }
@@ -914,17 +903,21 @@
                 const ae = ADMIN_EVENT_TYPES.find(t => t.id === btn.dataset.eventType);
                 if (!ae || !confirm(`Применить «${ae.name}»?`)) return;
                 const { data: { user } } = await supabase.auth.getUser();
-                await supabase.from('event_admin_events').insert([{
+                // Вставляем только те поля, которые есть в таблице
+                const { error: insertError } = await supabase.from('event_admin_events').insert([{
                   event_id: event.id,
                   type: ae.id,
                   name: ae.name,
                   icon: ae.icon,
                   health_change: ae.healthChange,
                   duration: ae.duration,
-                  description: ae.description,
-                  timestamp: new Date().toISOString(),
-                  applied_by: user?.id
+                  applied_by: user?.id || null
                 }]);
+                if (insertError) {
+                  console.error('Ошибка вставки ручного события:', insertError);
+                  showToast('Ошибка: ' + insertError.message, 'error');
+                  return;
+                }
                 showToast(`${ae.name} применено`, 'success');
                 renderMonitor();
               });
